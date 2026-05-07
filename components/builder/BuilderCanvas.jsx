@@ -1,0 +1,3321 @@
+'use client';
+
+import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  pointerWithin,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import { isValidNodeHierarchy } from '@/lib/builderHierarchy';
+import { computeReorderFromDrop, findNodeInTree } from '@/lib/builderTree';
+import { normalizeResponsiveStyle } from '@/lib/styleNormalizer';
+import { withResolvedLayoutGap } from '@/lib/layoutGapUtils';
+import { mergeDeviceStyleWithTypeDefaults, mergeMenuDeviceStyle } from '@/lib/nodeLayoutDefaults';
+import { SECTION_TEMPLATES } from '@/lib/sectionTemplates';
+
+const SECTION_TEMPLATE_IDS = new Set(Object.keys(SECTION_TEMPLATES));
+import { getRichTextAnimationStyle } from '@/lib/richTextAnimation';
+import { rootSemanticTag } from '@/lib/rootSemanticTag';
+import { getDeviceStyle, styleToCss } from '@/lib/styleToCss';
+import { useBuilderTheme } from '@/context/BuilderThemeContext';
+import { mergeNodeStyleWithSiteTheme } from '@/lib/siteDesignTheme';
+import Carousel from '@/components/runtime/Carousel';
+import Menu from '@/components/runtime/Menu';
+import ResizeHandle from './canvas/ResizeHandle';
+import InlineEdit from './canvas/InlineEdit';
+import AddSectionModal from './canvas/AddSectionModal';
+import WidgetPicker from './canvas/WidgetPicker';
+import BuilderOnboardingOverlay from './canvas/BuilderOnboardingOverlay';
+import ColumnResizeOverlay from './canvas/ColumnResizeOverlay';
+import GapHandlesOverlay from './canvas/GapHandlesOverlay';
+import SpacingGuidesOverlay from './canvas/SpacingGuidesOverlay';
+import GridOverlay from './canvas/GridOverlay';
+import RichTextEditor from './RichTextEditor';
+
+function applyDeviceStylePatch(existingStyle, device, patch, nodeType = null, siteTheme = null) {
+  const normalizedCurrent = normalizeResponsiveStyle(existingStyle || {}, { nodeType, siteTheme });
+  const desktopBase = normalizedCurrent.desktop || {};
+  const currentDeviceStyle = getDeviceStyle(normalizedCurrent, device) || {};
+
+  const targetDeviceMerged = {
+    ...currentDeviceStyle,
+    layout: {
+      ...(currentDeviceStyle.layout || {}),
+      ...(patch.layout || {}),
+    },
+    spacing: {
+      ...(currentDeviceStyle.spacing || {}),
+      ...(patch.spacing || {}),
+    },
+    size: {
+      ...(currentDeviceStyle.size || {}),
+      ...(patch.size || {}),
+    },
+  };
+
+  const buildOverride = (baseGroup = {}, mergedGroup = {}) => {
+    const out = {};
+    Object.keys(mergedGroup).forEach((key) => {
+      if (mergedGroup[key] !== baseGroup[key]) out[key] = mergedGroup[key];
+    });
+    return Object.keys(out).length ? out : undefined;
+  };
+
+  const nextStyle = {
+    ...normalizedCurrent,
+    desktop: desktopBase,
+  };
+
+  if (device === 'desktop') {
+    nextStyle.desktop = targetDeviceMerged;
+  } else {
+    nextStyle[device] = {
+      layout: buildOverride(desktopBase.layout, targetDeviceMerged.layout),
+      spacing: buildOverride(desktopBase.spacing, targetDeviceMerged.spacing),
+      size: buildOverride(desktopBase.size, targetDeviceMerged.size),
+    };
+    Object.keys(nextStyle[device]).forEach((key) => {
+      if (!nextStyle[device][key]) delete nextStyle[device][key];
+    });
+  }
+
+  return {
+    style_json: nextStyle,
+    previewCss: styleToCss(targetDeviceMerged, siteTheme),
+    targetDeviceMerged,
+  };
+}
+
+/** Columns inside section rows use CSS `flex: 1 1 0`, which ignores plain width — neutralize when user sets width. */
+function withFlexWidthOverride(nodeType, patch) {
+  const w = patch.size?.width;
+  if (!w || typeof w !== 'string') return patch;
+  if (nodeType !== 'column' && nodeType !== 'stack' && nodeType !== 'rich_text') return patch;
+
+  const pct = String(w).trim();
+  if (pct === '100%' || pct === '100') {
+    return {
+      ...patch,
+      layout: {
+        ...(patch.layout || {}),
+        flexGrow: 1,
+        flexShrink: 1,
+        flexBasis: '0%',
+        minWidth: 0,
+        maxWidth: '100%',
+      },
+      size: {
+        ...(patch.size || {}),
+        width: '100%',
+      },
+    };
+  }
+
+  return {
+    ...patch,
+    layout: {
+      ...(patch.layout || {}),
+      flexGrow: 0,
+      flexShrink: 0,
+      flexBasis: w,
+      minWidth: 0,
+    },
+  };
+}
+
+function clampNumber(n, min, max) {
+  const x = typeof n === 'number' ? n : Number(n);
+  if (!Number.isFinite(x)) return min;
+  return Math.max(min, Math.min(max, x));
+}
+
+function snapGapToScale(px, siteTheme) {
+  const scale = [
+    { id: 'xs', px: Number(siteTheme?.spacing?.xs ?? 4) },
+    { id: 'sm', px: Number(siteTheme?.spacing?.sm ?? 8) },
+    { id: 'md', px: Number(siteTheme?.spacing?.md ?? 16) },
+    { id: 'lg', px: Number(siteTheme?.spacing?.lg ?? 24) },
+    { id: 'xl', px: Number(siteTheme?.spacing?.xl ?? 32) },
+  ].filter((s) => Number.isFinite(s.px));
+  if (!scale.length) return { gap: Math.max(0, Math.round(px)), gapScale: '' };
+  let best = scale[0];
+  let bestDist = Math.abs(best.px - px);
+  for (const s of scale) {
+    const d = Math.abs(s.px - px);
+    if (d < bestDist) {
+      best = s;
+      bestDist = d;
+    }
+  }
+  return { gap: best.px, gapScale: best.id };
+}
+
+function dropCollisionDetection(args) {
+  const pointerHits = pointerWithin(args);
+  if (pointerHits.length) return pointerHits;
+  return closestCenter(args);
+}
+
+function renderNodeContent(
+  node,
+  {
+    isInlineEditing,
+    inlineDraftText,
+    onInlineDraftChange,
+    onInlineEditStart,
+    onInlineEditCommit,
+    onInlineEditCancel,
+    isSavingNode,
+    isRichTextEditing,
+    onRichTextEditStart,
+    onRichTextCommit,
+    onRichTextCancel,
+    richBlockStyle,
+    menuStyle,
+    widgetCss,
+    device,
+  }
+) {
+  if (node.nodeType === 'heading') {
+    const anim = getRichTextAnimationStyle(node.props?.animation || {});
+    const HeadingTag = String(node.props?.tag || 'h1').toLowerCase() === 'h2' ? 'h2' : 'h1';
+    if (isInlineEditing) {
+      return (
+        <InlineEdit
+          className="bld-inline-text-editor bld-inline-text-editor--heading"
+          value={inlineDraftText}
+          onChange={onInlineDraftChange}
+          onCommit={() => onInlineEditCommit(node)}
+          onCancel={onInlineEditCancel}
+          disabled={isSavingNode}
+        />
+      );
+    }
+    return (
+      <HeadingTag
+        className={`bld-demo-heading ${anim.className || ''}`.trim()}
+        style={{ ...(widgetCss || {}), ...(anim.style || {}) }}
+        onDoubleClick={(event) => onInlineEditStart(node, event)}
+      >
+        {node.props?.text || 'Heading'}
+      </HeadingTag>
+    );
+  }
+  if (node.nodeType === 'text') {
+    const anim = getRichTextAnimationStyle(node.props?.animation || {});
+    if (isInlineEditing) {
+      return (
+        <InlineEdit
+          className="bld-inline-text-editor bld-inline-text-editor--text"
+          value={inlineDraftText}
+          onChange={onInlineDraftChange}
+          onCommit={() => onInlineEditCommit(node)}
+          onCancel={onInlineEditCancel}
+          disabled={isSavingNode}
+        />
+      );
+    }
+    return (
+      <p
+        className={`bld-demo-text ${anim.className || ''}`.trim()}
+        style={{ ...(widgetCss || {}), ...(anim.style || {}) }}
+        onDoubleClick={(event) => onInlineEditStart(node, event)}
+      >
+        {node.props?.text || 'Text block content'}
+      </p>
+    );
+  }
+  if (node.nodeType === 'button') {
+    const anim = getRichTextAnimationStyle(node.props?.animation || {});
+    if (isInlineEditing) {
+      return (
+        <InlineEdit
+          className="bld-inline-text-editor bld-inline-text-editor--button"
+          value={inlineDraftText}
+          onChange={onInlineDraftChange}
+          onCommit={() => onInlineEditCommit(node)}
+          onCancel={onInlineEditCancel}
+          disabled={isSavingNode}
+        />
+      );
+    }
+    return (
+      <button
+        type="button"
+        className={`bld-demo-button ${anim.className || ''}`.trim()}
+        style={{ ...(widgetCss || {}), ...(anim.style || {}) }}
+        onDoubleClick={(event) => onInlineEditStart(node, event)}
+      >
+        {node.props?.text || 'Button'}
+      </button>
+    );
+  }
+  if (node.nodeType === 'menu') {
+    return (
+      <Menu
+        items={Array.isArray(node.props?.items) ? node.props.items : [{ label: 'Home', to: '/' }, { label: 'About', to: '/about' }]}
+        orientation={node.props?.orientation === 'column' ? 'column' : 'row'}
+        variant={node.props?.variant}
+        align={node.props?.align}
+        ariaLabel={node.props?.ariaLabel || 'Main navigation'}
+        currentPath="#"
+        mega={node.props?.mega || {}}
+        mobile={node.props?.mobile || {}}
+        sticky={node.props?.sticky || {}}
+        style={widgetCss || undefined}
+        className="live-node bld-demo-menu"
+      />
+    );
+  }
+  if (node.nodeType === 'image') {
+    const imageStyle = {
+      objectFit: node.props?.imageFit || 'cover',
+      ...(Number(node.props?.imageHeightPx || 0) > 0
+        ? { height: `${Number(node.props?.imageHeightPx || 0)}px` }
+        : {}),
+    };
+    return (
+      <figure className="bld-demo-image-wrap" style={widgetCss || undefined}>
+        <img
+          src={node.props?.src || 'https://via.placeholder.com/800x400'}
+          alt={node.props?.alt || node.displayName}
+          className="bld-demo-image"
+          style={imageStyle || undefined}
+        />
+        {node.props?.caption ? <figcaption className="bld-demo-image-caption">{node.props.caption}</figcaption> : null}
+      </figure>
+    );
+  }
+  if (node.nodeType === 'table') {
+    const colCount = Array.isArray(node.props?.columns) ? node.props.columns.length : 0;
+    return (
+      <div className="bld-demo-table" style={widgetCss || undefined}>
+        <p className="bld-demo-table__label">Data table{colCount ? ` (${colCount} columns)` : ''}</p>
+      </div>
+    );
+  }
+  if (node.nodeType === 'form') {
+    return (
+      <div className="bld-demo-form" style={widgetCss || undefined}>
+        <p className="bld-demo-form__label">Form (configure fields in inspector)</p>
+      </div>
+    );
+  }
+  if (
+    node.nodeType === 'input' ||
+    node.nodeType === 'textarea' ||
+    node.nodeType === 'select' ||
+    node.nodeType === 'checkbox' ||
+    node.nodeType === 'radio' ||
+    node.nodeType === 'switch' ||
+    node.nodeType === 'date' ||
+    node.nodeType === 'submit'
+  ) {
+    const label = String(node.props?.label || node.displayName || node.nodeType || 'Field');
+    const name = String(node.props?.name || '').trim();
+    const placeholder = String(node.props?.placeholder || '');
+    const required = Boolean(node.props?.required);
+    const type = String(node.props?.type || node.nodeType || 'text');
+    const options = Array.isArray(node.props?.options) ? node.props.options : [];
+
+    return (
+      <div className="bld-demo-field" style={widgetCss || undefined}>
+        <div className="bld-demo-field__head">
+          <span className="bld-demo-field__label">
+            {label}
+            {required ? <span className="bld-demo-field__req"> *</span> : null}
+          </span>
+          <span className="bld-demo-field__meta">
+            {node.nodeType}
+            {name ? ` · ${name}` : ''}
+          </span>
+        </div>
+        {node.nodeType === 'textarea' ? (
+          <textarea className="bld-demo-field__control" placeholder={placeholder} disabled rows={Number(node.props?.rows || 4)} />
+        ) : node.nodeType === 'select' ? (
+          <select className="bld-demo-field__control" disabled defaultValue="">
+            <option value="">{placeholder || 'Select option'}</option>
+            {options.map((opt, i) => {
+              const v = typeof opt === 'string' ? opt : String(opt?.value || '');
+              const l = typeof opt === 'string' ? opt : String(opt?.label || v);
+              return (
+                <option key={`${v}-${i}`} value={v}>
+                  {l}
+                </option>
+              );
+            })}
+          </select>
+        ) : node.nodeType === 'checkbox' || node.nodeType === 'switch' ? (
+          <label className="bld-demo-field__toggle">
+            <input type="checkbox" disabled defaultChecked={Boolean(node.props?.checkedByDefault || node.props?.onByDefault)} />
+            <span>{label}</span>
+          </label>
+        ) : node.nodeType === 'radio' ? (
+          <div className="bld-demo-field__radio">
+            {(options.length ? options : [{ label: 'Option A', value: 'a' }, { label: 'Option B', value: 'b' }]).map((opt, i) => {
+              const v = typeof opt === 'string' ? opt : String(opt?.value || '');
+              const l = typeof opt === 'string' ? opt : String(opt?.label || v);
+              return (
+                <label key={`${v}-${i}`} className="bld-demo-field__toggle">
+                  <input type="radio" disabled name={`demo-${name || node.id}`} />
+                  <span>{l}</span>
+                </label>
+              );
+            })}
+          </div>
+        ) : node.nodeType === 'submit' ? (
+          <button type="button" className="bld-demo-field__submit" disabled>
+            {String(node.props?.text || 'Submit')}
+          </button>
+        ) : (
+          <input className="bld-demo-field__control" type={type === 'email' ? 'email' : type === 'number' ? 'number' : type === 'date' ? 'date' : 'text'} placeholder={placeholder} disabled />
+        )}
+      </div>
+    );
+  }
+  if (node.nodeType === 'carousel') {
+    const slides = Array.isArray(node.props?.slides) ? node.props.slides : [];
+    return (
+      <div className="bld-demo-carousel" style={widgetCss || undefined}>
+        <Carousel
+          slides={slides.length ? slides : [{ title: 'Slide', body: 'Carousel preview' }]}
+          settings={node.props?.settings}
+          device={device || 'desktop'}
+          variant={node.props?.variant}
+          autoplay={node.props?.autoplay}
+          loop={node.props?.loop}
+          showArrows={node.props?.showArrows}
+          showDots={node.props?.showDots}
+          speed={node.props?.speed}
+          interval={node.props?.interval}
+          slidesPerView={node.props?.slidesPerView}
+          gap={node.props?.gap}
+          style={{ width: '100%', maxWidth: '100%' }}
+        />
+      </div>
+    );
+  }
+  if (node.nodeType === 'rich_text') {
+    const animRich = getRichTextAnimationStyle(node.props?.animation || {});
+    const mergedRt = {
+      ...(richBlockStyle || {}),
+      ...(animRich.style || {}),
+    };
+    return (
+      <RichTextEditor
+        html={node.props?.content || '<p></p>'}
+        isEditing={Boolean(isRichTextEditing)}
+        onStartEdit={onRichTextEditStart}
+        onCommit={onRichTextCommit}
+        onCancel={onRichTextCancel}
+        disabled={Boolean(isSavingNode)}
+        style={{ ...(widgetCss || {}), ...(mergedRt || {}) }}
+        className={`bld-rich-text--canvas ${animRich.className || ''}`.trim()}
+      />
+    );
+  }
+  return null;
+}
+
+function DropZone({
+  id,
+  label,
+  validationParentType,
+  draggingNodeType,
+  isDisabled = false,
+  showLabel = true,
+  className = '',
+}) {
+  const invalidWhileDragging =
+    draggingNodeType && !isValidNodeHierarchy(draggingNodeType, validationParentType ?? null);
+  const disabled = isDisabled || invalidWhileDragging;
+
+  const { isOver, setNodeRef } = useDroppable({ id, disabled });
+  const zoneKind = String(id || '').startsWith('before-')
+    ? 'before'
+    : String(id || '').startsWith('inside-')
+      ? 'inside'
+      : String(id || '').startsWith('root-drop')
+        ? 'after'
+        : 'inside';
+  const zoneLabel =
+    zoneKind === 'before' ? 'Place above' : zoneKind === 'after' ? 'Place at end' : 'Drop into layout';
+  // Keep canvas clean: show drop targets only while dragging.
+  // Hook must always run to preserve consistent hook order.
+  if (!draggingNodeType) return null;
+  return (
+    <div
+      ref={setNodeRef}
+      className={`bld-drop-zone bld-drop-zone--${zoneKind} ${isOver && !disabled ? 'is-over' : ''} ${isOver && disabled ? 'is-over-invalid' : ''} ${disabled ? 'is-disabled' : ''} ${showLabel ? '' : 'is-minimal'} ${className}`.trim()}
+    >
+      {showLabel ? zoneLabel || label : null}
+    </div>
+  );
+}
+
+function friendlyFreeMoveSnapSummary(guideX, guideY) {
+  const x =
+    guideX === 'left'
+      ? 'left edge'
+      : guideX === 'center-x'
+        ? 'horizontal center'
+        : guideX === 'right'
+          ? 'right edge'
+          : null;
+  const y =
+    guideY === 'top'
+      ? 'top edge'
+      : guideY === 'center-y'
+        ? 'vertical center'
+        : guideY === 'bottom'
+          ? 'bottom edge'
+          : null;
+  if (x && y) return `Snapped — ${x} · ${y}`;
+  if (x) return `Snapped — ${x}`;
+  if (y) return `Snapped — ${y}`;
+  return 'Snapped';
+}
+
+function friendlyNeighborGapLine(gaps, spacing) {
+  if (gaps) {
+    const entries = [
+      ['left', gaps.gapL],
+      ['right', gaps.gapR],
+      ['above', gaps.gapT],
+      ['below', gaps.gapB],
+    ].filter(([, v]) => v != null && v < 900);
+    if (entries.length) {
+      const [dir, px] = entries.reduce((a, b) => (a[1] <= b[1] ? a : b));
+      const where =
+        dir === 'left' ? 'to the left' : dir === 'right' ? 'to the right' : dir === 'above' ? 'above' : 'below';
+      return `${px}px ${where}`;
+    }
+  }
+  if (spacing) {
+    const m = Math.min(spacing.left, spacing.right, spacing.top, spacing.bottom);
+    return `${m}px from frame edge`;
+  }
+  return '';
+}
+
+function CanvasFloatingToolbar({
+  dragListeners,
+  onDuplicate,
+  onDelete,
+  duplicateDisabled,
+  deleteDisabled,
+  menuItems,
+}) {
+  const [moreOpen, setMoreOpen] = useState(false);
+  const wrapRef = useRef(null);
+  const dragAltHintId = useId();
+
+  useEffect(() => {
+    if (!moreOpen) return undefined;
+    const handle = (event) => {
+      if (!wrapRef.current?.contains(event.target)) {
+        setMoreOpen(false);
+      }
+    };
+    window.addEventListener('mousedown', handle);
+    return () => window.removeEventListener('mousedown', handle);
+  }, [moreOpen]);
+
+  const visibleMenu = (menuItems || []).filter((item) => item && !item.hidden);
+
+  return (
+    <div
+      ref={wrapRef}
+      className="bld-canvas-toolbar bld-row__toolbar-inline"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <span className="bld-drag-handle-wrap">
+        <button
+          type="button"
+          className="bld-row__toolbar-btn bld-row__toolbar-btn--drag"
+          title="Drag to reorder layers · Turn on Free mode in the top bar to drag-position widgets · Hold Alt while dragging to duplicate"
+          aria-label="Drag to reorder"
+          aria-describedby={dragAltHintId}
+          {...dragListeners}
+        >
+          <span className="bld-row__grip" aria-hidden>
+            ⋮⋮
+          </span>
+        </button>
+        <span id={dragAltHintId} className="bld-drag-handle-hint" role="tooltip">
+          Hold Alt while dragging to duplicate
+        </span>
+      </span>
+      <button
+        type="button"
+        className="bld-row__toolbar-btn"
+        title="Copy this block"
+        aria-label="Duplicate"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          onDuplicate?.(event);
+        }}
+        disabled={duplicateDisabled}
+      >
+        ⧉
+      </button>
+      <button
+        type="button"
+        className="bld-row__toolbar-btn bld-row__toolbar-btn--danger"
+        title="Remove from page"
+        aria-label="Delete"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          onDelete?.(event);
+        }}
+        disabled={deleteDisabled}
+      >
+        ×
+      </button>
+      {visibleMenu.length ? (
+        <div className="bld-canvas-toolbar__more" onPointerDown={(event) => event.stopPropagation()}>
+          <button
+            type="button"
+            className={`bld-row__toolbar-btn bld-row__toolbar-btn--more${moreOpen ? ' is-open' : ''}`.trim()}
+            aria-expanded={moreOpen}
+            aria-haspopup="menu"
+            title="More"
+            aria-label="More actions"
+            onClick={(event) => {
+              event.stopPropagation();
+              setMoreOpen((prev) => !prev);
+            }}
+          >
+            ⋯
+          </button>
+          {moreOpen ? (
+            <div className="bld-canvas-toolbar__dropdown" role="menu">
+              {visibleMenu.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  role="menuitem"
+                  className="bld-canvas-toolbar__menu-item"
+                  disabled={Boolean(item.disabled)}
+                  onMouseDown={
+                    item.useMouseDown
+                      ? (event) => {
+                          setMoreOpen(false);
+                          item.onSelect?.(event);
+                        }
+                      : undefined
+                  }
+                  onClick={
+                    item.useMouseDown
+                      ? undefined
+                      : (event) => {
+                          event.stopPropagation();
+                          setMoreOpen(false);
+                          item.onSelect?.(event);
+                        }
+                  }
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function NodeRenderer({
+  node,
+  rowIndex = null,
+  selectedNodeId,
+  onSelectNode,
+  parentNodeType,
+  draggingNodeType,
+  device,
+  previewCssByNodeId,
+  onSetPreviewCssForNode,
+  activeSpacingEdit,
+  onReportOverflow,
+  rowRole,
+  onDeleteNode,
+  onRequestNavigator,
+  onInsertStarterTemplate,
+  onInsertHeaderTemplate,
+  onSetContainerDirection,
+  onUpdateNode,
+  onCreateNode,
+  onQuickAddNode,
+  onDuplicateNode,
+  onReorderNode,
+  isReorderingNode,
+  rowSiblingsCount = null,
+  isCreatingNode,
+  isSavingNode,
+  isDeletingNode,
+  deletingNodeId,
+  onOpenWidgetPicker,
+  showSectionAddButtonBefore = false,
+  onOpenSectionInsert,
+  hoveredNodeId,
+  onHoverNode,
+  onSaveGlobalSection,
+  onAlignMenuRightInRow,
+  onUploadLogoInRow,
+  onStretchSectionFullWidth,
+  onStretchSectionFromSelection,
+  onAlignMenuRightFromSelection,
+  isFreeMode = false,
+  /** HTML tag for root rows only (`main` / `header` / `footer` / `section`), matches liveRenderer. */
+  rowSemanticTag = null,
+  /** Copy node id for keyboard paste / duplicate-from-buffer (shell). */
+  onCopyNodeId,
+  /** Briefly pulse outline on this node id after paste (shell). */
+  flashPasteNodeId = null,
+  /** Briefly highlight node after list reorder drop (canvas). */
+  flashReorderNodeId = null,
+  onAddSectionPreviewEnter,
+  onAddSectionPreviewLeave,
+  onFreeMoveBrush,
+  freeMoveBrushActive = false,
+}) {
+  const isSelected = node.id === selectedNodeId;
+  const handleSelect = (event) => {
+    event.stopPropagation();
+    onSelectNode(node.id);
+  };
+
+  const handleContextMenu = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onSelectNode(node.id);
+  };
+
+  const handleKeyDown = (event) => {
+    const target = event.target;
+    const tagName = target?.tagName?.toLowerCase?.() || '';
+    const isEditableTarget =
+      target?.isContentEditable || tagName === 'input' || tagName === 'textarea' || tagName === 'select';
+    if (isEditableTarget) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      onSelectNode(node.id);
+    }
+  };
+
+  const isContainer = node.nodeType === 'row' || node.nodeType === 'column' || node.nodeType === 'stack';
+  const isNodeActive = isSelected;
+  const canResizeNode = isFreeMode ? true : !isContainer;
+  const supportsInlineTextEdit =
+    node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'button';
+  const headingTag = String(node.props?.tag || 'h1').toLowerCase() === 'h2' ? 'h2' : 'h1';
+  const [isInlineEditing, setIsInlineEditing] = useState(false);
+  const [isRichTextEditing, setIsRichTextEditing] = useState(false);
+  const dragLocked = isInlineEditing || isRichTextEditing;
+  const { attributes, listeners, setNodeRef: setDraggableRef, isDragging } = useDraggable({
+    id: `node-${node.id}`,
+    data: { nodeId: node.id, nodeType: node.nodeType },
+    disabled: dragLocked,
+  });
+  const usesLiveNodeClass =
+    isContainer || node.nodeType === 'menu' || node.nodeType === 'rich_text';
+  const selKind =
+    isSelected && node.nodeType === 'row'
+      ? 'bld-sel-section'
+      : isSelected && node.nodeType === 'column'
+        ? 'bld-sel-column'
+        : isSelected && node.nodeType === 'stack'
+          ? 'bld-sel-stack'
+          : isSelected
+            ? 'bld-sel-widget'
+            : '';
+  const classNames = [
+    ...(usesLiveNodeClass ? ['live-node'] : []),
+    node.nodeType === 'row'
+      ? 'bld-row'
+      : node.nodeType === 'column'
+        ? 'bld-column'
+        : node.nodeType === 'stack'
+          ? 'bld-stack'
+          : 'bld-block',
+    selKind,
+    isSelected ? 'is-selected' : '',
+    isDragging ? 'is-dragging' : '',
+    flashPasteNodeId === node.id ? 'bld-node--paste-flash' : '',
+    flashReorderNodeId === node.id ? 'bld-node--reorder-flash' : '',
+    deletingNodeId === node.id ? 'bld-node--deleting' : '',
+    isInlineEditing || isRichTextEditing ? 'bld-node--editing-focus' : '',
+  ]
+    .join(' ')
+    .trim();
+  const [inlineDraftText, setInlineDraftText] = useState('');
+  const [inlinePanelText, setInlinePanelText] = useState('');
+  const [inlinePanelImageSrc, setInlinePanelImageSrc] = useState('');
+  const [inlinePanelImageAlt, setInlinePanelImageAlt] = useState('');
+  const [inlinePanelMenuItems, setInlinePanelMenuItems] = useState('');
+  const [inlinePanelError, setInlinePanelError] = useState('');
+  const [isReadingImage, setIsReadingImage] = useState(false);
+  const isCommittingInlineEditRef = useRef(false);
+  const [interactionPreviewStyle, setInteractionPreviewStyle] = useState(null);
+  const [dragAssist, setDragAssist] = useState(null);
+  const [overflowLocal, setOverflowLocal] = useState(null);
+  const nodeElementRef = useRef(null);
+  const inlineEditWrapRef = useRef(null);
+  const [floatingToolbarPos, setFloatingToolbarPos] = useState(null);
+  const { siteTheme } = useBuilderTheme();
+  const rawDevice = getDeviceStyle(node.style_json, device);
+  const themed = mergeNodeStyleWithSiteTheme(rawDevice, siteTheme, node.nodeType);
+  const gapReady = withResolvedLayoutGap(themed, siteTheme);
+  const deviceStyle = mergeDeviceStyleWithTypeDefaults(
+    node.nodeType,
+    node.nodeType === 'menu'
+      ? mergeMenuDeviceStyle(
+          node.props?.orientation === 'column' ? 'column' : 'row',
+          gapReady,
+          { align: node.props?.align },
+          siteTheme
+        )
+      : gapReady
+  );
+  const nodeCss = styleToCss(deviceStyle, siteTheme) || undefined;
+  const externalPreview = previewCssByNodeId?.[node.id] || null;
+  const inlineStyle = interactionPreviewStyle || externalPreview || nodeCss || undefined;
+  const isRow = node.nodeType === 'row';
+  const isRowEmpty = isRow && !node.children?.length;
+  const isDirectionalContainer = node.nodeType === 'column' || node.nodeType === 'stack';
+  const supportsDirectManipulation = true;
+
+  const addGridToRow = async (event, columnCount) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (node.nodeType !== 'row') return;
+    onSelectNode(node.id);
+    for (let i = 0; i < columnCount; i += 1) {
+      if (onQuickAddNode) {
+        // Quick add auto-resolves hierarchy in shell.
+        // For row+column this adds direct columns.
+        // eslint-disable-next-line no-await-in-loop
+        await onQuickAddNode({ targetNodeId: node.id, nodeType: 'column' });
+      } else {
+        // eslint-disable-next-line no-await-in-loop
+        await onCreateNode?.({ nodeType: 'column', parentNodeId: node.id });
+      }
+    }
+  };
+
+  const commitStylePatch = async (patch) => {
+    if (!onUpdateNode || !patch) return;
+    const next = applyDeviceStylePatch(
+      node.style_json,
+      device,
+      withFlexWidthOverride(node.nodeType, patch),
+      node.nodeType,
+      siteTheme
+    );
+    await onUpdateNode({
+      nodeId: node.id,
+      payload: { style_json: next.style_json },
+    });
+  };
+
+  const commitStylePatchAllDevices = async (patch) => {
+    if (!onUpdateNode || !patch) return;
+    const devices = ['desktop', 'tablet', 'mobile'];
+    let nextStyleJson = node.style_json;
+    for (const d of devices) {
+      const next = applyDeviceStylePatch(
+        nextStyleJson,
+        d,
+        withFlexWidthOverride(node.nodeType, patch),
+        node.nodeType,
+        siteTheme
+      );
+      nextStyleJson = next.style_json;
+    }
+    await onUpdateNode({
+      nodeId: node.id,
+      payload: { style_json: nextStyleJson },
+    });
+  };
+
+  const startResizeWithMouse = (event) => {
+    if (!isFreeMode) return;
+    if (!supportsDirectManipulation || isSavingNode || isDragging || Boolean(draggingNodeType)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    onSelectNode(node.id);
+    const element = nodeElementRef.current;
+    if (!element) return;
+    const rect = element.getBoundingClientRect();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startWidth = rect.width;
+    const startHeight = rect.height;
+
+    const handleMove = (moveEvent) => {
+      const nextWidth = Math.max(80, Math.round(startWidth + (moveEvent.clientX - startX)));
+      const nextHeight = Math.max(40, Math.round(startHeight + (moveEvent.clientY - startY)));
+      const resizeLayoutPatch = node.nodeType !== 'row' ? { alignSelf: 'flex-start' } : {};
+      const next = applyDeviceStylePatch(
+        node.style_json,
+        device,
+        withFlexWidthOverride(node.nodeType, {
+          layout: resizeLayoutPatch,
+          size: {
+            width: `${nextWidth}px`,
+            height: `${nextHeight}px`,
+          },
+        }),
+        node.nodeType,
+        siteTheme
+      );
+      setInteractionPreviewStyle(next.previewCss);
+    };
+
+    const handleUp = async (upEvent) => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+      const nextWidth = Math.max(80, Math.round(startWidth + (upEvent.clientX - startX)));
+      const nextHeight = Math.max(40, Math.round(startHeight + (upEvent.clientY - startY)));
+      const resizeLayoutPatch = node.nodeType !== 'row' ? { alignSelf: 'flex-start' } : {};
+      setInteractionPreviewStyle(null);
+      await commitStylePatch({
+        layout: resizeLayoutPatch,
+        size: {
+          width: `${nextWidth}px`,
+          height: `${nextHeight}px`,
+        },
+      });
+    };
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+  };
+
+  const adjustNodeSize = async ({ widthDelta = 0, heightDelta = 0 }) => {
+    const element = nodeElementRef.current;
+    const rect = element?.getBoundingClientRect?.();
+    const widthFromStyle = parseFloat(String(deviceStyle?.size?.width || '').replace('px', ''));
+    const heightFromStyle = parseFloat(String(deviceStyle?.size?.height || '').replace('px', ''));
+    const baseWidth = Number.isFinite(widthFromStyle) ? widthFromStyle : Math.round(rect?.width || 240);
+    const baseHeight = Number.isFinite(heightFromStyle) ? heightFromStyle : Math.round(rect?.height || 120);
+    const nextWidth = Math.max(80, Math.round(baseWidth + widthDelta));
+    const nextHeight = Math.max(40, Math.round(baseHeight + heightDelta));
+    const sizePatch = {};
+    if (widthDelta) sizePatch.width = `${nextWidth}px`;
+    if (heightDelta) sizePatch.height = `${nextHeight}px`;
+    if (!Object.keys(sizePatch).length) return;
+    await commitStylePatch({
+      layout: node.nodeType !== 'row' ? { alignSelf: 'flex-start' } : {},
+      size: sizePatch,
+    });
+  };
+
+  const startMoveWithMouse = (event) => {
+    if (!supportsDirectManipulation || isSavingNode || isDragging || Boolean(draggingNodeType)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    onSelectNode(node.id);
+    onFreeMoveBrush?.(true);
+    const normalized = normalizeResponsiveStyle(node.style_json || {}, { nodeType: node.nodeType, siteTheme });
+    const currentStyle = getDeviceStyle(normalized, device) || {};
+    const startLeft = parseFloat(currentStyle.layout?.left || '0') || 0;
+    const startTop = parseFloat(currentStyle.layout?.top || '0') || 0;
+    const startX = event.clientX;
+    const startY = event.clientY;
+    // Shrinking layout containers (stack/column) to fit-content makes the builder confusing
+    // (child widgets like Carousel look "tiny" vs live). Only shrink true content blocks.
+    const shouldShrinkToContent = node.nodeType === 'image' || node.nodeType === 'button';
+    const element = nodeElementRef.current;
+    const parentRect = element?.offsetParent?.getBoundingClientRect?.() || element?.parentElement?.getBoundingClientRect?.();
+    const rect = element?.getBoundingClientRect?.();
+    const elementWidth = Math.round(rect?.width || 0);
+    const elementHeight = Math.round(rect?.height || 0);
+    const snapThreshold = 8;
+    const clampToParent = (leftPx, topPx) => {
+      if (!parentRect || elementWidth <= 0 || elementHeight <= 0) {
+        return { left: leftPx, top: topPx };
+      }
+      const maxLeft = Math.max(0, Math.round(parentRect.width - elementWidth));
+      const maxTop = Math.max(0, Math.round(parentRect.height - elementHeight));
+      return {
+        left: Math.max(0, Math.min(maxLeft, leftPx)),
+        top: Math.max(0, Math.min(maxTop, topPx)),
+      };
+    };
+
+    const handleMove = (moveEvent) => {
+      const rawLeft = Math.round(startLeft + (moveEvent.clientX - startX));
+      const rawTop = Math.round(startTop + (moveEvent.clientY - startY));
+      const bounded = clampToParent(rawLeft, rawTop);
+      let nextLeft = bounded.left;
+      let nextTop = bounded.top;
+      let guideX = null;
+      let guideY = null;
+      if (parentRect && elementWidth > 0 && elementHeight > 0) {
+        const maxLeft = Math.max(0, Math.round(parentRect.width - elementWidth));
+        const maxTop = Math.max(0, Math.round(parentRect.height - elementHeight));
+        const centerX = Math.round((parentRect.width - elementWidth) / 2);
+        const centerY = Math.round((parentRect.height - elementHeight) / 2);
+        const snapXTargets = [
+          { value: 0, key: 'left' },
+          { value: centerX, key: 'center-x' },
+          { value: maxLeft, key: 'right' },
+        ];
+        const snapYTargets = [
+          { value: 0, key: 'top' },
+          { value: centerY, key: 'center-y' },
+          { value: maxTop, key: 'bottom' },
+        ];
+        for (const target of snapXTargets) {
+          if (Math.abs(nextLeft - target.value) <= snapThreshold) {
+            nextLeft = target.value;
+            guideX = target.key;
+            break;
+          }
+        }
+        for (const target of snapYTargets) {
+          if (Math.abs(nextTop - target.value) <= snapThreshold) {
+            nextTop = target.value;
+            guideY = target.key;
+            break;
+          }
+        }
+        const spacing = {
+          left: nextLeft,
+          right: Math.max(0, maxLeft - nextLeft),
+          top: nextTop,
+          bottom: Math.max(0, maxTop - nextTop),
+        };
+        const isSnap = Boolean(guideX || guideY);
+        const prScreen = element.offsetParent?.getBoundingClientRect?.();
+        let vline = null;
+        let hline = null;
+        if (isSnap && prScreen && elementWidth > 0 && elementHeight > 0) {
+          if (guideX === 'left') vline = prScreen.left;
+          else if (guideX === 'center-x') vline = prScreen.left + prScreen.width / 2;
+          else if (guideX === 'right') vline = prScreen.right;
+          if (guideY === 'top') hline = prScreen.top;
+          else if (guideY === 'center-y') hline = prScreen.top + prScreen.height / 2;
+          else if (guideY === 'bottom') hline = prScreen.bottom;
+        }
+        let gaps = null;
+        const er = element.getBoundingClientRect?.();
+        const parentEl = element.offsetParent;
+        if (!isSnap && er && parentEl instanceof Element) {
+          const others = [...parentEl.querySelectorAll('[data-bld-node]')].filter((el) => el !== element);
+          const ecx = (er.left + er.right) / 2;
+          const ecy = (er.top + er.bottom) / 2;
+          let gapL = null;
+          let gapR = null;
+          let gapT = null;
+          let gapB = null;
+          for (const el of others) {
+            const cr = el.getBoundingClientRect();
+            const ccx = (cr.left + cr.right) / 2;
+            const ccy = (cr.top + cr.bottom) / 2;
+            if (Math.abs(ecy - ccy) <= Math.max(er.height, cr.height) * 0.65) {
+              const dL = er.left - cr.right;
+              const dR = cr.left - er.right;
+              if (dL >= -1 && dL < 800) gapL = gapL == null ? dL : Math.min(gapL, dL);
+              if (dR >= -1 && dR < 800) gapR = gapR == null ? dR : Math.min(gapR, dR);
+            }
+            if (Math.abs(ecx - ccx) <= Math.max(er.width, cr.width) * 0.65) {
+              const dT = er.top - cr.bottom;
+              const dB = cr.top - er.bottom;
+              if (dT >= -1 && dT < 800) gapT = gapT == null ? dT : Math.min(gapT, dT);
+              if (dB >= -1 && dB < 800) gapB = gapB == null ? dB : Math.min(gapB, dB);
+            }
+          }
+          gaps = {
+            gapL: gapL != null ? Math.round(Math.max(0, gapL)) : null,
+            gapR: gapR != null ? Math.round(Math.max(0, gapR)) : null,
+            gapT: gapT != null ? Math.round(Math.max(0, gapT)) : null,
+            gapB: gapB != null ? Math.round(Math.max(0, gapB)) : null,
+          };
+        }
+        if (isSnap) {
+          setDragAssist({
+            mode: 'snap',
+            snapSummary: friendlyFreeMoveSnapSummary(guideX, guideY),
+            vline,
+            hline,
+          });
+        } else {
+          setDragAssist({
+            mode: 'free',
+            spacingLine: friendlyNeighborGapLine(gaps, spacing),
+          });
+        }
+      } else {
+        setDragAssist(null);
+      }
+      const next = applyDeviceStylePatch(
+        node.style_json,
+        device,
+        {
+          layout: {
+            position: 'absolute',
+            left: `${nextLeft}px`,
+            top: `${nextTop}px`,
+            ...(shouldShrinkToContent ? { alignSelf: 'flex-start', maxWidth: 'fit-content' } : {}),
+          },
+          ...(shouldShrinkToContent ? { size: { width: 'fit-content' } } : {}),
+        },
+        node.nodeType,
+        siteTheme
+      );
+      setInteractionPreviewStyle(next.previewCss);
+    };
+
+    const handleUp = async (upEvent) => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+      onFreeMoveBrush?.(false);
+      const rawLeft = Math.round(startLeft + (upEvent.clientX - startX));
+      const rawTop = Math.round(startTop + (upEvent.clientY - startY));
+      const bounded = clampToParent(rawLeft, rawTop);
+      const nextLeft = bounded.left;
+      const nextTop = bounded.top;
+      setInteractionPreviewStyle(null);
+      setDragAssist(null);
+      await commitStylePatch({
+        layout: {
+          position: 'absolute',
+          left: `${nextLeft}px`,
+          top: `${nextTop}px`,
+          ...(shouldShrinkToContent ? { alignSelf: 'flex-start', maxWidth: 'fit-content' } : {}),
+        },
+        ...(shouldShrinkToContent ? { size: { width: 'fit-content' } } : {}),
+      });
+    };
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+  };
+
+  const maybeStartDirectMove = (event) => {
+    if (!isFreeMode || !isSelected) return;
+    if (event.button !== 0) return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (node.nodeType === 'menu') {
+      const navMenu = target.closest('nav.menu');
+      if (navMenu && !target.closest('a.menu-item')) {
+        event.preventDefault();
+        startMoveWithMouse(event);
+        return;
+      }
+    }
+    const interactiveSelector =
+      'button,input,textarea,select,a,[role="button"],[contenteditable="true"],[contenteditable=""],.bld-transform-handle,.bld-node-controls,.bld-canvas-toolbar,.bld-canvas-toolbar__dropdown';
+    if (target.closest(interactiveSelector)) return;
+    startMoveWithMouse(event);
+  };
+
+  const openAddForRow = (event) => {
+    event.stopPropagation();
+    onSelectNode(node.id);
+    onOpenWidgetPicker?.(node.id);
+  };
+  const openAddSectionAfterRow = (event) => {
+    event.stopPropagation();
+    if (!Number.isInteger(rowIndex)) return;
+    onSelectNode(node.id);
+    onOpenSectionInsert?.(rowIndex + 1);
+  };
+
+  const openAddForNode = (event) => {
+    event.stopPropagation();
+    onSelectNode(node.id);
+    onOpenWidgetPicker?.(node.id);
+  };
+
+  const deleteThisNode = (event) => {
+    event?.stopPropagation?.();
+    onDeleteNode?.(Number(node.id));
+  };
+
+  const duplicateThisNode = (event) => {
+    event?.stopPropagation?.();
+    onDuplicateNode?.(Number(node.id));
+  };
+
+  const handleRichTextEditStart = () => {
+    onSelectNode(node.id);
+    setIsRichTextEditing(true);
+  };
+
+  const handleRichTextCommit = async (sanitizedHtml) => {
+    setIsRichTextEditing(false);
+    if (!onUpdateNode) return;
+    const prev = String(node.props?.content || '');
+    if (prev === sanitizedHtml) return;
+    await onUpdateNode({
+      nodeId: node.id,
+      payload: {
+        props: {
+          ...(node.props || {}),
+          content: sanitizedHtml,
+        },
+      },
+    });
+  };
+
+  const handleRichTextCancel = () => {
+    setIsRichTextEditing(false);
+  };
+
+  useEffect(() => {
+    if (!supportsInlineTextEdit || !isInlineEditing) return;
+    setInlineDraftText(node.props?.text || '');
+  }, [isInlineEditing, node.props?.text, supportsInlineTextEdit]);
+
+  useEffect(() => {
+    setIsRichTextEditing(false);
+  }, [node.id]);
+
+  useEffect(() => {
+    if (!isSelected) setIsRichTextEditing(false);
+  }, [isSelected]);
+
+  useEffect(() => {
+    setInlinePanelText(node.props?.text || '');
+    setInlinePanelImageSrc(node.props?.src || '');
+    setInlinePanelImageAlt(node.props?.alt || '');
+    setInlinePanelMenuItems(
+      JSON.stringify(Array.isArray(node.props?.items) ? node.props.items : [], null, 2)
+    );
+    setInlinePanelError('');
+  }, [node.id, node.props?.text, node.props?.src, node.props?.alt, node.props?.items]);
+
+  useLayoutEffect(() => {
+    if (!supportsInlineTextEdit || !isInlineEditing) {
+      setFloatingToolbarPos(null);
+      return undefined;
+    }
+    const el = inlineEditWrapRef.current;
+    const update = () => {
+      if (!el) {
+        setFloatingToolbarPos(null);
+        return;
+      }
+      const r = el.getBoundingClientRect();
+      setFloatingToolbarPos({ top: r.top - 10, left: r.left + r.width / 2 });
+    };
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [supportsInlineTextEdit, isInlineEditing, node.id, inlineDraftText]);
+
+  const handleInlineEditStart = (targetNode, event) => {
+    if (!supportsInlineTextEdit || targetNode.id !== node.id) return;
+    event.preventDefault();
+    event.stopPropagation();
+    onSelectNode(node.id);
+    setIsInlineEditing(true);
+    setInlineDraftText(targetNode.props?.text || '');
+  };
+
+  const handleInlineEditCancel = () => {
+    setIsInlineEditing(false);
+    isCommittingInlineEditRef.current = false;
+    setInlineDraftText(node.props?.text || '');
+  };
+
+  const handleInlineEditCommit = async (targetNode) => {
+    if (isCommittingInlineEditRef.current) return;
+    if (!supportsInlineTextEdit || targetNode.id !== node.id) return;
+    isCommittingInlineEditRef.current = true;
+    const nextText = inlineDraftText;
+    setIsInlineEditing(false);
+    if (!onUpdateNode) {
+      isCommittingInlineEditRef.current = false;
+      return;
+    }
+    if ((targetNode.props?.text || '') === nextText) {
+      isCommittingInlineEditRef.current = false;
+      return;
+    }
+    try {
+      await onUpdateNode({
+        nodeId: targetNode.id,
+        payload: {
+          props: {
+            ...targetNode.props,
+            text: nextText,
+          },
+        },
+      });
+    } finally {
+      isCommittingInlineEditRef.current = false;
+    }
+  };
+
+  const handleInlinePanelSave = async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setInlinePanelError('');
+    if (!onUpdateNode) return;
+
+    const nextProps = { ...node.props };
+    if (node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'button') {
+      nextProps.text = inlinePanelText;
+    } else if (node.nodeType === 'image') {
+      nextProps.src = inlinePanelImageSrc;
+      nextProps.alt = inlinePanelImageAlt;
+    } else if (node.nodeType === 'menu') {
+      let parsedItems = [];
+      try {
+        parsedItems = JSON.parse(inlinePanelMenuItems || '[]');
+      } catch {
+        setInlinePanelError('Menu JSON invalid hai.');
+        return;
+      }
+      if (!Array.isArray(parsedItems)) {
+        setInlinePanelError('Menu items array hona chahiye.');
+        return;
+      }
+      nextProps.items = parsedItems;
+    } else {
+      return;
+    }
+
+    await onUpdateNode({
+      nodeId: node.id,
+      payload: { props: nextProps },
+    });
+  };
+
+  const handleInlineImagePick = (event) => {
+    const file = event.target.files?.[0];
+    if (!file || !file.type?.startsWith('image/')) {
+      event.target.value = '';
+      return;
+    }
+    setIsReadingImage(true);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const src = typeof reader.result === 'string' ? reader.result : '';
+      setInlinePanelImageSrc(src);
+      setInlinePanelImageAlt((prev) => prev || file.name.replace(/\.[^.]+$/, ''));
+      setIsReadingImage(false);
+      event.target.value = '';
+    };
+    reader.onerror = () => {
+      setIsReadingImage(false);
+      event.target.value = '';
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const updateImageProps = async (patch) => {
+    if (node.nodeType !== 'image' || !onUpdateNode) return;
+    await onUpdateNode({
+      nodeId: node.id,
+      payload: {
+        props: {
+          ...(node.props || {}),
+          ...patch,
+        },
+      },
+    });
+  };
+
+  const adjustImageCropHeight = async (delta) => {
+    if (node.nodeType !== 'image') return;
+    const currentHeight = Number(node.props?.imageHeightPx || 0);
+    const nextHeight = Math.max(0, currentHeight + delta);
+    await updateImageProps({ imageHeightPx: nextHeight });
+  };
+
+  const adjustImageBlockWidth = async (delta) => {
+    if (node.nodeType !== 'image') return;
+    const widthFromStyle = parseFloat(String(deviceStyle?.size?.width || '').replace('px', ''));
+    const widthFromRect = Math.round(nodeElementRef.current?.getBoundingClientRect?.().width || 0);
+    const baseWidth = Number.isFinite(widthFromStyle) ? widthFromStyle : widthFromRect || 320;
+    const nextWidth = Math.max(120, Math.round(baseWidth + delta));
+    const keepPosition = String(deviceStyle?.layout?.position || '').trim();
+    await commitStylePatch({
+      layout: {
+        alignSelf: 'flex-start',
+        maxWidth: `${nextWidth}px`,
+        ...(keepPosition ? { position: keepPosition } : {}),
+      },
+      size: { width: `${nextWidth}px` },
+    });
+  };
+
+  const adjustNodeWidth = async (delta) => {
+    const widthFromStyle = parseFloat(String(deviceStyle?.size?.width || '').replace('px', ''));
+    const widthFromRect = Math.round(nodeElementRef.current?.getBoundingClientRect?.().width || 0);
+    const baseWidth = Number.isFinite(widthFromStyle) ? widthFromStyle : widthFromRect || 320;
+    const nextWidth = Math.max(80, Math.round(baseWidth + delta));
+    const patch = {
+      size: { width: `${nextWidth}px` },
+      layout: node.nodeType !== 'row' ? { alignSelf: 'flex-start', maxWidth: `${nextWidth}px` } : {},
+    };
+    await commitStylePatch(patch);
+  };
+
+  const quickSetHeadingTag = async (tag) => {
+    if (node.nodeType !== 'heading' || !onUpdateNode) return;
+    await onUpdateNode({
+      nodeId: node.id,
+      payload: {
+        props: {
+          ...(node.props || {}),
+          tag,
+        },
+      },
+    });
+  };
+
+  const quickToggleBold = async () => {
+    const current = String(deviceStyle?.typography?.fontWeight || '400');
+    const next = current === '700' ? '400' : '700';
+    await commitStylePatch({
+      typography: { fontWeight: next },
+    });
+  };
+
+  const quickSetTextColor = async (color) => {
+    await commitStylePatch({
+      typography: { color },
+      colors: { textColor: color },
+    });
+  };
+
+  const quickSetLink = async () => {
+    if (!onUpdateNode) return;
+    const current = String(node.props?.href || '');
+    const next = typeof window !== 'undefined' ? window.prompt('Set link URL', current || '#') : current;
+    if (next == null) return;
+    await onUpdateNode({
+      nodeId: node.id,
+      payload: {
+        props: {
+          ...(node.props || {}),
+          href: String(next || ''),
+        },
+      },
+    });
+  };
+
+  const quickCycleAlign = async () => {
+    const order = ['left', 'center', 'right'];
+    const current = String(deviceStyle?.typography?.textAlign || 'left');
+    const index = order.indexOf(current);
+    const next = order[(index + 1 + order.length) % order.length];
+    await commitStylePatch({
+      typography: { textAlign: next },
+    });
+  };
+
+  const inlineRichToolbarControls = supportsInlineTextEdit ? (
+    <>
+      {node.nodeType === 'heading' ? (
+        <button
+          type="button"
+          className="bld-quick-text-toolbar__btn"
+          onClick={() => quickSetHeadingTag(headingTag === 'h1' ? 'h2' : 'h1')}
+        >
+          {headingTag === 'h1' ? 'H1' : 'H2'}
+        </button>
+      ) : null}
+      <button type="button" className="bld-quick-text-toolbar__btn" onClick={quickToggleBold}>
+        Bold
+      </button>
+      <label className="bld-quick-text-toolbar__color" title="Text color">
+        <input
+          type="color"
+          value={String(deviceStyle?.typography?.color || '#0f172a')}
+          onChange={(event) => quickSetTextColor(event.target.value)}
+        />
+      </label>
+      <button type="button" className="bld-quick-text-toolbar__btn" onClick={quickSetLink}>
+        Link
+      </button>
+      <button type="button" className="bld-quick-text-toolbar__btn" onClick={quickCycleAlign}>
+        Align
+      </button>
+    </>
+  ) : null;
+
+  const cycleImageFit = async () => {
+    if (node.nodeType !== 'image') return;
+    const order = ['cover', 'contain', 'fill'];
+    const current = String(node.props?.imageFit || 'cover');
+    const next = order[(order.indexOf(current) + 1 + order.length) % order.length] || 'cover';
+    await updateImageProps({ imageFit: next });
+  };
+
+  const quickImageFullWidth = async () => {
+    if (node.nodeType !== 'image') return;
+    // Apply across all devices so it stays consistent on Desktop/Tablet/Mobile.
+    await updateImageProps({ imageHeightPx: 0, imageFit: String(node.props?.imageFit || 'contain') || 'contain' });
+    await commitStylePatchAllDevices({
+      layout: {
+        alignSelf: 'stretch',
+        maxWidth: '100%',
+      },
+      size: {
+        width: '100%',
+        height: 'auto',
+      },
+    });
+  };
+
+  const rowEmptyDrop = (
+    <DropZone
+      id={`inside-${node.id}`}
+      label={`Drop inside ${node.nodeType}`}
+      validationParentType={node.nodeType}
+      draggingNodeType={draggingNodeType}
+      showLabel={Boolean(draggingNodeType)}
+      className="bld-row-placeholder__drop"
+    />
+  );
+
+  const stopDragBubble = (event) => {
+    event.stopPropagation();
+  };
+
+  const rowEmptyAddOnly = (
+    <div className="bld-row-placeholder__actions" onClick={stopDragBubble}>
+      <button
+        type="button"
+        className="bld-row-placeholder__btn bld-row-placeholder__btn--primary"
+        title="Add element"
+        aria-label="Add element"
+        onClick={openAddForRow}
+        disabled={isCreatingNode}
+      >
+        + Add Element
+      </button>
+      <button
+        type="button"
+        className="bld-row-placeholder__pick-hint"
+        onClick={openAddForRow}
+        disabled={isCreatingNode}
+      >
+        Try: Heading • Image • Button
+      </button>
+    </div>
+  );
+
+  const inlineDirectionControls = null;
+  const quickAddControls = null;
+  const miniNodeToolbar = null;
+
+  const isLayoutContainer = node.nodeType === 'row' || node.nodeType === 'column' || node.nodeType === 'stack';
+  const parseGapPx = (gapValue) => {
+    if (typeof gapValue === 'number' && Number.isFinite(gapValue)) return gapValue;
+    const raw = String(gapValue ?? '').trim();
+    const n = Number.parseFloat(raw.replace('px', ''));
+    return Number.isFinite(n) ? n : 0;
+  };
+  const parsePaddingPx = (paddingValue) => {
+    const raw = String(paddingValue ?? '').trim();
+    if (!raw) return 0;
+    const parts = raw.split(/\s+/);
+    const first = parts[0] || '0';
+    const n = Number.parseFloat(String(first).replace('px', ''));
+    return Number.isFinite(n) ? n : 0;
+  };
+  const applyQuickFlexPatch = async (patch) => {
+    await commitStylePatch({
+      layout: {
+        display: 'flex',
+        flexWrap: 'nowrap',
+        ...(patch.layout || {}),
+      },
+      spacing: patch.spacing || {},
+    });
+  };
+  const quickSetDirection = async (direction) => {
+    await applyQuickFlexPatch({
+      layout: {
+        flexDirection: direction,
+        justifyContent: deviceStyle?.layout?.justifyContent || 'flex-start',
+        alignItems: deviceStyle?.layout?.alignItems || 'stretch',
+      },
+    });
+  };
+  const quickCenter = async () => {
+    await applyQuickFlexPatch({
+      layout: { justifyContent: 'center', alignItems: 'center' },
+    });
+  };
+  const quickSpaceBetween = async () => {
+    await applyQuickFlexPatch({
+      layout: { justifyContent: 'space-between', alignItems: 'center' },
+    });
+  };
+  const quickGapDelta = async (delta) => {
+    const currentGap = parseGapPx(deviceStyle?.layout?.gap);
+    const nextGap = Math.max(0, Math.round(currentGap + delta));
+    await applyQuickFlexPatch({
+      layout: { gap: nextGap },
+    });
+  };
+  const quickSetJustify = async (justify) => {
+    await applyQuickFlexPatch({
+      layout: {
+        justifyContent: justify,
+        alignItems: deviceStyle?.layout?.alignItems || 'center',
+      },
+    });
+  };
+  const quickPaddingDelta = async (delta) => {
+    const currentPad = parsePaddingPx(deviceStyle?.spacing?.padding);
+    const nextPad = Math.max(0, Math.round(currentPad + delta));
+    await applyQuickFlexPatch({
+      spacing: { padding: `${nextPad}px` },
+    });
+  };
+
+  const quickLayoutControls =
+    isLayoutContainer && isSelected ? (
+      <div
+        className="bld-quick-layout-controls"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button type="button" className="bld-quick-layout-controls__btn" onClick={() => quickSetDirection('row')} disabled={isSavingNode}>
+          Row
+        </button>
+        <button type="button" className="bld-quick-layout-controls__btn" onClick={() => quickSetDirection('column')} disabled={isSavingNode}>
+          Column
+        </button>
+        <button type="button" className="bld-quick-layout-controls__btn" onClick={() => quickSetJustify('flex-start')} disabled={isSavingNode}>
+          Left
+        </button>
+        <button type="button" className="bld-quick-layout-controls__btn" onClick={() => quickSetJustify('center')} disabled={isSavingNode}>
+          Align
+        </button>
+        <button type="button" className="bld-quick-layout-controls__btn" onClick={() => quickSetJustify('flex-end')} disabled={isSavingNode}>
+          Right
+        </button>
+        <button type="button" className="bld-quick-layout-controls__btn" onClick={quickCenter} disabled={isSavingNode}>
+          Center
+        </button>
+        <button type="button" className="bld-quick-layout-controls__btn" onClick={quickSpaceBetween} disabled={isSavingNode}>
+          Space Between
+        </button>
+        <button type="button" className="bld-quick-layout-controls__btn" onClick={() => quickGapDelta(4)} disabled={isSavingNode}>
+          Gap +
+        </button>
+        <button type="button" className="bld-quick-layout-controls__btn" onClick={() => quickGapDelta(-4)} disabled={isSavingNode}>
+          Gap −
+        </button>
+        <button type="button" className="bld-quick-layout-controls__btn" onClick={() => quickPaddingDelta(4)} disabled={isSavingNode}>
+          Pad +
+        </button>
+        <button type="button" className="bld-quick-layout-controls__btn" onClick={() => quickPaddingDelta(-4)} disabled={isSavingNode}>
+          Pad −
+        </button>
+      </div>
+    ) : null;
+
+  const isRowContainer = node.nodeType === 'row';
+  const canShowGapHandles =
+    isLayoutContainer && isSelected && !isFreeMode && (node.children?.length || 0) > 1;
+  const canShowColumnResize =
+    isRowContainer && isSelected && !isFreeMode && (node.children?.filter((c) => c.nodeType === 'column')?.length || 0) > 1;
+
+  const spacingEditForThisNode = activeSpacingEdit && activeSpacingEdit.nodeId === node.id ? activeSpacingEdit : null;
+
+  const isHoveredHere = hoveredNodeId === node.id;
+
+  // Local overflow measurement (selected/hovered only, debounced).
+  useEffect(() => {
+    const el = nodeElementRef.current;
+    if (!el) return undefined;
+    if (!isNodeActive && !isHoveredHere) return undefined;
+
+    let raf = 0;
+    let t = 0;
+    let ro = null;
+
+    const measure = () => {
+      const cs = window.getComputedStyle(el);
+      const isFlex = String(cs.display || '').includes('flex');
+      const flexWrap = String(cs.flexWrap || 'nowrap');
+      const horizontal = el.scrollWidth > el.clientWidth + 1;
+      const vertical = el.scrollHeight > el.clientHeight + 1;
+
+      let flexWrapUnexpected = false;
+      if (isFlex && flexWrap === 'nowrap') {
+        const kidsWrap = el.querySelector(':scope > .bld-node-children');
+        const kids = kidsWrap ? Array.from(kidsWrap.children || []) : [];
+        if (kids.length >= 2) {
+          const tops = kids.map((k) => k.getBoundingClientRect().top);
+          const minTop = Math.min(...tops);
+          const maxTop = Math.max(...tops);
+          flexWrapUnexpected = maxTop - minTop > 3;
+        }
+      }
+
+      onReportOverflow?.(node.id, { horizontal, vertical, flexWrapUnexpected, ts: Date.now() });
+      setOverflowLocal({ horizontal, vertical, flexWrapUnexpected });
+    };
+
+    const schedule = () => {
+      if (t) window.clearTimeout(t);
+      t = window.setTimeout(() => {
+        if (raf) cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(measure);
+      }, 120);
+    };
+
+    schedule();
+    ro = new ResizeObserver(() => schedule());
+    ro.observe(el);
+    window.addEventListener('scroll', schedule, true);
+
+    return () => {
+      if (t) window.clearTimeout(t);
+      if (raf) cancelAnimationFrame(raf);
+      if (ro) ro.disconnect();
+      window.removeEventListener('scroll', schedule, true);
+    };
+  }, [isNodeActive, isHoveredHere, node.id, onReportOverflow]);
+
+  const supportsInlineContentPanel = false;
+  const inlineContentPanel =
+    isSelected && supportsInlineContentPanel ? (
+      <form className="bld-inline-content-panel" onSubmit={handleInlinePanelSave} onClick={(e) => e.stopPropagation()}>
+        {node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'button' ? (
+          <textarea
+            className="bld-inline-content-panel__textarea"
+            rows={2}
+            value={inlinePanelText}
+            onChange={(event) => setInlinePanelText(event.target.value)}
+            placeholder="Text yahi edit karein"
+          />
+        ) : null}
+        {node.nodeType === 'image' ? (
+          <>
+            <input
+              className="bld-inline-content-panel__input"
+              value={inlinePanelImageSrc}
+              onChange={(event) => setInlinePanelImageSrc(event.target.value)}
+              placeholder="Image URL / Data URL"
+            />
+            <input
+              className="bld-inline-content-panel__input"
+              value={inlinePanelImageAlt}
+              onChange={(event) => setInlinePanelImageAlt(event.target.value)}
+              placeholder="Image alt text"
+            />
+            <input type="file" className="bld-inline-content-panel__input" accept="image/*" onChange={handleInlineImagePick} />
+          </>
+        ) : null}
+        {node.nodeType === 'menu' ? (
+          <textarea
+            className="bld-inline-content-panel__textarea"
+            rows={4}
+            value={inlinePanelMenuItems}
+            onChange={(event) => setInlinePanelMenuItems(event.target.value)}
+            placeholder='[{"label":"Home","to":"/"}]'
+          />
+        ) : null}
+        {inlinePanelError ? <p className="bld-inline-content-panel__error">{inlinePanelError}</p> : null}
+        <button type="submit" className="bld-inline-content-panel__save" disabled={isSavingNode || isReadingImage}>
+          {isSavingNode ? 'Saving...' : isReadingImage ? 'Reading image...' : 'Apply'}
+        </button>
+      </form>
+    ) : null;
+
+  const showQuickTextToolbar =
+    isNodeActive &&
+    !isInlineEditing &&
+    (node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'button');
+
+  const showRowChrome = isNodeActive || isHoveredHere;
+  const showFloatingToolbar =
+    supportsDirectManipulation && !dragLocked && (isNodeActive || isHoveredHere);
+  const needsShellChromeOverlay =
+    showFloatingToolbar || quickLayoutControls != null || showQuickTextToolbar;
+  const layerBadgeSuppressed =
+    (isRow && showRowChrome) ||
+    ((node.nodeType === 'column' || node.nodeType === 'stack') && needsShellChromeOverlay);
+
+  const RowSurfaceTag =
+    isRow && rowSemanticTag && ['main', 'header', 'footer', 'section'].includes(rowSemanticTag)
+      ? rowSemanticTag
+      : 'div';
+
+  const rowMoreMenuItems = [];
+  if (!isRowEmpty) {
+    rowMoreMenuItems.push({
+      key: 'pick',
+      label: 'Add element…',
+      onSelect: openAddForRow,
+      useMouseDown: false,
+      disabled: isCreatingNode,
+    });
+  }
+  rowMoreMenuItems.push({
+    key: 'section',
+    label: 'Add section after',
+    onSelect: openAddSectionAfterRow,
+    useMouseDown: false,
+    disabled: !Number.isInteger(rowIndex) || isCreatingNode,
+  });
+  if (onReorderNode && parentNodeType === null && Number.isInteger(rowIndex)) {
+    rowMoreMenuItems.push({
+      key: 'move-up',
+      label: 'Move section up',
+      onSelect: () => onReorderNode({ nodeId: node.id, newParentId: null, newIndex: Math.max(0, rowIndex - 1) }),
+      useMouseDown: false,
+      disabled: isReorderingNode || rowIndex === 0,
+    });
+    rowMoreMenuItems.push({
+      key: 'move-down',
+      label: 'Move section down',
+      onSelect: () => onReorderNode({ nodeId: node.id, newParentId: null, newIndex: rowIndex + 1 }),
+      useMouseDown: false,
+      disabled:
+        isReorderingNode ||
+        (Number.isFinite(Number(rowSiblingsCount)) ? rowIndex >= Number(rowSiblingsCount) - 1 : false),
+    });
+  }
+  if (onSaveGlobalSection && parentNodeType === null) {
+    rowMoreMenuItems.push({
+      key: 'global-header',
+      label: 'Save as global header',
+      onSelect: () => onSaveGlobalSection({ rowId: node.id, role: 'header' }),
+      useMouseDown: false,
+      disabled: isSavingNode || isCreatingNode,
+    });
+    rowMoreMenuItems.push({
+      key: 'global-footer',
+      label: 'Save as global footer',
+      onSelect: () => onSaveGlobalSection({ rowId: node.id, role: 'footer' }),
+      useMouseDown: false,
+      disabled: isSavingNode || isCreatingNode,
+    });
+  }
+  if (isFreeMode) {
+    rowMoreMenuItems.push({
+      key: 'free',
+      label: 'Free move',
+      onSelect: startMoveWithMouse,
+      useMouseDown: true,
+      disabled: isSavingNode || isDragging || Boolean(draggingNodeType),
+    });
+  }
+  if (onCopyNodeId) {
+    rowMoreMenuItems.push({
+      key: 'copy',
+      label: 'Copy',
+      onSelect: () => onCopyNodeId(node.id),
+      useMouseDown: false,
+    });
+  }
+
+  const shellMoreMenuItems = [];
+  if (isContainer) {
+    shellMoreMenuItems.push({
+      key: 'pick',
+      label: 'Add element…',
+      onSelect: openAddForNode,
+      useMouseDown: false,
+      disabled: isCreatingNode,
+    });
+  }
+  if (isFreeMode) {
+    shellMoreMenuItems.push({
+      key: 'free',
+      label: 'Free move',
+      onSelect: startMoveWithMouse,
+      useMouseDown: true,
+      disabled: isSavingNode || isDragging || Boolean(draggingNodeType),
+    });
+  }
+  if (onCopyNodeId) {
+    shellMoreMenuItems.push({
+      key: 'copy',
+      label: 'Copy',
+      onSelect: () => onCopyNodeId(node.id),
+      useMouseDown: false,
+    });
+  }
+
+  return (
+    <>
+      <DropZone
+        id={`before-${node.id}`}
+        label="Drop here (reorder)"
+        validationParentType={parentNodeType ?? null}
+        draggingNodeType={draggingNodeType}
+        showLabel={Boolean(draggingNodeType)}
+      />
+      {node.nodeType === 'row' && showSectionAddButtonBefore ? (
+        <div className="bld-add-section-inline">
+          <button
+            type="button"
+            className="bld-add-section-inline__btn"
+            onMouseEnter={(event) => {
+              if (!Number.isInteger(rowIndex)) return;
+              onAddSectionPreviewEnter?.(event.currentTarget, rowIndex);
+            }}
+            onMouseLeave={() => onAddSectionPreviewLeave?.()}
+            onClick={(event) => {
+              event.stopPropagation();
+              if (!Number.isInteger(rowIndex)) return;
+              onOpenSectionInsert?.(rowIndex);
+            }}
+            disabled={isCreatingNode}
+          >
+            + Add Section
+          </button>
+        </div>
+      ) : null}
+      {isRow ? (
+        <RowSurfaceTag
+          ref={(element) => {
+            nodeElementRef.current = element;
+            setDraggableRef(element);
+          }}
+          {...attributes}
+          data-bld-node={node.id}
+          {...(node.props?.meta?.isHeader || node.props?.meta?.role === 'header'
+            ? {
+                'data-site-header': 'true',
+                ...(node.props?.meta?.headerAlign
+                  ? { 'data-header-align': String(node.props.meta.headerAlign) }
+                  : {}),
+              }
+            : {})}
+          {...(rowSemanticTag === 'footer' || node.props?.meta?.isFooter || node.props?.meta?.role === 'footer'
+            ? { 'data-site-footer': 'true' }
+            : {})}
+          className={`${classNames} bld-node ${isSelected ? 'bld-selected' : ''}`.trim()}
+          style={inlineStyle}
+          onClick={handleSelect}
+          onMouseDown={maybeStartDirectMove}
+          onKeyDown={handleKeyDown}
+          onMouseEnter={() => onHoverNode?.(node.id)}
+          onMouseLeave={() => {
+            if (hoveredNodeId === node.id) onHoverNode?.(null);
+          }}
+          onContextMenu={handleContextMenu}
+          role="group"
+          tabIndex={0}
+          aria-label={`${node.displayName || 'Section'}, ${rowRole || 'row'}`}
+        >
+          <span
+            className={`bld-layer-type-badge bld-layer-type-badge--section${layerBadgeSuppressed ? ' bld-layer-type-badge--hidden' : ''}`.trim()}
+            aria-hidden
+          >
+            Section
+          </span>
+          {showRowChrome ? (
+            <div className="bld-node__chrome bld-node__chrome--row bld-node__chrome--overlay">
+              <div className="bld-node__chrome-top">
+                <div className="bld-node__label is-layout-label">
+                  Section{' '}
+                  <span className="bld-node__type">{node.displayName || node.nodeType}</span>
+                  {rowRole ? <span className="bld-node__section-tag">{rowRole}</span> : null}
+                  {overflowLocal?.horizontal || overflowLocal?.vertical || overflowLocal?.flexWrapUnexpected ? (
+                    <span className="bld-node__overflow" title="Layout overflow detected" aria-label="Overflow">
+                      Overflow
+                    </span>
+                  ) : null}
+                </div>
+                <CanvasFloatingToolbar
+                  dragListeners={listeners}
+                  onDuplicate={duplicateThisNode}
+                  onDelete={deleteThisNode}
+                  duplicateDisabled={isSavingNode}
+                  deleteDisabled={isDeletingNode}
+                  menuItems={rowMoreMenuItems}
+                />
+              </div>
+                {quickLayoutControls ? <div className="bld-node__chrome-layout">{quickLayoutControls}</div> : null}
+              </div>
+          ) : null}
+          {inlineDirectionControls}
+          {quickAddControls}
+          {inlineContentPanel}
+          {isRowEmpty ? (
+            <div
+              className={`bld-row-placeholder ${isSelected || isHoveredHere ? 'bld-row-placeholder--selected' : ''}`.trim()}
+            >
+              {rowEmptyDrop}
+              {showRowChrome ? rowEmptyAddOnly : null}
+              {!draggingNodeType && !isDragging && !freeMoveBrushActive ? (
+                <div className="bld-row-smart-suggestions" onPointerDown={(e) => e.stopPropagation()}>
+                  <span className="bld-row-smart-suggestions__label">Start here</span>
+                  <button
+                    type="button"
+                    className="bld-row-smart-suggestions__btn"
+                    disabled={isCreatingNode || isSavingNode}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (isCreatingNode || isSavingNode) return;
+                      onSelectNode(node.id);
+                      await onInsertStarterTemplate?.({ targetRowId: node.id });
+                    }}
+                  >
+                    Hero section
+                  </button>
+                  <button
+                    type="button"
+                    className="bld-row-smart-suggestions__btn"
+                    disabled={isCreatingNode || isSavingNode}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (isCreatingNode || isSavingNode) return;
+                      onSelectNode(node.id);
+                      if (onQuickAddNode) {
+                        await onQuickAddNode({ targetNodeId: node.id, nodeType: 'column' });
+                        await onQuickAddNode({ targetNodeId: node.id, nodeType: 'column' });
+                      } else {
+                        await onCreateNode?.({ nodeType: 'column', parentNodeId: node.id });
+                        await onCreateNode?.({ nodeType: 'column', parentNodeId: node.id });
+                      }
+                    }}
+                  >
+                    Two columns
+                  </button>
+                </div>
+              ) : null}
+              <p className="bld-row-placeholder__hint">
+                Drag blocks from the library, or open the row menu to add a section or move freely.
+              </p>
+            </div>
+          ) : (
+            <>
+              <DropZone
+                id={`inside-${node.id}`}
+                label={`Drop inside ${node.nodeType}`}
+                validationParentType={node.nodeType}
+                draggingNodeType={draggingNodeType}
+                showLabel={Boolean(draggingNodeType)}
+              />
+              <div className="bld-node-children">
+                {node.children.map((childNode) => (
+                    <NodeRenderer
+                    key={childNode.id}
+                    node={childNode}
+                    rowIndex={null}
+                    rowSemanticTag={null}
+                    selectedNodeId={selectedNodeId}
+                    onSelectNode={onSelectNode}
+                    parentNodeType={node.nodeType}
+                    draggingNodeType={draggingNodeType}
+                    device={device}
+                    onDeleteNode={onDeleteNode}
+                    onRequestNavigator={onRequestNavigator}
+                    onInsertStarterTemplate={onInsertStarterTemplate}
+                    onInsertHeaderTemplate={onInsertHeaderTemplate}
+                    onSetContainerDirection={onSetContainerDirection}
+                    onUpdateNode={onUpdateNode}
+                    onCreateNode={onCreateNode}
+                    onQuickAddNode={onQuickAddNode}
+                    onDuplicateNode={onDuplicateNode}
+                      onReorderNode={onReorderNode}
+                      isReorderingNode={isReorderingNode}
+                    isCreatingNode={isCreatingNode}
+                    isSavingNode={isSavingNode}
+                    isDeletingNode={isDeletingNode}
+                    deletingNodeId={deletingNodeId}
+                    onOpenWidgetPicker={onOpenWidgetPicker}
+                    onOpenSectionInsert={onOpenSectionInsert}
+                    hoveredNodeId={hoveredNodeId}
+                    onHoverNode={onHoverNode}
+                    onSaveGlobalSection={onSaveGlobalSection}
+                    onAlignMenuRightInRow={onAlignMenuRightInRow}
+                    onUploadLogoInRow={onUploadLogoInRow}
+                    onStretchSectionFullWidth={onStretchSectionFullWidth}
+                    onStretchSectionFromSelection={onStretchSectionFromSelection}
+                    onAlignMenuRightFromSelection={onAlignMenuRightFromSelection}
+                    isFreeMode={isFreeMode}
+                    onCopyNodeId={onCopyNodeId}
+                    flashPasteNodeId={flashPasteNodeId}
+                    flashReorderNodeId={flashReorderNodeId}
+                    onAddSectionPreviewEnter={onAddSectionPreviewEnter}
+                    onAddSectionPreviewLeave={onAddSectionPreviewLeave}
+                    onFreeMoveBrush={onFreeMoveBrush}
+                    freeMoveBrushActive={freeMoveBrushActive}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </RowSurfaceTag>
+      ) : (
+        <div
+          ref={(element) => {
+            nodeElementRef.current = element;
+            setDraggableRef(element);
+          }}
+          {...attributes}
+          data-bld-node={node.id}
+          className={`${classNames} bld-node bld-node__shell ${isSelected ? 'bld-selected' : ''}`.trim()}
+          style={isContainer ? inlineStyle : undefined}
+          onClick={handleSelect}
+          onMouseDown={maybeStartDirectMove}
+          onKeyDown={handleKeyDown}
+          role="button"
+          tabIndex={0}
+          onMouseEnter={() => onHoverNode?.(node.id)}
+          onMouseLeave={() => {
+            if (hoveredNodeId === node.id) onHoverNode?.(null);
+          }}
+          onContextMenu={handleContextMenu}
+        >
+            {isContainer ? (
+              <span
+                className={`bld-layer-type-badge${node.nodeType === 'column' ? ' bld-layer-type-badge--column' : ''}${node.nodeType === 'stack' ? ' bld-layer-type-badge--stack' : ''}${layerBadgeSuppressed ? ' bld-layer-type-badge--hidden' : ''}`.trim()}
+                aria-hidden
+              >
+                {node.nodeType === 'column' ? 'Column' : node.nodeType === 'stack' ? 'Stack' : 'Section'}
+              </span>
+            ) : null}
+            {needsShellChromeOverlay ? (
+              <div
+                className={`bld-node__chrome bld-node__chrome--overlay${isContainer ? ' bld-node__chrome--nest' : ''}`.trim()}
+              >
+                <div className="bld-node__chrome-top">
+                  {isContainer ? (
+                    <div className={`bld-node__label ${isContainer ? 'is-layout-label' : ''}`}>
+                      {node.nodeType === 'column'
+                        ? 'Column'
+                        : node.nodeType === 'stack'
+                          ? 'Stack'
+                          : node.nodeType === 'menu'
+                            ? 'Menu'
+                            : node.nodeType === 'row'
+                              ? 'Section'
+                              : 'Widget'}{' '}
+                      <span className="bld-node__type">{node.displayName || node.nodeType}</span>
+                      {overflowLocal?.horizontal || overflowLocal?.vertical || overflowLocal?.flexWrapUnexpected ? (
+                        <span className="bld-node__overflow" title="Layout overflow detected" aria-label="Overflow">
+                          Overflow
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="bld-node__chrome-spacer" aria-hidden />
+                  )}
+                  {showFloatingToolbar ? (
+                    <CanvasFloatingToolbar
+                      dragListeners={listeners}
+                      onDuplicate={duplicateThisNode}
+                      onDelete={deleteThisNode}
+                      duplicateDisabled={isSavingNode}
+                      deleteDisabled={isDeletingNode}
+                      menuItems={shellMoreMenuItems}
+                    />
+                  ) : null}
+                </div>
+                {quickLayoutControls ? <div className="bld-node__chrome-layout">{quickLayoutControls}</div> : null}
+                {showQuickTextToolbar ? (
+                  <div className="bld-node__chrome-text">
+                    <div className="bld-quick-text-toolbar" onPointerDown={stopDragBubble} onClick={(event) => event.stopPropagation()}>
+                      {inlineRichToolbarControls}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            {miniNodeToolbar}
+            {inlineDirectionControls}
+            {quickAddControls}
+            {inlineContentPanel}
+            {spacingEditForThisNode ? (
+              <SpacingGuidesOverlay
+                targetElement={nodeElementRef.current}
+                edit={spacingEditForThisNode}
+              />
+            ) : null}
+            {canShowGapHandles ? (
+              <GapHandlesOverlay
+                containerNode={node}
+                containerElement={nodeElementRef.current}
+                deviceStyle={deviceStyle}
+                disabled={isSavingNode || isDragging || Boolean(draggingNodeType)}
+                onPreviewCss={setInteractionPreviewStyle}
+                onCommitPatch={commitStylePatch}
+                snapGapToScale={snapGapToScale}
+                applyDeviceStylePatch={applyDeviceStylePatch}
+                withFlexWidthOverride={withFlexWidthOverride}
+                device={device}
+                siteTheme={siteTheme}
+              />
+            ) : null}
+            {canShowColumnResize ? (
+              <ColumnResizeOverlay
+                rowNode={node}
+                rowElement={nodeElementRef.current}
+                deviceStyle={deviceStyle}
+                disabled={isSavingNode || isDragging || Boolean(draggingNodeType)}
+                onPreviewColumnCss={(colId, css) => onSetPreviewCssForNode?.(colId, css)}
+                onCommitColumnStyleJson={async (colId, styleJson) => {
+                  await onUpdateNode?.({ nodeId: colId, payload: { style_json: styleJson } });
+                }}
+                onClearPreview={() => onSetPreviewCssForNode?.(null, null, { clearAll: true })}
+                applyDeviceStylePatch={applyDeviceStylePatch}
+                withFlexWidthOverride={withFlexWidthOverride}
+                device={device}
+                siteTheme={siteTheme}
+              />
+            ) : null}
+            {dragAssist ? (
+              <div className="bld-drag-assist">
+                <span className="bld-drag-assist__mode">
+                  {dragAssist.mode === 'snap' ? 'Snap mode' : 'Free move'}
+                </span>
+                <span className="bld-drag-assist__chip">
+                  {dragAssist.mode === 'snap' ? dragAssist.snapSummary : dragAssist.spacingLine || '—'}
+                </span>
+              </div>
+            ) : null}
+            {supportsInlineTextEdit && isInlineEditing ? (
+              <div ref={inlineEditWrapRef} className="bld-inline-edit-anchor">
+                {renderNodeContent(node, {
+                  isInlineEditing,
+                  inlineDraftText,
+                  onInlineDraftChange: setInlineDraftText,
+                  onInlineEditStart: handleInlineEditStart,
+                  onInlineEditCommit: handleInlineEditCommit,
+                  onInlineEditCancel: handleInlineEditCancel,
+                  isSavingNode,
+                  isRichTextEditing,
+                  onRichTextEditStart: handleRichTextEditStart,
+                  onRichTextCommit: handleRichTextCommit,
+                  onRichTextCancel: handleRichTextCancel,
+                  richBlockStyle: inlineStyle,
+                  menuStyle: deviceStyle,
+                  widgetCss: inlineStyle,
+                  device,
+                })}
+              </div>
+            ) : (
+              renderNodeContent(node, {
+                isInlineEditing,
+                inlineDraftText,
+                onInlineDraftChange: setInlineDraftText,
+                onInlineEditStart: handleInlineEditStart,
+                onInlineEditCommit: handleInlineEditCommit,
+                onInlineEditCancel: handleInlineEditCancel,
+                isSavingNode,
+                isRichTextEditing,
+                onRichTextEditStart: handleRichTextEditStart,
+                onRichTextCommit: handleRichTextCommit,
+                onRichTextCancel: handleRichTextCancel,
+                richBlockStyle: inlineStyle,
+                menuStyle: deviceStyle,
+                widgetCss: inlineStyle,
+                device,
+              })
+            )}
+            {null}
+            {(node.nodeType === 'image' || node.nodeType === 'menu') && isNodeActive ? (
+              <div
+                className="bld-node__media-toolbar"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="bld-image-quick-tools">
+                  {node.nodeType === 'image' ? (
+                    <button
+                      type="button"
+                      className="bld-image-quick-tools__btn"
+                      title="Full width (all devices)"
+                      aria-label="Full width (all devices)"
+                      onClick={quickImageFullWidth}
+                      disabled={isSavingNode}
+                    >
+                      Full
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="bld-image-quick-tools__btn"
+                    title="Decrease width"
+                    aria-label="Decrease width"
+                    onClick={() =>
+                      node.nodeType === 'image' ? adjustImageBlockWidth(-30) : adjustNodeWidth(-30)
+                    }
+                    disabled={isSavingNode}
+                  >
+                    W−
+                  </button>
+                  <button
+                    type="button"
+                    className="bld-image-quick-tools__btn"
+                    title="Increase width"
+                    aria-label="Increase width"
+                    onClick={() =>
+                      node.nodeType === 'image' ? adjustImageBlockWidth(30) : adjustNodeWidth(30)
+                    }
+                    disabled={isSavingNode}
+                  >
+                    W+
+                  </button>
+                  {node.nodeType === 'image' ? (
+                    <>
+                      <button
+                        type="button"
+                        className="bld-image-quick-tools__btn"
+                        title="Decrease crop height"
+                        aria-label="Decrease crop height"
+                        onClick={() => adjustImageCropHeight(-20)}
+                        disabled={isSavingNode}
+                      >
+                        −
+                      </button>
+                      <button
+                        type="button"
+                        className="bld-image-quick-tools__btn"
+                        title="Change image fit"
+                        aria-label="Change image fit"
+                        onClick={cycleImageFit}
+                        disabled={isSavingNode}
+                      >
+                        {String(node.props?.imageFit || 'cover') === 'contain'
+                          ? 'Contain'
+                          : String(node.props?.imageFit || 'cover') === 'fill'
+                            ? 'Fill'
+                            : 'Cover'}
+                      </button>
+                      <button
+                        type="button"
+                        className="bld-image-quick-tools__btn"
+                        title="Increase crop height"
+                        aria-label="Increase crop height"
+                        onClick={() => adjustImageCropHeight(20)}
+                        disabled={isSavingNode}
+                      >
+                        +
+                      </button>
+                    </>
+                  ) : null}
+                </div>
+                {supportsDirectManipulation && canResizeNode ? (
+                  <ResizeHandle
+                    className="bld-transform-handle--inline-resize"
+                    onMouseDown={startResizeWithMouse}
+                    disabled={isSavingNode || isDragging || Boolean(draggingNodeType)}
+                  />
+                ) : null}
+              </div>
+            ) : null}
+            {isContainer ? (
+              <DropZone
+                id={`inside-${node.id}`}
+                label={`Drop inside ${node.nodeType}`}
+                validationParentType={node.nodeType}
+                draggingNodeType={draggingNodeType}
+                showLabel={Boolean(draggingNodeType)}
+              />
+            ) : null}
+            {isContainer && !node.children?.length ? (
+              <div className="bld-node-empty" onPointerDown={stopDragBubble}>
+                <p className="bld-node-empty__text">Empty {node.nodeType}. Add content to start building.</p>
+                <div className="bld-node-empty__actions">
+                  <button
+                    type="button"
+                    className="bld-node-empty__btn bld-node-empty__btn--primary"
+                    onPointerDown={stopDragBubble}
+                    onClick={openAddForNode}
+                    disabled={isCreatingNode}
+                  >
+                    + Add Element
+                  </button>
+                  <button
+                    type="button"
+                    className="bld-node-empty__pick-hint"
+                    onPointerDown={stopDragBubble}
+                    onClick={openAddForNode}
+                    disabled={isCreatingNode}
+                  >
+                    Try: Heading • Image • Button
+                  </button>
+                </div>
+                <p className="bld-node-empty__hint">Move, duplicate, and delete live in the toolbar; use ⋯ for more.</p>
+              </div>
+            ) : null}
+            {node.children?.length ? (
+              <div className="bld-node-children">
+                {node.children.map((childNode) => (
+                  <NodeRenderer
+                    key={childNode.id}
+                    node={childNode}
+                    selectedNodeId={selectedNodeId}
+                    onSelectNode={onSelectNode}
+                    parentNodeType={node.nodeType}
+                    draggingNodeType={draggingNodeType}
+                    device={device}
+                    previewCssByNodeId={previewCssByNodeId}
+                    onSetPreviewCssForNode={onSetPreviewCssForNode}
+                    onReportOverflow={onReportOverflow}
+                    onDeleteNode={onDeleteNode}
+                    onRequestNavigator={onRequestNavigator}
+                    onInsertStarterTemplate={onInsertStarterTemplate}
+                    onInsertHeaderTemplate={onInsertHeaderTemplate}
+                    onSetContainerDirection={onSetContainerDirection}
+                    onUpdateNode={onUpdateNode}
+                    onCreateNode={onCreateNode}
+                    onQuickAddNode={onQuickAddNode}
+                    onDuplicateNode={onDuplicateNode}
+                    isCreatingNode={isCreatingNode}
+                    isSavingNode={isSavingNode}
+                    isDeletingNode={isDeletingNode}
+                    deletingNodeId={deletingNodeId}
+                    onOpenWidgetPicker={onOpenWidgetPicker}
+                    onOpenSectionInsert={onOpenSectionInsert}
+                    hoveredNodeId={hoveredNodeId}
+                    onHoverNode={onHoverNode}
+                    onSaveGlobalSection={onSaveGlobalSection}
+                    onAlignMenuRightInRow={onAlignMenuRightInRow}
+                    onUploadLogoInRow={onUploadLogoInRow}
+                    onStretchSectionFullWidth={onStretchSectionFullWidth}
+                    onStretchSectionFromSelection={onStretchSectionFromSelection}
+                    onAlignMenuRightFromSelection={onAlignMenuRightFromSelection}
+                    isFreeMode={isFreeMode}
+                    rowSemanticTag={null}
+                    onCopyNodeId={onCopyNodeId}
+                    flashPasteNodeId={flashPasteNodeId}
+                    flashReorderNodeId={flashReorderNodeId}
+                    onAddSectionPreviewEnter={onAddSectionPreviewEnter}
+                    onAddSectionPreviewLeave={onAddSectionPreviewLeave}
+                    onFreeMoveBrush={onFreeMoveBrush}
+                    freeMoveBrushActive={freeMoveBrushActive}
+                  />
+                ))}
+              </div>
+            ) : null}
+            {supportsDirectManipulation &&
+            isNodeActive &&
+            canResizeNode &&
+            !(node.nodeType === 'image' || node.nodeType === 'menu') ? (
+              <ResizeHandle
+                onMouseDown={startResizeWithMouse}
+                disabled={isSavingNode || isDragging || Boolean(draggingNodeType)}
+              />
+            ) : null}
+          </div>
+      )}
+      {supportsInlineTextEdit &&
+      isInlineEditing &&
+      floatingToolbarPos &&
+      typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className="bld-floating-inline-toolbar"
+              style={{
+                position: 'fixed',
+                top: floatingToolbarPos.top,
+                left: floatingToolbarPos.left,
+                transform: 'translate(-50%, -100%)',
+                zIndex: 13000,
+              }}
+              role="toolbar"
+              aria-label="Text formatting"
+              onPointerDown={(event) => event.preventDefault()}
+            >
+              <div className="bld-floating-inline-toolbar__inner">
+                {inlineRichToolbarControls}
+                <button
+                  type="button"
+                  className="bld-floating-inline-toolbar__done"
+                  onClick={() => handleInlineEditCommit(node)}
+                >
+                  Done
+                </button>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
+      {dragAssist?.mode === 'snap' &&
+      (dragAssist.vline != null || dragAssist.hline != null) &&
+      typeof document !== 'undefined'
+        ? createPortal(
+            <div className="bld-snap-guides" aria-hidden>
+              {dragAssist.vline != null ? (
+                <div className="bld-snap-guides__line bld-snap-guides__line--v" style={{ left: dragAssist.vline }} />
+              ) : null}
+              {dragAssist.hline != null ? (
+                <div className="bld-snap-guides__line bld-snap-guides__line--h" style={{ top: dragAssist.hline }} />
+              ) : null}
+            </div>,
+            document.body
+          )
+        : null}
+    </>
+  );
+}
+
+function validateResolvedDrop(tree, draggedNodeId, payload) {
+  if (!payload) return false;
+  const dragged = findNodeInTree(tree, draggedNodeId);
+  if (!dragged) return false;
+  let parentType = null;
+  if (payload.newParentId) {
+    const parent = findNodeInTree(tree, payload.newParentId);
+    if (!parent) return false;
+    parentType = parent.nodeType;
+  }
+  return isValidNodeHierarchy(dragged.nodeType, parentType);
+}
+
+function breadcrumbDisplayLabel(n) {
+  if (!n) return 'Node';
+  if (n.nodeType === 'row') return n.displayName || 'Section';
+  if (n.nodeType === 'column') return n.displayName || 'Column';
+  if (n.nodeType === 'stack') return n.displayName || 'Stack';
+  return n.displayName || n.nodeType || 'Block';
+}
+
+function findBreadcrumbTrail(nodes, targetId, path = []) {
+  for (const n of nodes || []) {
+    const crumb = { id: n.id, label: breadcrumbDisplayLabel(n) };
+    const next = [...path, crumb];
+    if (n.id === targetId) return next;
+    const found = findBreadcrumbTrail(n.children || [], targetId, next);
+    if (found) return found;
+  }
+  return null;
+}
+
+export default function BuilderCanvas({
+  device,
+  onDeviceChange,
+  tree,
+  selectedNodeId,
+  onSelectNode,
+  isLoading,
+  onCreateNode,
+  onQuickAddNode,
+  isCreatingNode = false,
+  onReorderNode,
+  isReorderingNode,
+  onDeleteNode,
+  onRequestNavigator,
+  onInsertStarterTemplate,
+  onInsertHeaderTemplate,
+  onInsertSectionTemplate,
+  onCreateHeroSection,
+  projectTemplates = [],
+  onImportPageTemplate,
+  onSetContainerDirection,
+  onUpdateNode,
+  onDuplicateNode,
+  isSavingNode,
+  isDeletingNode,
+  deletingNodeId = null,
+  onCreateSection,
+  projectType = 'website',
+  onSaveGlobalSection,
+  onAlignMenuRightInRow,
+  onUploadLogoInRow,
+  onStretchSectionFullWidth,
+  onStretchSectionFromSelection,
+  onAlignMenuRightFromSelection,
+  isFreeMode = false,
+  isLayoutDebug = false,
+  minimalPageChrome = false,
+  onCopyNodeId,
+  flashPasteNodeId = null,
+  previewCssByNodeId: externalPreviewCssByNodeId,
+  onSetPreviewCssForNode: externalOnSetPreviewCssForNode,
+  activeSpacingEdit,
+  onOverflowDiagnosticsChange,
+  showGrid = false,
+}) {
+  const { siteTheme, currentPageSlug } = useBuilderTheme();
+  const pageVars = currentPageSlug ? siteTheme?.pageVars?.[currentPageSlug] : null;
+  const sectionGapPx = pageVars && Number.isFinite(Number(pageVars.sectionGapPx)) ? Number(pageVars.sectionGapPx) : null;
+  const sectionPadBottomPx =
+    pageVars && Number.isFinite(Number(pageVars.sectionPadBottomPx)) ? Number(pageVars.sectionPadBottomPx) : null;
+  const stickyHeader = Boolean(pageVars?.stickyHeader);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+  const [draggingNodeType, setDraggingNodeType] = useState(null);
+  const [isAddSectionOpen, setIsAddSectionOpen] = useState(false);
+  const [sectionInsertIndex, setSectionInsertIndex] = useState(null);
+  const [sectionModalTab, setSectionModalTab] = useState('presets');
+  const [isWidgetPickerOpen, setIsWidgetPickerOpen] = useState(false);
+  const [widgetPickerTargetId, setWidgetPickerTargetId] = useState(null);
+  const [hasAutoOpenedTemplatePicker, setHasAutoOpenedTemplatePicker] = useState(false);
+  const [hoveredNodeId, setHoveredNodeId] = useState(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [addSectionPreview, setAddSectionPreview] = useState(null);
+  const [canvasFreeMoveActive, setCanvasFreeMoveActive] = useState(false);
+  const [reorderFlashNodeId, setReorderFlashNodeId] = useState(null);
+  const [previewCssByNodeId, setPreviewCssByNodeId] = useState({});
+  const reorderFlashTimerRef = useRef(null);
+  const hoverEnterTimerRef = useRef(null);
+  const addSectionPreviewTimerRef = useRef(null);
+  const dragAltDuplicateRef = useRef(false);
+  const hoverLeaveTimerRef = useRef(null);
+  const HOVER_ENTER_MS = 100;
+  const HOVER_LEAVE_MS = 150;
+
+  const setPreviewCssForNode = useCallback((nodeId, css, opts = {}) => {
+    if (opts?.clearAll) {
+      setPreviewCssByNodeId({});
+      return;
+    }
+    if (!nodeId) return;
+    setPreviewCssByNodeId((prev) => {
+      const next = { ...(prev || {}) };
+      if (!css) delete next[nodeId];
+      else next[nodeId] = css;
+      return next;
+    });
+  }, []);
+
+  const effectivePreviewCssByNodeId = externalPreviewCssByNodeId || previewCssByNodeId;
+  const effectiveSetPreviewCssForNode = externalOnSetPreviewCssForNode || setPreviewCssForNode;
+
+  const overflowByNodeIdRef = useRef({});
+  const overflowFlushTimerRef = useRef(null);
+  const reportOverflow = useCallback((nodeId, diag) => {
+    if (!nodeId) return;
+    overflowByNodeIdRef.current = {
+      ...(overflowByNodeIdRef.current || {}),
+      [nodeId]: diag,
+    };
+    if (overflowFlushTimerRef.current) window.clearTimeout(overflowFlushTimerRef.current);
+    overflowFlushTimerRef.current = window.setTimeout(() => {
+      overflowFlushTimerRef.current = null;
+      onOverflowDiagnosticsChange?.(overflowByNodeIdRef.current);
+    }, 140);
+  }, [onOverflowDiagnosticsChange]);
+
+  const onHoverNodeIntent = useCallback((nodeId) => {
+    if (draggingNodeType) return;
+    if (hoverLeaveTimerRef.current) {
+      clearTimeout(hoverLeaveTimerRef.current);
+      hoverLeaveTimerRef.current = null;
+    }
+    if (nodeId == null) {
+      if (hoverEnterTimerRef.current) {
+        clearTimeout(hoverEnterTimerRef.current);
+        hoverEnterTimerRef.current = null;
+      }
+      hoverLeaveTimerRef.current = setTimeout(() => {
+        hoverLeaveTimerRef.current = null;
+        setHoveredNodeId(null);
+      }, HOVER_LEAVE_MS);
+      return;
+    }
+    if (hoverEnterTimerRef.current) {
+      clearTimeout(hoverEnterTimerRef.current);
+    }
+    hoverEnterTimerRef.current = setTimeout(() => {
+      hoverEnterTimerRef.current = null;
+      setHoveredNodeId(nodeId);
+    }, HOVER_ENTER_MS);
+  }, [draggingNodeType]);
+
+  useEffect(() => {
+    return () => {
+      if (hoverEnterTimerRef.current) clearTimeout(hoverEnterTimerRef.current);
+      if (hoverLeaveTimerRef.current) clearTimeout(hoverLeaveTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isLoading || !tree?.length) return undefined;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      try {
+        if (window.localStorage.getItem('bld-onboarding-v1')) return;
+      } catch {
+        return;
+      }
+      setShowOnboarding(true);
+    }, 500);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [isLoading, tree?.length]);
+
+  const dismissOnboarding = useCallback(() => {
+    try {
+      window.localStorage.setItem('bld-onboarding-v1', '1');
+    } catch {
+      /* ignore */
+    }
+    setShowOnboarding(false);
+  }, []);
+
+  const showAddSectionPreviewAnchor = useCallback((el, insertIndex) => {
+    if (addSectionPreviewTimerRef.current) {
+      window.clearTimeout(addSectionPreviewTimerRef.current);
+      addSectionPreviewTimerRef.current = null;
+    }
+    const r = el.getBoundingClientRect?.();
+    if (!r) return;
+    const vw = typeof window !== 'undefined' ? window.innerWidth : 1200;
+    const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
+    const TOOLTIP_W = 220;
+    const TOOLTIP_H = 112;
+    const PAD = 10;
+    const GAP = 10;
+
+    const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+    const maxLeft = Math.max(PAD, vw - (TOOLTIP_W + PAD));
+    const maxTop = Math.max(PAD, vh - (TOOLTIP_H + PAD));
+
+    // Prefer below the anchor (clean + predictable).
+    let top = r.bottom + 8;
+    let left = clamp(r.left, PAD, maxLeft);
+
+    // When the anchor is near the bottom, switch to a side placement so the hint never covers the button.
+    if (top > maxTop) {
+      top = clamp(r.top + (r.height - TOOLTIP_H) / 2, PAD, maxTop);
+      left = r.right + GAP;
+      if (left > maxLeft) left = r.left - TOOLTIP_W - GAP;
+      left = clamp(left, PAD, maxLeft);
+    }
+
+    setAddSectionPreview({
+      insertIndex,
+      top: clamp(top, PAD, maxTop),
+      left: clamp(left, PAD, maxLeft),
+    });
+  }, []);
+
+  const hideAddSectionPreviewAnchorDebounced = useCallback(() => {
+    if (addSectionPreviewTimerRef.current) {
+      window.clearTimeout(addSectionPreviewTimerRef.current);
+    }
+    addSectionPreviewTimerRef.current = window.setTimeout(() => {
+      addSectionPreviewTimerRef.current = null;
+      setAddSectionPreview(null);
+    }, 160);
+  }, []);
+
+  const keepAddSectionPreviewAnchor = useCallback(() => {
+    if (addSectionPreviewTimerRef.current) {
+      window.clearTimeout(addSectionPreviewTimerRef.current);
+      addSectionPreviewTimerRef.current = null;
+    }
+  }, []);
+
+  const onFreeMoveBrush = useCallback((active) => {
+    setCanvasFreeMoveActive(Boolean(active));
+  }, []);
+
+  const triggerReorderFlash = useCallback((nodeId) => {
+    const id = Number(nodeId);
+    if (!Number.isFinite(id) || id <= 0) return;
+    if (reorderFlashTimerRef.current) window.clearTimeout(reorderFlashTimerRef.current);
+    setReorderFlashNodeId(id);
+    reorderFlashTimerRef.current = window.setTimeout(() => {
+      reorderFlashTimerRef.current = null;
+      setReorderFlashNodeId(null);
+    }, 520);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (addSectionPreviewTimerRef.current) window.clearTimeout(addSectionPreviewTimerRef.current);
+      if (reorderFlashTimerRef.current) window.clearTimeout(reorderFlashTimerRef.current);
+    },
+    []
+  );
+
+  const allowedWidgets = useMemo(() => {
+    if (projectType === 'dashboard' || projectType === 'app') {
+      return ['heading', 'text', 'rich_text', 'image', 'button', 'menu', 'table', 'carousel'];
+    }
+    if (projectType === 'admin') {
+      return ['heading', 'text', 'rich_text', 'image', 'button', 'menu', 'table', 'form', 'carousel'];
+    }
+    return ['heading', 'text', 'rich_text', 'image', 'button', 'menu', 'carousel'];
+  }, [projectType]);
+
+  useEffect(() => {
+    const handleKeyDelete = (event) => {
+      if (!selectedNodeId || !onDeleteNode) return;
+      if (!tree?.length) return;
+      const target = event.target;
+      const tagName = target?.tagName?.toLowerCase?.() || '';
+      const isEditableTarget =
+        target?.isContentEditable || tagName === 'input' || tagName === 'textarea' || tagName === 'select';
+      if (isEditableTarget) return;
+      if (event.key !== 'Delete' && event.key !== 'Backspace') return;
+      event.preventDefault();
+      onDeleteNode(Number(selectedNodeId));
+    };
+
+    window.addEventListener('keydown', handleKeyDelete);
+    return () => window.removeEventListener('keydown', handleKeyDelete);
+  }, [selectedNodeId, onDeleteNode, tree]);
+
+  const flushHoverIntentTimers = () => {
+    if (hoverEnterTimerRef.current) {
+      clearTimeout(hoverEnterTimerRef.current);
+      hoverEnterTimerRef.current = null;
+    }
+    if (hoverLeaveTimerRef.current) {
+      clearTimeout(hoverLeaveTimerRef.current);
+      hoverLeaveTimerRef.current = null;
+    }
+    setHoveredNodeId(null);
+  };
+
+  const handleDragStart = (event) => {
+    if (!tree?.length) return;
+    flushHoverIntentTimers();
+    const ae = event.activatorEvent;
+    dragAltDuplicateRef.current = Boolean(
+      ae && typeof ae === 'object' && 'altKey' in ae && ae.altKey
+    );
+    const t = event.active?.data?.current?.nodeType;
+    setDraggingNodeType(typeof t === 'string' ? t : null);
+  };
+
+  const handleDragCancel = () => {
+    dragAltDuplicateRef.current = false;
+    setDraggingNodeType(null);
+    flushHoverIntentTimers();
+  };
+
+  useEffect(() => {
+    if (!draggingNodeType) return undefined;
+    const edge = 72;
+    const speed = 16;
+    const onPointerMove = (event) => {
+      const y = Number(event.clientY || 0);
+      const vh = window.innerHeight || 0;
+      if (y < edge) {
+        window.scrollBy({ top: -speed, behavior: 'auto' });
+      } else if (y > vh - edge) {
+        window.scrollBy({ top: speed, behavior: 'auto' });
+      }
+    };
+    window.addEventListener('pointermove', onPointerMove);
+    return () => window.removeEventListener('pointermove', onPointerMove);
+  }, [draggingNodeType]);
+
+  const handleDragEnd = async (event) => {
+    if (!tree?.length) return;
+    const wantAltDuplicate = dragAltDuplicateRef.current;
+    dragAltDuplicateRef.current = false;
+    setDraggingNodeType(null);
+    flushHoverIntentTimers();
+
+    const activeNodeId = event.active?.data?.current?.nodeId;
+    const overId = event.over?.id;
+    if (activeNodeId == null || overId == null) return;
+
+    const payload = computeReorderFromDrop(tree, activeNodeId, overId);
+    if (!payload) return;
+    if (!validateResolvedDrop(tree, activeNodeId, payload)) return;
+
+    if (wantAltDuplicate && onDuplicateNode) {
+      void (async () => {
+        const dup = await onDuplicateNode(Number(activeNodeId));
+        const newId = dup?.duplicatedNodeId;
+        if (!newId) return;
+        const baseTree = dup.tree || tree;
+        const payloadDup = computeReorderFromDrop(baseTree, newId, overId);
+        if (!payloadDup || !validateResolvedDrop(baseTree, newId, payloadDup)) return;
+        await onReorderNode({
+          nodeId: newId,
+          newParentId: payloadDup.newParentId,
+          newIndex: payloadDup.newIndex,
+          baseTree,
+        });
+        triggerReorderFlash(newId);
+      })();
+      return;
+    }
+
+    await onReorderNode({
+      nodeId: activeNodeId,
+      newParentId: payload.newParentId,
+      newIndex: payload.newIndex,
+    });
+    triggerReorderFlash(activeNodeId);
+  };
+
+  const openAddSectionAt = (insertIndex) => {
+    setSectionInsertIndex(Number.isFinite(insertIndex) ? insertIndex : null);
+    setSectionModalTab('layouts');
+    setIsAddSectionOpen(true);
+  };
+
+  const openSectionPresets = (insertIndex = null) => {
+    setSectionInsertIndex(Number.isFinite(insertIndex) ? insertIndex : null);
+    setSectionModalTab('presets');
+    setIsAddSectionOpen(true);
+  };
+
+  const openWidgetPickerFor = (targetNodeId) => {
+    if (!targetNodeId) return;
+    setWidgetPickerTargetId(Number(targetNodeId));
+    setIsWidgetPickerOpen(true);
+  };
+
+  const handleSelectSectionStructure = async (columnCount) => {
+    if (!onCreateSection) return;
+    const nextColumns = Number(columnCount);
+    if (!Number.isInteger(nextColumns) || nextColumns < 1) return;
+    await onCreateSection({ columnCount: nextColumns, insertIndex: sectionInsertIndex });
+    setIsAddSectionOpen(false);
+    setSectionInsertIndex(null);
+  };
+
+  const handleSelectSectionPreset = async (presetId) => {
+    if (SECTION_TEMPLATE_IDS.has(presetId) && onInsertSectionTemplate) {
+      await onInsertSectionTemplate(presetId, { insertIndex: sectionInsertIndex });
+      setIsAddSectionOpen(false);
+      setSectionInsertIndex(null);
+      return;
+    }
+    if (presetId === 'starter') {
+      await onInsertStarterTemplate?.({});
+    } else {
+      return;
+    }
+    setIsAddSectionOpen(false);
+    setSectionInsertIndex(null);
+  };
+
+  // Optional: auto-open template picker on first visit to an empty page (skipped when minimal chrome).
+  useEffect(() => {
+    if (minimalPageChrome) return;
+    if (isLoading) return;
+    if (tree?.length) return;
+    if (hasAutoOpenedTemplatePicker) return;
+    // Don't fight the user if modal already open.
+    if (isAddSectionOpen) return;
+    setHasAutoOpenedTemplatePicker(true);
+    openSectionPresets(0);
+  }, [hasAutoOpenedTemplatePicker, isAddSectionOpen, isLoading, minimalPageChrome, tree?.length]);
+
+  const templateCards = useMemo(() => {
+    const safeTemplates = Array.isArray(projectTemplates) ? projectTemplates : [];
+    const findByKeyword = (keyword) =>
+      safeTemplates.find((tpl) => String(tpl?.name || '').toLowerCase().includes(keyword));
+    return [
+      { id: 'header', title: 'Header', subtitle: 'Logo + Menu', keyword: 'header', fallback: 'header' },
+      { id: 'hero', title: 'Hero', subtitle: 'Headline + CTA', keyword: 'hero', fallback: 'starter' },
+      { id: 'landing', title: 'Landing', subtitle: 'Full page layout', keyword: 'landing', fallback: 'starter' },
+      { id: 'contact', title: 'Contact', subtitle: 'Form section', keyword: 'contact', fallback: 'starter' },
+      { id: 'footer', title: 'Footer', subtitle: 'Links + copyright', keyword: 'footer', fallback: null },
+    ].map((card) => ({
+      ...card,
+      template: findByKeyword(card.keyword) || null,
+    }));
+  }, [projectTemplates]);
+
+  const handleStartTemplate = async (card) => {
+    if (!card) return;
+    if (card.template?.id && onImportPageTemplate) {
+      await onImportPageTemplate(card.template.id);
+      return;
+    }
+    if (card.id === 'hero' && onInsertSectionTemplate) {
+      await onInsertSectionTemplate('hero', { insertIndex: 0 });
+      return;
+    }
+    if (card.id === 'features' && onInsertSectionTemplate) {
+      await onInsertSectionTemplate('features', { insertIndex: tree?.length ?? 0 });
+      return;
+    }
+    if (card.fallback === 'header' && onInsertSectionTemplate) {
+      await onInsertSectionTemplate('header', { insertIndex: 0 });
+      return;
+    }
+    if (card.fallback === 'starter') {
+      await onInsertStarterTemplate?.({});
+      return;
+    }
+    if (card.id === 'footer' && onInsertSectionTemplate) {
+      await onInsertSectionTemplate('footer', { insertIndex: tree?.length ?? 0 });
+    }
+  };
+
+  /** Matches `lib/rootSemanticTag.js` (single root row can be Header/Footer/Main from meta). */
+  const rowRoleForIndex = (index, total) => {
+    if (total <= 0) return null;
+    if (total === 1) {
+      const row = tree?.[0];
+      const meta = row?.props?.meta || {};
+      if (meta.isHeader || meta.role === 'header') return 'Header';
+      if (meta.isFooter || meta.role === 'footer') return 'Footer';
+      return 'Main';
+    }
+    if (index === 0) return 'Header';
+    if (index === total - 1) return 'Footer';
+    return 'Section';
+  };
+
+  const selectedBreadcrumbTrail = useMemo(
+    () => (selectedNodeId && tree?.length ? findBreadcrumbTrail(tree, selectedNodeId) : null),
+    [tree, selectedNodeId]
+  );
+
+  useEffect(() => {
+    if (!selectedNodeId || isLoading) return undefined;
+    const timer = window.setTimeout(() => {
+      const el = document.querySelector(`[data-bld-node="${selectedNodeId}"]`);
+      if (!el) return;
+      const scroller = el.closest('.bld-canvas-wrap') || el.closest('main');
+      if (scroller) {
+        const er = el.getBoundingClientRect();
+        const sr = scroller.getBoundingClientRect();
+        const margin = 12;
+        const overlaps =
+          er.bottom >= sr.top + margin &&
+          er.top <= sr.bottom - margin &&
+          er.right >= sr.left + margin &&
+          er.left <= sr.right - margin;
+        if (overlaps) return;
+      }
+      el.scrollIntoView?.({ block: 'nearest', behavior: 'auto', inline: 'nearest' });
+    }, 48);
+    return () => window.clearTimeout(timer);
+  }, [selectedNodeId, isLoading]);
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={dropCollisionDetection}
+      onDragStart={handleDragStart}
+      onDragCancel={handleDragCancel}
+      onDragEnd={handleDragEnd}
+    >
+      <main
+        className={`bld-canvas-wrap ${isLayoutDebug ? 'is-layout-debug' : ''} ${draggingNodeType ? 'bld-canvas-wrap--dnd-active' : ''}`.trim()}
+      >
+        {showOnboarding ? <BuilderOnboardingOverlay onDismiss={dismissOnboarding} /> : null}
+        {addSectionPreview && typeof document !== 'undefined'
+          ? createPortal(
+              <div
+                className="bld-add-section-hover-preview"
+                role="tooltip"
+                style={{ top: addSectionPreview.top, left: addSectionPreview.left }}
+                onMouseEnter={keepAddSectionPreviewAnchor}
+                onMouseLeave={hideAddSectionPreviewAnchorDebounced}
+              >
+                <div className="bld-add-section-hover-preview__title">New section</div>
+                <div className="bld-add-section-hover-preview__sub">
+                  Inserts at slot {addSectionPreview.insertIndex + 1}. Click for templates or blank columns.
+                </div>
+                <div className="bld-add-section-hover-preview__wires" aria-hidden>
+                  <span className="bld-add-section-hover-preview__wire bld-add-section-hover-preview__wire--1" />
+                  <span className="bld-add-section-hover-preview__wire bld-add-section-hover-preview__wire--2" />
+                  <span className="bld-add-section-hover-preview__wire bld-add-section-hover-preview__wire--3" />
+                </div>
+              </div>,
+              document.body
+            )
+          : null}
+        <div className={`bld-canvas bld-canvas--${device}`}>
+          {typeof onDeviceChange === 'function' ? (
+            <div className="bld-canvas__device" role="tablist" aria-label="Canvas preview device">
+              {['desktop', 'tablet', 'mobile'].map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  role="tab"
+                  aria-selected={device === d}
+                  className={`bld-canvas__device-btn ${device === d ? 'is-active' : ''}`}
+                  onClick={() => onDeviceChange(d)}
+                >
+                  {d === 'desktop' ? 'Desktop' : d === 'tablet' ? 'Tablet' : 'Mobile'}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <div className={`bld-canvas__page${draggingNodeType ? ' bld-canvas__page--dnd-active' : ''}`.trim()}>
+            <DropZone
+              id="root-drop-append"
+              label="Drop row at end of page"
+              validationParentType={null}
+              draggingNodeType={draggingNodeType}
+              showLabel={Boolean(draggingNodeType)}
+            />
+            {isLoading ? (
+              <div className="bld-canvas__empty-shell">
+                <div className="bld-canvas__empty">Loading builder...</div>
+              </div>
+            ) : null}
+            {!isLoading && !tree?.length ? (
+              minimalPageChrome ? (
+                <div className="bld-canvas__empty-shell bld-canvas__empty-shell--blank">
+                  <div className="bld-canvas__blank" role="status" aria-live="polite">
+                    <span className="bld-canvas__blank-title">Blank page</span>
+                    <span className="bld-canvas__blank-sub">
+                      Drag from the left (Templates / Elements), or add a section below. Styles open in the right panel
+                      after you pick a layer.
+                    </span>
+                    <div className="bld-canvas__blank-actions">
+                      <button
+                        type="button"
+                        className="bld-canvas__blank-cta"
+                        onMouseEnter={(event) => showAddSectionPreviewAnchor(event.currentTarget, 0)}
+                        onMouseLeave={hideAddSectionPreviewAnchorDebounced}
+                        onClick={() => openAddSectionAt(0)}
+                        disabled={isCreatingNode}
+                      >
+                        + Add section
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bld-canvas__empty-shell">
+                  <div className="bld-start" role="dialog" aria-label="Start building">
+                    <div className="bld-start__card">
+                      <div className="bld-start__title">Start building</div>
+                      <div className="bld-start__subtitle">
+                        Choose a template to begin fast, or add a blank section and build from scratch.
+                      </div>
+
+                      <div className="bld-start__actions">
+                        <button
+                          type="button"
+                          className="bld-start__primary"
+                          onClick={() => openSectionPresets(0)}
+                          disabled={isCreatingNode}
+                        >
+                          Start from Template
+                        </button>
+                        <button
+                          type="button"
+                          className="bld-start__secondary"
+                          onClick={() => openAddSectionAt(0)}
+                          disabled={isCreatingNode}
+                        >
+                          Start Blank
+                        </button>
+                        <button
+                          type="button"
+                          className="bld-start__secondary"
+                          onClick={() => onCreateHeroSection?.()}
+                          disabled={isCreatingNode}
+                        >
+                          + Create Hero Section
+                        </button>
+                        <button
+                          type="button"
+                          className="bld-start__secondary"
+                          onClick={() => openSectionPresets(0)}
+                          disabled={isCreatingNode}
+                        >
+                          Insert Header/Footer
+                        </button>
+                      </div>
+
+                      <div className="bld-start__templates">
+                        <div className="bld-start__templates-title">Templates</div>
+                        <div className="bld-start__grid">
+                          {templateCards.map((card) => {
+                            const hasSaved = Boolean(card.template?.id);
+                            const hint = hasSaved ? `Saved: ${card.template?.name || card.title}` : 'Uses built-in starter (or save a template)';
+                            const disabled = isCreatingNode;
+                            return (
+                              <button
+                                key={card.id}
+                                type="button"
+                                className="bld-start__tpl"
+                                onClick={() => handleStartTemplate(card)}
+                                disabled={disabled}
+                                title={hint}
+                              >
+                                <div className="bld-start__tpl-title">
+                                  {card.title}
+                                  {hasSaved ? (
+                                    <span className="bld-start__badge">Saved</span>
+                                  ) : (
+                                    <span className="bld-start__badge bld-start__badge--soft">Starter</span>
+                                  )}
+                                </div>
+                                <div className="bld-start__tpl-subtitle">{card.subtitle}</div>
+                                <div className="bld-start__tpl-meta">{hasSaved ? card.template?.name || '' : 'No saved template found'}</div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {!Array.isArray(projectTemplates) || projectTemplates.length === 0 ? (
+                          <div className="bld-start__note">
+                            No saved templates yet. Use the Templates tab → “Save Page Template”, then these cards will import the snapshot.
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            ) : null}
+            {!minimalPageChrome && !isLoading && selectedBreadcrumbTrail?.length ? (
+              <nav className="bld-canvas__breadcrumb" aria-label="Selection path">
+                {selectedBreadcrumbTrail.map((crumb, idx) => {
+                  const isLast = idx === selectedBreadcrumbTrail.length - 1;
+                  return (
+                    <Fragment key={crumb.id}>
+                      {idx > 0 ? (
+                        <span className="bld-canvas__breadcrumb__sep" aria-hidden="true">
+                          →
+                        </span>
+                      ) : null}
+                      {isLast ? (
+                        <span className="bld-canvas__breadcrumb__seg bld-canvas__breadcrumb__seg--current" aria-current="page">
+                          {crumb.label}
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="bld-canvas__breadcrumb__seg"
+                          title={`Select ${crumb.label}`}
+                          onClick={() => onSelectNode(crumb.id)}
+                        >
+                          {crumb.label}
+                        </button>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </nav>
+            ) : null}
+            {!isLoading && tree?.length ? (
+              <div
+                className="live-site bld-canvas__live-mirror"
+                data-sticky-header={stickyHeader ? 'true' : 'false'}
+                style={{
+                  ...(sectionGapPx != null ? { '--live-section-gap': `${sectionGapPx}px` } : {}),
+                  ...(sectionPadBottomPx != null ? { '--live-section-pad-bottom': `${sectionPadBottomPx}px` } : {}),
+                }}
+              >
+                {showGrid ? <GridOverlay containerSelector=".bld-canvas__live-mirror .live-doc" /> : null}
+                <div className="live-doc">
+                  {tree.map((node, index) => (
+                    <NodeRenderer
+                      key={node.id}
+                      node={node}
+                      rowIndex={index}
+                      selectedNodeId={selectedNodeId}
+                      onSelectNode={onSelectNode}
+                      parentNodeType={null}
+                      draggingNodeType={draggingNodeType}
+                      device={device}
+                      previewCssByNodeId={effectivePreviewCssByNodeId}
+                      onSetPreviewCssForNode={effectiveSetPreviewCssForNode}
+                      activeSpacingEdit={activeSpacingEdit}
+                      onReportOverflow={reportOverflow}
+                      rowRole={node.nodeType === 'row' ? rowRoleForIndex(index, tree.length) : null}
+                      rowSemanticTag={node.nodeType === 'row' ? rootSemanticTag(tree, index) : null}
+                      onDeleteNode={onDeleteNode}
+                      onRequestNavigator={onRequestNavigator}
+                      onInsertStarterTemplate={onInsertStarterTemplate}
+                      onInsertHeaderTemplate={onInsertHeaderTemplate}
+                      onSetContainerDirection={onSetContainerDirection}
+                      onUpdateNode={onUpdateNode}
+                      onCreateNode={onCreateNode}
+                      onQuickAddNode={onQuickAddNode}
+                      onDuplicateNode={onDuplicateNode}
+                      onReorderNode={onReorderNode}
+                      isReorderingNode={isReorderingNode}
+                      rowSiblingsCount={tree.length}
+                      isCreatingNode={isCreatingNode}
+                      isSavingNode={isSavingNode}
+                      isDeletingNode={isDeletingNode}
+                      deletingNodeId={deletingNodeId}
+                      onOpenWidgetPicker={openWidgetPickerFor}
+                      showSectionAddButtonBefore={index > 0}
+                      onOpenSectionInsert={openAddSectionAt}
+                      hoveredNodeId={hoveredNodeId}
+                      onHoverNode={onHoverNodeIntent}
+                      onSaveGlobalSection={onSaveGlobalSection}
+                      onAlignMenuRightInRow={onAlignMenuRightInRow}
+                      onUploadLogoInRow={onUploadLogoInRow}
+                      onStretchSectionFullWidth={onStretchSectionFullWidth}
+                      onStretchSectionFromSelection={onStretchSectionFromSelection}
+                      onAlignMenuRightFromSelection={onAlignMenuRightFromSelection}
+                      isFreeMode={isFreeMode}
+                      onCopyNodeId={onCopyNodeId}
+                      flashPasteNodeId={flashPasteNodeId}
+                      flashReorderNodeId={reorderFlashNodeId}
+                      onAddSectionPreviewEnter={showAddSectionPreviewAnchor}
+                      onAddSectionPreviewLeave={hideAddSectionPreviewAnchorDebounced}
+                      onFreeMoveBrush={onFreeMoveBrush}
+                      freeMoveBrushActive={canvasFreeMoveActive}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {!isLoading && tree?.length ? (
+              <div className="bld-add-section-inline bld-add-section-inline--tail">
+                <button
+                  type="button"
+                  className="bld-add-section-inline__btn"
+                  onMouseEnter={(event) => showAddSectionPreviewAnchor(event.currentTarget, tree.length)}
+                  onMouseLeave={hideAddSectionPreviewAnchorDebounced}
+                  onClick={() => openAddSectionAt(tree.length)}
+                  disabled={isCreatingNode}
+                >
+                  + Add Section
+                </button>
+              </div>
+            ) : null}
+            {isReorderingNode ? <div className="bld-canvas__hint">Saving reorder...</div> : null}
+          </div>
+        </div>
+      </main>
+      <AddSectionModal
+        open={isAddSectionOpen}
+        onClose={() => {
+          if (isCreatingNode) return;
+          setIsAddSectionOpen(false);
+          setSectionInsertIndex(null);
+        }}
+        onSelect={handleSelectSectionStructure}
+        onSelectPreset={handleSelectSectionPreset}
+        initialTab={sectionModalTab}
+        isBusy={isCreatingNode}
+      />
+      <WidgetPicker
+        open={isWidgetPickerOpen}
+        onClose={() => {
+          if (isCreatingNode) return;
+          setIsWidgetPickerOpen(false);
+          setWidgetPickerTargetId(null);
+        }}
+        allowedWidgets={allowedWidgets}
+        isBusy={isCreatingNode}
+        onSelect={async (widgetNodeType) => {
+          if (!widgetPickerTargetId) return;
+          if (onQuickAddNode) {
+            await onQuickAddNode({ targetNodeId: widgetPickerTargetId, nodeType: widgetNodeType });
+          } else {
+            await onCreateNode?.({ nodeType: widgetNodeType, parentNodeId: widgetPickerTargetId });
+          }
+          setIsWidgetPickerOpen(false);
+          setWidgetPickerTargetId(null);
+        }}
+      />
+    </DndContext>
+  );
+}

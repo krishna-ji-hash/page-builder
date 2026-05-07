@@ -1,0 +1,26 @@
+# Local MySQL for Builder Custom (matches .env.example defaults)
+# Requires Docker Desktop: https://docs.docker.com/desktop/
+#
+# Start:  npm run db:up
+# Then:  npm run db:migrate && npm run db:seed
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: builder-custom-mysql
+    restart: unless-stopped
+    ports:
+      - '3306:3306'
+    environment:
+      MYSQL_ROOT_PASSWORD: change-me
+      MYSQL_DATABASE: documents
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost', '-pchange-me']
+      interval: 4s
+      timeout: 5s
+      retries: 30
+      start_period: 20s

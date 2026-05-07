@@ -1,0 +1,112 @@
+@media (max-width: 1279px) {
+  .bld-builder-root {
+    --bld-sidebar-width: 280px;
+    --bld-inspector-width: 300px;
+  }
+
+  /* Topbar: keep actions on-screen without page-level horizontal scroll */
+  .bld-topbar {
+    padding-inline: 10px;
+  }
+
+  .bld-topbar .bld-btn {
+    padding: 5px 7px;
+    font-size: var(--bld-fs-xs);
+  }
+}
+
+@media (max-width: 1099px) {
+  .bld-builder-root {
+    --bld-sidebar-width: 260px;
+    --bld-inspector-width: 280px;
+  }
+}
+
+@media (max-width: 991px) {
+  .bld-topbar {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .bld-topbar__left,
+  .bld-topbar__center,
+  .bld-topbar__right {
+    justify-content: space-between;
+  }
+
+  .bld-shell__body {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .bld-center {
+    order: -1;
+    flex: 1 1 auto;
+    min-height: min(48vh, 560px);
+    overflow: hidden;
+  }
+
+  .bld-right {
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: 100%;
+    min-height: 0;
+    border-left: none;
+    border-top: 1px solid var(--bld-border);
+    max-height: min(42vh, 440px);
+    order: 1;
+  }
+
+  .bld-left {
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: 100%;
+    min-height: 0;
+    border-right: none;
+    border-bottom: 1px solid var(--bld-border);
+    max-height: min(48vh, 520px);
+    order: 2;
+  }
+}
+
+@media (max-width: 767px) {
+  .bld-canvas-wrap {
+    padding: 12px;
+  }
+
+  .bld-topbar__right {
+    justify-content: flex-start;
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-wrap: nowrap;
+    gap: 8px;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  .bld-topbar__actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .bld-device-switch {
+    width: 100%;
+  }
+
+  .bld-device-switch__btn {
+    flex: 1;
+  }
+
+  .bld-field-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .bld-box-model {
+    grid-template-columns: 1fr;
+  }
+}

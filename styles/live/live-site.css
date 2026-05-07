@@ -1,0 +1,1276 @@
+.live-site {
+  min-height: 100vh;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  overflow-x: hidden;
+  font-family: var(--font-family-body, system-ui, -apple-system, 'Segoe UI', sans-serif);
+  line-height: var(--line-height-base, 1.5);
+  color: var(--color-text, #0f172a);
+  background: var(--color-background, #f8fafc);
+  box-sizing: border-box;
+}
+
+.live-site__main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem;
+}
+
+.live-site__fallback {
+  max-width: 560px;
+  margin: 4rem auto;
+  padding: 2rem;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.live-site__fallback h1 {
+  margin: 0 0 0.5rem;
+  font-size: 1.35rem;
+}
+
+.live-site__fallback p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.95rem;
+}
+
+.live-doc {
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  /* Horizontal padding only on content landmarks so header/footer can span edge-to-edge */
+  padding: 0;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  /* Space between top-level sections (rows). Reduce to tighten homepage vertical rhythm. */
+  gap: var(--live-section-gap, 12px);
+}
+
+.live-doc > section.live-node,
+.live-doc > main.live-node {
+  padding-left: clamp(10px, 3vw, 22px);
+  padding-right: clamp(10px, 3vw, 22px);
+  /* Extra bottom padding can double the perceived inter-section gap. */
+  padding-bottom: var(--live-section-pad-bottom, 12px);
+  box-sizing: border-box;
+}
+
+/* Sticky header (per-page toggle via data attr)
+   Header rows are tagged with `data-site-header="true"` in both liveRenderer and BuilderCanvas.
+   Single root row uses `<main>` (see rootSemanticTag) unless marked header/footer — include it below.
+   Parent overflow-x must not be `hidden` or sticky fails (see .live-site / globals.css overrides). */
+.live-site[data-sticky-header='true'],
+.live-site[data-sticky-header='true'] .live-doc {
+  overflow-x: clip;
+}
+
+@supports not (overflow: clip) {
+  .live-site[data-sticky-header='true'],
+  .live-site[data-sticky-header='true'] .live-doc {
+    overflow-x: visible;
+  }
+}
+
+.live-site[data-sticky-header='true'] .live-doc > header,
+.live-site[data-sticky-header='true'] .live-doc > [data-site-header='true'],
+.live-site[data-sticky-header='true'] .live-doc > main.live-node.bld-row:first-child {
+  /* Inline style_json may set `position: static`; force sticky for header rows. */
+  position: sticky !important;
+  top: 0 !important;
+  /* Inline style may set z-index: 0; force above page content. */
+  z-index: 5000 !important;
+  background: var(--color-background, #f8fafc);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.08);
+}
+
+/* Keep live output visually aligned with builder canvas defaults. */
+.live-doc * {
+  box-sizing: border-box;
+}
+
+.live-doc h1,
+.live-doc h2,
+.live-doc h3,
+.live-doc h4,
+.live-doc h5,
+.live-doc h6,
+.live-doc p,
+.live-doc figure {
+  margin: 0;
+}
+
+.live-doc img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+.live-doc button {
+  font: inherit;
+}
+
+/* Carousel (runtime + builder preview) */
+.live-carousel {
+  width: 100%;
+  max-width: 100%;
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+  /* Default border is OFF; enable via Style → Border (sets --node-border-width/color). */
+  border: var(--node-border-width, 0px) solid
+    var(--node-border-color, color-mix(in srgb, var(--bld-border, #e2e8f0) 45%, transparent));
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.14);
+  background: #0b1220;
+  --carousel-gap: 12px;
+  --carousel-per-view: 1;
+  --carousel-speed: 420ms;
+}
+
+.live-carousel:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-primary, #2563eb) 65%, #fff 35%);
+  outline-offset: 2px;
+}
+
+.live-carousel__viewport {
+  width: 100%;
+  overflow: hidden;
+}
+
+.live-carousel__track {
+  display: flex;
+  gap: var(--carousel-gap);
+  will-change: transform;
+  transition-property: transform;
+  transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.live-carousel__item {
+  flex: 0 0 calc((100% - (var(--carousel-per-view) - 1) * var(--carousel-gap)) / var(--carousel-per-view));
+  min-width: 0;
+}
+
+.live-carousel__slide {
+  position: relative;
+  min-height: 220px;
+  background: linear-gradient(135deg, #0b1220, #0f172a);
+}
+
+/* Contain mode: show the whole image (no crop) by letting it size naturally. */
+.live-carousel--fit-contain .live-carousel__slide {
+  min-height: 0;
+}
+
+.live-carousel--fit-contain .live-carousel__img {
+  position: relative;
+  inset: auto;
+  height: auto;
+}
+
+.live-carousel__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: var(--carousel-image-fit, cover);
+  display: block;
+  filter: saturate(1.05) contrast(1.02);
+}
+
+.live-carousel__overlay {
+  position: relative;
+  z-index: 1;
+  padding: clamp(14px, 2.4vw, 22px);
+  display: flex;
+}
+
+.live-carousel__card {
+  max-width: min(520px, 92%);
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.28);
+}
+
+.live-carousel__card--left {
+  margin-right: auto;
+}
+.live-carousel__card--center {
+  margin: 0 auto;
+}
+.live-carousel__card--right {
+  margin-left: auto;
+}
+
+.live-carousel__card--dark {
+  color: #f8fafc;
+  background: rgba(10, 14, 22, 0.62);
+}
+.live-carousel__card--light {
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.78);
+  border-color: rgba(15, 23, 42, 0.12);
+}
+
+.live-carousel__title {
+  margin: 0 0 6px;
+  font-size: clamp(16px, 2.2vw, 22px);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.live-carousel__body {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  opacity: 0.92;
+}
+
+.live-carousel__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 12px;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  color: inherit;
+}
+
+.live-carousel__arrows {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+}
+
+.live-carousel__arrow {
+  pointer-events: auto;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(2, 6, 23, 0.55);
+  color: #e2e8f0;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.live-carousel__arrow:hover {
+  background: rgba(2, 6, 23, 0.72);
+}
+
+.live-carousel__dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(2, 6, 23, 0.72);
+}
+
+.live-carousel__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.10);
+  cursor: pointer;
+}
+
+.live-carousel__dot.is-active {
+  background: rgba(255, 255, 255, 0.82);
+}
+
+/* Card carousel variant */
+.live-carousel--card {
+  background: var(--color-surface, #ffffff);
+}
+.live-carousel__card-slide {
+  height: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-border, #e2e8f0) 85%, transparent);
+  background: var(--color-surface, #ffffff);
+}
+.live-carousel__card-img {
+  width: 100%;
+  height: 180px;
+  object-fit: var(--carousel-image-fit, cover);
+  display: block;
+}
+
+.live-carousel--fit-contain .live-carousel__card-img {
+  height: auto;
+}
+.live-carousel__card-inner {
+  padding: 14px 16px 16px;
+}
+
+/* Layout = inline from style_json (styleToCss + mergeDeviceStyleWithTypeDefaults). Classes = box/tokens only. */
+.live-node {
+  box-sizing: border-box;
+  /* Let flex children shrink so rows/columns do not force page-wide horizontal scroll */
+  min-width: 0;
+  /* Design tokens from styleToCss (inline overrides these when set) */
+  color: var(--node-text, inherit);
+  background-color: var(--node-bg, transparent);
+  border-radius: var(--node-radius, 0);
+  padding: var(--node-pad, unset);
+}
+
+/* Row / column / stack flex — controlled only via inline style_json (responsive layers). */
+
+/* Landmarks from first/last/middle root rows */
+.live-site header.live-node,
+.live-site footer.live-node,
+.live-site main.live-node,
+.live-site section.live-node {
+  width: 100%;
+}
+
+.live-site main.live-node {
+  flex: 1;
+}
+
+/* Header/footer: full width of viewport band; flex from style_json inline. */
+.live-doc > header.live-node,
+.live-doc > footer.live-node,
+.live-doc > [data-site-footer='true'] {
+  max-width: 100%;
+  min-width: 0;
+  width: 100%;
+  overflow-x: clip;
+}
+
+/* If footer is unstyled, prevent it from visually "floating" on top of prior section backgrounds. */
+.live-doc > footer.live-node,
+.live-doc > [data-site-footer='true'] {
+  /* Use surface so it contrasts against hero/background images. */
+  background: var(--node-bg, var(--color-surface, #ffffff));
+  padding-top: var(--live-footer-pad-top, 18px);
+  padding-bottom: var(--live-footer-pad-bottom, 18px);
+  /* Free-move can accidentally persist `position:absolute` on rows; never allow for footers. */
+  position: relative !important;
+  inset: auto !important;
+  left: auto !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  transform: none !important;
+  z-index: 1 !important;
+}
+
+/* Middle columns shrink so nav menu scrolls instead of overlapping the actions column */
+.live-doc > header.live-node > .live-node.bld-column,
+.live-doc > footer.live-node > .live-node.bld-column,
+.live-doc > [data-site-footer='true'] > .live-node.bld-column {
+  min-width: 0;
+}
+
+/* Header parity with builder:
+   For 3-col headers (logo | nav | actions), keep nav centered at any browser zoom. */
+@media (min-width: 769px) {
+  .live-doc > :is(header.live-node.bld-row, [data-site-header='true'].bld-row) {
+    display: grid !important;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+  }
+
+  .live-doc > :is(header.live-node.bld-row, [data-site-header='true'].bld-row) > .live-node.bld-column:first-child {
+    justify-self: start;
+  }
+
+  .live-doc > :is(header.live-node.bld-row, [data-site-header='true'].bld-row) > .live-node.bld-column:has(nav.menu) {
+    justify-self: center;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .live-doc
+    > :is(header.live-node.bld-row, [data-site-header='true'].bld-row)
+    > .live-node.bld-column:has(nav.menu)
+    nav.menu {
+    width: 100%;
+  }
+
+  .live-doc > :is(header.live-node.bld-row, [data-site-header='true'].bld-row) > .live-node.bld-column:last-child {
+    justify-self: end;
+  }
+}
+
+/*
+ * Free-move in the builder stores position:absolute on nodes; that removes them from the row flex
+ * flow and causes logo | nav | buttons to overlap. Landmark header/footer rows: force direct
+ * columns back into normal flex participation (Bar alignment / space-between works again).
+ */
+.live-doc > header.live-node.bld-row > .live-node.bld-column,
+.live-doc > footer.live-node.bld-row > .live-node.bld-column,
+.live-doc > [data-site-footer='true'].bld-row > .live-node.bld-column {
+  position: relative !important;
+  inset: auto !important;
+  left: auto !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  transform: none !important;
+}
+
+.live-doc > header.live-node.bld-row > .live-node.bld-column > .live-node.bld-stack,
+.live-doc > footer.live-node.bld-row > .live-node.bld-column > .live-node.bld-stack {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.live-doc > header.live-node > .live-node,
+.live-doc > footer.live-node > .live-node {
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* Stacks that wrap nav: width bounds only; flex from style_json. */
+.live-doc .live-node:has(> nav.menu) {
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* Root sections: width bounds only; flex-wrap / layout from style_json. */
+.live-doc > .live-node:first-child,
+.live-doc > .live-node:last-child {
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* Current nav link — subtle default; override via node style_json */
+.live-node a[aria-current='page'] {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.live-node nav,
+.live-node[aria-label='Main navigation'] {
+  overflow-x: auto;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.live-doc .menu {
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* Responsive menu: desktop links vs mobile hamburger */
+.live-site .menu__mobile {
+  display: none;
+}
+
+.live-site .menu__desktop {
+  display: flex;
+  align-items: center;
+  gap: inherit;
+  width: 100%;
+  min-width: 0;
+}
+
+.live-site .menu__hamburger {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  border: 1px solid color-mix(in srgb, var(--node-text, #0f172a) 18%, transparent);
+  background: color-mix(in srgb, var(--color-background, #fff) 92%, transparent);
+  border-radius: 10px;
+  padding: 8px 10px;
+  width: max-content;
+}
+
+.live-site .menu__hamburger::-webkit-details-marker {
+  display: none;
+}
+
+.live-site .menu__hamburger-lines {
+  display: inline-block;
+  width: 18px;
+  height: 2px;
+  background: currentColor;
+  position: relative;
+}
+
+.live-site .menu__hamburger-lines::before,
+.live-site .menu__hamburger-lines::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  width: 18px;
+  height: 2px;
+  background: currentColor;
+}
+
+.live-site .menu__hamburger-lines::before {
+  top: -6px;
+}
+
+.live-site .menu__hamburger-lines::after {
+  top: 6px;
+}
+
+.live-site .menu__panel {
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--bld-border, #e2e8f0) 70%, transparent);
+  background: color-mix(in srgb, var(--color-background, #fff) 96%, #fff 4%);
+  box-shadow: 0 14px 38px rgba(15, 23, 42, 0.18);
+  display: grid;
+  gap: 8px;
+}
+
+.live-site .menu__actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.live-site .menu__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  text-decoration: none;
+  font-weight: 800;
+  border: 1px solid color-mix(in srgb, var(--bld-border, #e2e8f0) 85%, transparent);
+  color: var(--color-text, #0f172a);
+  background: transparent;
+}
+
+.live-site .menu__action--primary {
+  background: var(--bld-primary, #2563eb);
+  border-color: var(--bld-primary, #2563eb);
+  color: #fff;
+}
+
+@media (max-width: 768px) {
+  /* Global mobile stacking: sections should become single-column unless explicitly overridden. */
+  .live-doc > :where(section.live-node.bld-row, main.live-node.bld-row, .live-node.bld-row):not([data-site-header='true']):not([data-site-footer='true']) {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .live-doc > :where(section.live-node.bld-row, main.live-node.bld-row, .live-node.bld-row) > .live-node.bld-column {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Common: stacks should not force horizontal overflow on mobile. */
+  .live-doc .live-node.bld-stack {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  /* Header: keep it readable on small screens (logo + hamburger, then actions). */
+  .live-doc > header.live-node.bld-row {
+    flex-wrap: nowrap;
+    row-gap: 0;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  /* Logo + nav stay on one line */
+  .live-doc > header.live-node.bld-row > .live-node.bld-column {
+    width: auto;
+    min-width: 0;
+  }
+
+  .live-doc > header.live-node.bld-row > .live-node.bld-column:first-child {
+    flex: 0 0 auto;
+  }
+
+  .live-doc > header.live-node.bld-row > .live-node.bld-column:has(nav.menu) {
+    flex: 1 1 auto;
+  }
+
+  /* Nav column: keep hamburger aligned to the right. */
+  .live-doc > header.live-node.bld-row > .live-node.bld-column:has(nav.menu) {
+    display: flex !important;
+    justify-content: flex-end !important;
+    align-items: center;
+  }
+
+  /* Actions column: center buttons and allow wrap. */
+  .live-doc > header.live-node.bld-row > .live-node.bld-column:has(.live-node.bld-stack > button),
+  .live-doc > header.live-node.bld-row > .live-node.bld-column:has(.live-node.bld-stack > a) {
+    display: flex;
+    justify-content: center;
+  }
+
+  .live-doc > header.live-node .live-node.bld-stack {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+  }
+
+  .live-doc > header.live-node .live-node.bld-stack > button,
+  .live-doc > header.live-node .live-node.bld-stack > a {
+    flex: 0 0 auto;
+    max-width: 100%;
+  }
+
+  /* First view (collapsed): show only logo + hamburger, hide header action buttons. */
+  .live-doc > header.live-node.bld-row
+    > .live-node.bld-column:has(.live-node.bld-stack .live-action-button-wrap),
+  .live-doc > header.live-node.bld-row
+    > .live-node.bld-column:has(.live-node.bld-stack > button),
+  .live-doc > header.live-node.bld-row
+    > .live-node.bld-column:has(.live-node.bld-stack > a) {
+    display: none !important;
+  }
+
+  /* Keep logo from pushing hamburger offscreen */
+  .live-doc > header.live-node img {
+    max-width: 180px;
+    height: auto;
+  }
+
+  /* When hamburger is open: show header action buttons INSIDE the drawer (bottom).
+     Use site-level :has so it works regardless of column order. */
+  .live-site:has(details.menu__mobile[open])
+    .live-doc > header.live-node.bld-row
+    > .live-node.bld-column:has(.live-node.bld-stack .live-action-button-wrap),
+  .live-site:has(details.menu__mobile[open])
+    .live-doc > header.live-node.bld-row
+    > .live-node.bld-column:has(.live-node.bld-stack > button),
+  .live-site:has(details.menu__mobile[open])
+    .live-doc > header.live-node.bld-row
+    > .live-node.bld-column:has(.live-node.bld-stack > a) {
+    display: block !important;
+    position: fixed !important;
+    left: 18px;
+    right: 18px;
+    bottom: 18px;
+    z-index: 20001;
+    pointer-events: auto;
+  }
+
+  .live-site:has(details.menu__mobile[open])
+    .live-doc > header.live-node.bld-row
+    > .live-node.bld-column:has(.live-node.bld-stack .live-action-button-wrap)
+    .live-node.bld-stack,
+  .live-site:has(details.menu__mobile[open])
+    .live-doc > header.live-node.bld-row
+    > .live-node.bld-column:has(.live-node.bld-stack > button)
+    .live-node.bld-stack,
+  .live-site:has(details.menu__mobile[open])
+    .live-doc > header.live-node.bld-row
+    > .live-node.bld-column:has(.live-node.bld-stack > a)
+    .live-node.bld-stack {
+    display: grid;
+    gap: 10px;
+    justify-items: stretch;
+  }
+
+  .live-site:has(details.menu__mobile[open])
+    .live-doc > header.live-node.bld-row
+    > .live-node.bld-column:has(.live-node.bld-stack .live-action-button-wrap)
+    .live-node.bld-stack > .live-action-button-wrap,
+  .live-site:has(details.menu__mobile[open])
+    .live-doc > header.live-node.bld-row
+    > .live-node.bld-column:has(.live-node.bld-stack > button)
+    .live-node.bld-stack > button,
+  .live-site:has(details.menu__mobile[open])
+    .live-doc > header.live-node.bld-row
+    > .live-node.bld-column:has(.live-node.bld-stack > a)
+    .live-node.bld-stack > a {
+    width: 100%;
+    text-align: center;
+  }
+
+  .live-site:has(details.menu__mobile[open])
+    .live-doc > header.live-node.bld-row
+    > .live-node.bld-column:has(.live-node.bld-stack .live-action-button-wrap)
+    .live-action-button-wrap > button {
+    width: 100%;
+  }
+
+  .live-site .menu__desktop {
+    display: none;
+  }
+  .live-site .menu__mobile {
+    display: block;
+  }
+  .live-site nav.menu {
+    overflow: visible;
+  }
+  .live-site .menu__panel .menu-item {
+    display: block;
+    width: 100%;
+  }
+
+  /* Mobile menu drawer */
+  .live-site nav.menu {
+    position: relative;
+  }
+
+  .live-site .menu__mobile[open] .menu__panel {
+    position: fixed;
+    inset: 0;
+    margin: 0;
+    border-radius: 0;
+    padding: 72px 18px 120px;
+    background: var(--color-background, #fff);
+    box-shadow: none;
+    z-index: 20000;
+    align-content: start;
+  }
+
+  .live-site .menu__mobile[open] .menu__panel::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: var(--color-background, #fff);
+    z-index: -1;
+  }
+
+  .live-site .menu__mobile[open] .menu-item {
+    padding: 14px 12px;
+    border-radius: 10px;
+    border: 1px solid color-mix(in srgb, var(--bld-border, #e2e8f0) 65%, transparent);
+    background: color-mix(in srgb, var(--color-background, #fff) 98%, #fff 2%);
+  }
+
+  /* Make hamburger become a close button when open */
+  .live-site .menu__mobile[open] > .menu__hamburger {
+    position: fixed;
+    top: 18px;
+    right: 18px;
+    z-index: 20001;
+    border: none;
+    background: transparent;
+    padding: 10px;
+    border-radius: 10px;
+  }
+
+  .live-site .menu__mobile[open] .menu__hamburger-lines {
+    background: transparent;
+    width: 18px;
+  }
+
+  .live-site .menu__mobile[open] .menu__hamburger-lines::before,
+  .live-site .menu__mobile[open] .menu__hamburger-lines::after {
+    top: 0;
+  }
+
+  .live-site .menu__mobile[open] .menu__hamburger-lines::before {
+    transform: rotate(45deg);
+  }
+
+  .live-site .menu__mobile[open] .menu__hamburger-lines::after {
+    transform: rotate(-45deg);
+  }
+}
+
+@media (max-width: 1024px) {
+  /* Tablet: allow 2-col sections to wrap instead of squeezing. */
+  .live-doc > :where(section.live-node.bld-row, main.live-node.bld-row, .live-node.bld-row):not([data-site-header='true']):not([data-site-footer='true']) {
+    flex-wrap: wrap;
+    row-gap: 16px;
+  }
+
+  .live-doc > :where(section.live-node.bld-row, main.live-node.bld-row, .live-node.bld-row) > .live-node.bld-column {
+    flex: 1 1 320px;
+    min-width: 0;
+  }
+}
+
+/* Dynamic table (data-bound) */
+.live-table {
+  width: 100%;
+  min-height: 3rem;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  padding: 0.75rem 1rem;
+  box-sizing: border-box;
+}
+
+.live-table__message {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.live-table--error .live-table__message {
+  color: #b91c1c;
+}
+
+.live-table__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.live-table__table th,
+.live-table__table td {
+  border: 1px solid #e2e8f0;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.live-table__table th {
+  background: #f1f5f9;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.live-table__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.live-table__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.live-table__search {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.live-table__search-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.live-table__search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.live-table__refresh {
+  flex-shrink: 0;
+  padding: 0.4rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border: 1px solid #c7d2fe;
+  background: #eef2ff;
+  color: #4338ca;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.live-table__refresh:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.live-table__banner {
+  font-size: 0.85rem;
+  margin: 0 0 0.5rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 6px;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.live-table__retry {
+  font-size: 0.85rem;
+  color: #4f46e5;
+  background: none;
+  border: none;
+  padding: 0.25rem 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* Dynamic form */
+.live-form {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.75rem;
+  max-width: 32rem;
+}
+
+/* Standalone form field widgets (Phase 6) */
+.live-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  width: 100%;
+  min-width: 0;
+  max-width: 32rem;
+}
+
+.live-form-field__label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.live-form-field__req {
+  color: #b91c1c;
+}
+
+.live-form-field__control {
+  box-sizing: border-box;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.live-form-field--toggle {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.live-form-field__toggleLabel {
+  font-size: 0.95rem;
+  color: #0f172a;
+}
+
+.live-form-field--radio {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.6rem 0.7rem;
+}
+
+.live-form-field__radioOption {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+  color: #0f172a;
+  font-size: 0.95rem;
+}
+
+.live-form--empty .live-form__message {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.live-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.live-form__toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  color: #0f172a;
+  background: #fff;
+}
+
+.live-form__radio {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.live-form__radioOpt {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.95rem;
+  color: #0f172a;
+}
+
+.live-form__label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.live-form__req {
+  color: #b91c1c;
+}
+
+.live-form__input {
+  box-sizing: border-box;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.live-form__error {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #b91c1c;
+}
+
+.live-form__status {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #b91c1c;
+}
+
+.live-form__status--ok {
+  color: #15803d;
+}
+
+.live-form__actions {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.live-form__submit {
+  padding: 0.5rem 1rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #fff;
+  background: #4f46e5;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.live-form__submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Toast */
+.live-toast-host {
+  position: fixed;
+  bottom: 1.25rem;
+  right: 1.25rem;
+  z-index: 10050;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: min(24rem, calc(100% - 2rem));
+  pointer-events: none;
+}
+
+.live-toast-host .live-toast {
+  pointer-events: auto;
+}
+
+.live-toast {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  font-size: 0.9rem;
+  color: #0f172a;
+}
+
+.live-toast--success {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
+.live-toast--error {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.live-toast--info {
+  border-color: #bae6fd;
+  background: #f0f9ff;
+}
+
+.live-toast__text {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.live-toast__close {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  color: #64748b;
+  padding: 0 0.15rem;
+}
+
+/* Action button */
+.live-action-button-wrap {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+}
+
+.live-action-button__feedback {
+  font-size: 0.8rem;
+  color: #b91c1c;
+}
+
+.live-action-button__feedback--ok {
+  color: #15803d;
+}
+
+/* Rich text (published) */
+.live-rich-text {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.live-rich-text a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+}
+
+@keyframes liveRichFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes liveRichFadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes liveRichSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes liveRichScale {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.live-rich-text--anim {
+  opacity: 1;
+}
+
+.live-rich-text--anim-fadeIn {
+  animation-name: liveRichFadeIn;
+  animation-timing-function: ease;
+}
+
+.live-rich-text--anim-fade {
+  animation-name: liveRichFadeIn;
+  animation-timing-function: ease;
+}
+
+.live-rich-text--anim-fadeInUp {
+  animation-name: liveRichFadeInUp;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.live-rich-text--anim-slideUp {
+  animation-name: liveRichSlideUp;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.live-rich-text--anim-slide {
+  animation-name: liveRichSlideUp;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.live-rich-text--anim-scale {
+  animation-name: liveRichScale;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.live-carousel {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  background: #fff;
+}
+
+.live-carousel__slide h3 {
+  margin: 0 0 8px;
+}
+
+.live-carousel__slide p {
+  margin: 0;
+}
+
+.live-carousel__controls {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}

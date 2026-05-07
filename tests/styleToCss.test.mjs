@@ -1,0 +1,45 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { coerceCssGap, getDeviceStyle, styleToCss } from '../lib/styleToCss.js';
+
+test('coerceCssGap handles numbers and strings', () => {
+  assert.equal(coerceCssGap(24), '24px');
+  assert.equal(coerceCssGap('16px'), '16px');
+  assert.equal(coerceCssGap(null), undefined);
+});
+
+test('getDeviceStyle: desktop base + tablet override-only merge for layout/colors/typography', () => {
+  const style = {
+    desktop: {
+      layout: { gap: 24, justifyContent: 'flex-start' },
+      colors: { textColor: '#111' },
+    },
+    tablet: {
+      layout: { gap: 16 },
+    },
+  };
+  const tablet = getDeviceStyle(style, 'tablet');
+  assert.equal(tablet.layout.gap, 16);
+  assert.equal(tablet.layout.justifyContent, 'flex-start');
+  assert.equal(tablet.colors.textColor, '#111');
+});
+
+test('getDeviceStyle: legacy flat style treated as desktop', () => {
+  const flat = { layout: { gap: 8 }, colors: { textColor: '#000' } };
+  const d = getDeviceStyle(flat, 'desktop');
+  assert.equal(d.layout.gap, 8);
+});
+
+test('styleToCss exposes --node-* vars and flex gap from layout.gap', () => {
+  const css = styleToCss({
+    layout: { gap: 20, display: 'flex', flexDirection: 'column' },
+    colors: { text: '#222', background: '#eee' },
+    spacing: { padding: '8px 12px' },
+    border: { radius: '6px' },
+  });
+  assert.equal(css['--node-gap'], '20px');
+  assert.equal(css.gap, '20px');
+  assert.equal(css['--node-text'], '#222');
+  assert.equal(css['--node-bg'], '#eee');
+  assert.ok(css['--node-pad']);
+});

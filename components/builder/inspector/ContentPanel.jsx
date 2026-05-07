@@ -1,0 +1,1034 @@
+'use client';
+
+import { MENU_ALIGNS, MENU_VARIANTS } from '@/lib/menuNav';
+
+export default function ContentPanel({ selectedNode, form, onChange, jsonErrors = {}, projectPages = [] }) {
+  const handleImageUpload = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type?.startsWith('image/')) {
+      event.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const src = typeof reader.result === 'string' ? reader.result : '';
+      onChange('src', src);
+      if (!form.alt?.trim()) {
+        onChange('alt', file.name.replace(/\.[^.]+$/, ''));
+      }
+      event.target.value = '';
+    };
+    reader.onerror = () => {
+      event.target.value = '';
+    };
+    reader.readAsDataURL(file);
+  };
+
+  if (!selectedNode) {
+    return (
+      <div className="bld-panel">
+        <div className="bld-empty-state">Select a widget on canvas.</div>
+      </div>
+    );
+  }
+
+  const isButton = selectedNode.nodeType === 'button';
+  const isTextLike = selectedNode.nodeType === 'heading' || selectedNode.nodeType === 'text' || isButton;
+  const isImage = selectedNode.nodeType === 'image';
+  const isMenu = selectedNode.nodeType === 'menu';
+  const isTable = selectedNode.nodeType === 'table';
+  const isForm = selectedNode.nodeType === 'form';
+  const isRichText = selectedNode.nodeType === 'rich_text';
+  const isCarousel = selectedNode.nodeType === 'carousel';
+  const carouselSlides = isCarousel && Array.isArray(selectedNode.props?.slides) ? selectedNode.props.slides : [];
+  const formFields = isForm && Array.isArray(selectedNode.props?.fields) ? selectedNode.props.fields : [];
+  const formNotifications =
+    isForm && selectedNode.props?.notifications && typeof selectedNode.props.notifications === 'object'
+      ? selectedNode.props.notifications
+      : {};
+
+  const handleCarouselSlideImageUpload = (slideIndex, event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type?.startsWith('image/')) {
+      event.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const src = typeof reader.result === 'string' ? reader.result : '';
+      onChange('carouselSlidePatch', {
+        index: slideIndex,
+        patch: {
+          imageSrc: src,
+          image: src,
+          imageAlt: file.name.replace(/\.[^.]+$/, ''),
+        },
+      });
+      event.target.value = '';
+    };
+    reader.onerror = () => {
+      event.target.value = '';
+    };
+    reader.readAsDataURL(file);
+  };
+
+  return (
+    <div className="bld-panel">
+      <div className="bld-panel__head">Content</div>
+      {isTextLike ? (
+        <div className="bld-field">
+          <label className="bld-label">{isButton ? 'Label' : 'Text'}</label>
+          <input className="bld-input" value={form.text || ''} onChange={(e) => onChange('text', e.target.value)} />
+        </div>
+      ) : null}
+      {isRichText ? (
+        <>
+          <div className="bld-field">
+            <label className="bld-label">HTML (sanitized on save)</label>
+            <textarea
+              className="bld-input bld-textarea"
+              rows={8}
+              value={form.richTextHtml || ''}
+              onChange={(e) => onChange('richTextHtml', e.target.value)}
+            />
+          </div>
+          <p className="bld-panel__hint">Double‑click the block on canvas for WYSIWYG + toolbar.</p>
+        </>
+      ) : null}
+      {isButton ? (
+        <>
+          <div className="bld-field">
+            <label className="bld-label">Type</label>
+            <select className="bld-input" value={form.buttonType || 'default'} onChange={(e) => onChange('buttonType', e.target.value)}>
+              <option value="default">Default</option>
+              <option value="info">Info</option>
+              <option value="success">Success</option>
+              <option value="warning">Warning</option>
+              <option value="danger">Danger</option>
+            </select>
+          </div>
+          <div className="bld-field">
+            <label className="bld-label">Link</label>
+            <input className="bld-input" value={form.href || ''} onChange={(e) => onChange('href', e.target.value)} />
+          </div>
+          <div className="bld-field">
+            <label className="bld-label">Alignment</label>
+            <div className="bld-layout-mini-panel__row">
+              {['left', 'center', 'right'].map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  className={`bld-layout-mini-btn ${form.alignment === v ? 'is-active' : ''}`}
+                  onClick={() => onChange('alignment', v)}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="bld-field">
+            <label className="bld-label">Size</label>
+            <select className="bld-input" value={form.size || 'medium'} onChange={(e) => onChange('size', e.target.value)}>
+              <option value="small">small</option>
+              <option value="medium">medium</option>
+              <option value="large">large</option>
+            </select>
+          </div>
+          <div className="bld-field">
+            <label className="bld-label">Icon</label>
+            <input
+              className="bld-input"
+              value={form.buttonIcon || ''}
+              onChange={(e) => onChange('buttonIcon', e.target.value)}
+              placeholder="arrow-down"
+            />
+          </div>
+          <div className="bld-field">
+            <label className="bld-label">Icon Position</label>
+            <select
+              className="bld-input"
+              value={form.buttonIconPosition || 'after'}
+              onChange={(e) => onChange('buttonIconPosition', e.target.value)}
+            >
+              <option value="before">Before</option>
+              <option value="after">After</option>
+            </select>
+          </div>
+          <div className="bld-field">
+            <label className="bld-label">Icon Spacing</label>
+            <input
+              type="range"
+              min="0"
+              max="40"
+              className="bld-range"
+              value={Number(form.buttonIconSpacing ?? 10)}
+              onChange={(e) => onChange('buttonIconSpacing', e.target.value)}
+            />
+            <input
+              type="number"
+              min="0"
+              className="bld-input"
+              value={Number(form.buttonIconSpacing ?? 10)}
+              onChange={(e) => onChange('buttonIconSpacing', e.target.value)}
+            />
+          </div>
+          <div className="bld-field">
+            <label className="bld-label">Button ID</label>
+            <input
+              className="bld-input"
+              value={form.buttonId || ''}
+              onChange={(e) => onChange('buttonId', e.target.value)}
+              placeholder="about_us_btn"
+            />
+            <p className="bld-field-note">Use letters, numbers, dashes or underscores only.</p>
+          </div>
+        </>
+      ) : null}
+      {isImage ? (
+        <>
+          <div className="bld-field">
+            <label className="bld-label">Upload</label>
+            <input type="file" accept="image/*" className="bld-input" onChange={handleImageUpload} />
+          </div>
+          <div className="bld-field">
+            <label className="bld-label">Image URL</label>
+            <input className="bld-input" value={form.src || ''} onChange={(e) => onChange('src', e.target.value)} />
+          </div>
+          <div className="bld-field">
+            <label className="bld-label">Alt</label>
+            <input className="bld-input" value={form.alt || ''} onChange={(e) => onChange('alt', e.target.value)} />
+          </div>
+          <div className="bld-field">
+            <label className="bld-label">Image Fit</label>
+            <select className="bld-input" value={form.imageFit || 'cover'} onChange={(e) => onChange('imageFit', e.target.value)}>
+              <option value="cover">cover (crop)</option>
+              <option value="contain">contain (full image)</option>
+              <option value="fill">fill</option>
+            </select>
+          </div>
+          <div className="bld-field">
+            <label className="bld-label">Crop Height (px)</label>
+            <input
+              type="number"
+              min="0"
+              className="bld-input"
+              value={Number(form.imageHeightPx || 0)}
+              onChange={(e) => onChange('imageHeightPx', e.target.value)}
+              placeholder="0 = auto height"
+            />
+          </div>
+        </>
+      ) : null}
+      {isMenu ? (
+        <>
+          <div className="bld-field">
+            <label className="bld-label">Direction</label>
+            <select
+              className="bld-input"
+              value={form.menuDirection || 'row'}
+              onChange={(e) => onChange('menuDirection', e.target.value)}
+            >
+              <option value="row">Horizontal</option>
+              <option value="column">Vertical</option>
+            </select>
+          </div>
+          <div className="bld-field">
+            <label className="bld-label">Variant</label>
+            <select
+              className="bld-input"
+              value={form.menuVariant || 'pill'}
+              onChange={(e) => onChange('menuVariant', e.target.value)}
+            >
+              {MENU_VARIANTS.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="bld-field">
+            <label className="bld-label">Alignment</label>
+            <select
+              className="bld-input"
+              value={form.menuAlign || 'center'}
+              onChange={(e) => onChange('menuAlign', e.target.value)}
+            >
+              {MENU_ALIGNS.map((a) => (
+                <option key={a} value={a}>
+                  {a === 'space-between' ? 'Space between' : a.charAt(0).toUpperCase() + a.slice(1)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="bld-field">
+            <label className="bld-label">Aria Label</label>
+            <input
+              className="bld-input"
+              value={form.menuAriaLabel || 'Main navigation'}
+              onChange={(e) => onChange('menuAriaLabel', e.target.value)}
+              placeholder="Main navigation"
+            />
+          </div>
+          <div className="bld-field">
+            <label className="bld-label">Menu Items JSON (supports nested children)</label>
+            <textarea
+              className="bld-input"
+              rows={7}
+              value={form.menuItemsJson || '[]'}
+              onChange={(e) => onChange('menuItemsJson', e.target.value)}
+              placeholder={
+                '[\n' +
+                '  { "id": "home", "label": "Home", "to": "/" },\n' +
+                '  { "id": "services", "label": "Services", "to": "/services", "children": [\n' +
+                '    { "id": "web", "label": "Web Design", "to": "/services/web" },\n' +
+                '    { "id": "seo", "label": "SEO", "to": "/services/seo" }\n' +
+                '  ]}\n' +
+                ']'
+              }
+            />
+            {jsonErrors.menuItemsJson ? <p className="bld-field-error">{jsonErrors.menuItemsJson}</p> : null}
+          </div>
+          <details className="bld-acc" style={{ marginTop: 10 }}>
+            <summary>Advanced: Mega + Mobile</summary>
+            <div className="bld-field" style={{ marginTop: 10 }}>
+              <label className="bld-label">Mega menu enabled</label>
+              <select
+                className="bld-input"
+                value={form.menuMegaEnabled ? 'yes' : 'no'}
+                onChange={(e) => onChange('menuMegaEnabled', e.target.value === 'yes')}
+              >
+                <option value="no">No</option>
+                <option value="yes">Yes</option>
+              </select>
+            </div>
+            <div className="bld-field">
+              <label className="bld-label">Mega columns</label>
+              <input
+                type="number"
+                min="1"
+                max="6"
+                className="bld-input"
+                value={Number(form.menuMegaColumns ?? 2)}
+                onChange={(e) => onChange('menuMegaColumns', e.target.value)}
+              />
+            </div>
+            <div className="bld-field">
+              <label className="bld-label">Mobile drawer</label>
+              <select
+                className="bld-input"
+                value={form.menuMobileEnabled ? 'yes' : 'no'}
+                onChange={(e) => onChange('menuMobileEnabled', e.target.value === 'yes')}
+              >
+                <option value="yes">Enabled</option>
+                <option value="no">Disabled</option>
+              </select>
+            </div>
+            <div className="bld-field">
+              <label className="bld-label">Mobile title</label>
+              <input
+                className="bld-input"
+                value={form.menuMobileTitle || ''}
+                onChange={(e) => onChange('menuMobileTitle', e.target.value)}
+                placeholder="Menu"
+              />
+            </div>
+          </details>
+          <div className="bld-field">
+            <label className="bld-label">Use Project Pages for Navigation</label>
+            <select
+              className="bld-input"
+              value={form.menuUseProjectPages ? 'yes' : 'no'}
+              onChange={(e) => onChange('menuUseProjectPages', e.target.value === 'yes')}
+            >
+              <option value="no">No (manual links)</option>
+              <option value="yes">Yes (auto page links)</option>
+            </select>
+            {form.menuUseProjectPages ? (
+              <p className="bld-field-note">
+                Auto links: {(projectPages || []).map((page) => page.slug).join(', ') || 'No pages found'}.
+              </p>
+            ) : null}
+          </div>
+        </>
+      ) : null}
+      {isCarousel ? (
+        <>
+          <div className="bld-field">
+            <label className="bld-label">Slider type</label>
+            <select className="bld-input" value={form.carouselVariant || 'hero'} onChange={(e) => onChange('carouselVariant', e.target.value)}>
+              <option value="image">Image slider</option>
+              <option value="hero">Hero slider</option>
+              <option value="card">Card carousel</option>
+            </select>
+          </div>
+
+          <div className="bld-field">
+            <label className="bld-label">Image fit</label>
+            <select className="bld-input" value={form.carouselImageFit || 'cover'} onChange={(e) => onChange('carouselImageFit', e.target.value)}>
+              <option value="cover">Cover (crop)</option>
+              <option value="contain">Contain (no crop)</option>
+            </select>
+            <p className="bld-field-note">Use Contain if your slide image is getting cut.</p>
+          </div>
+
+          <div className="bld-field bld-field--row">
+            <label className="bld-label" style={{ marginBottom: 0 }}>
+              Show overlay (text card)
+            </label>
+            <select
+              className="bld-input"
+              value={form.carouselShowOverlay ? 'yes' : 'no'}
+              onChange={(e) => onChange('carouselShowOverlay', e.target.value === 'yes')}
+            >
+              <option value="yes">Yes</option>
+              <option value="no">No</option>
+            </select>
+          </div>
+
+          <div className="bld-field-grid">
+            <div className="bld-field">
+              <label className="bld-label">Autoplay</label>
+              <select className="bld-input" value={form.carouselAutoplay ? 'yes' : 'no'} onChange={(e) => onChange('carouselAutoplay', e.target.value === 'yes')}>
+                <option value="no">Off</option>
+                <option value="yes">On</option>
+              </select>
+            </div>
+            <div className="bld-field">
+              <label className="bld-label">Loop</label>
+              <select className="bld-input" value={form.carouselLoop ? 'yes' : 'no'} onChange={(e) => onChange('carouselLoop', e.target.value === 'yes')}>
+                <option value="yes">On</option>
+                <option value="no">Off</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="bld-field">
+            <label className="bld-label">Pause on hover</label>
+            <select className="bld-input" value={form.carouselPauseOnHover ? 'yes' : 'no'} onChange={(e) => onChange('carouselPauseOnHover', e.target.value === 'yes')}>
+              <option value="yes">Yes</option>
+              <option value="no">No</option>
+            </select>
+            <p className="bld-field-note">If autoplay looks “not working” in builder, set this to No.</p>
+          </div>
+
+          <div className="bld-field-grid">
+            <div className="bld-field">
+              <label className="bld-label">Arrows</label>
+              <select className="bld-input" value={form.carouselArrows ? 'yes' : 'no'} onChange={(e) => onChange('carouselArrows', e.target.value === 'yes')}>
+                <option value="yes">On</option>
+                <option value="no">Off</option>
+              </select>
+            </div>
+            <div className="bld-field">
+              <label className="bld-label">Dots</label>
+              <select className="bld-input" value={form.carouselDots ? 'yes' : 'no'} onChange={(e) => onChange('carouselDots', e.target.value === 'yes')}>
+                <option value="yes">On</option>
+                <option value="no">Off</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="bld-field-grid">
+            <div className="bld-field">
+              <label className="bld-label">Speed (ms)</label>
+              <input
+                className="bld-input"
+                type="number"
+                min={0}
+                step={10}
+                value={form.carouselSpeedMs ?? ''}
+                onChange={(e) => onChange('carouselSpeedMs', e.target.value)}
+              />
+            </div>
+            <div className="bld-field">
+              <label className="bld-label">Interval (ms)</label>
+              <input
+                className="bld-input"
+                type="number"
+                min={0}
+                step={100}
+                value={form.carouselIntervalMs ?? ''}
+                onChange={(e) => onChange('carouselIntervalMs', e.target.value)}
+              />
+            </div>
+            <div className="bld-field">
+              <label className="bld-label">Gap (px)</label>
+              <input
+                className="bld-input"
+                type="number"
+                min={0}
+                step={1}
+                value={form.carouselGapPx ?? ''}
+                onChange={(e) => onChange('carouselGapPx', e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="bld-field">
+            <label className="bld-label">Slides per view (this breakpoint)</label>
+            <input
+              className="bld-input"
+              type="number"
+              min={1}
+              max={6}
+              step={1}
+              value={form.carouselPerView ?? ''}
+              onChange={(e) => onChange('carouselPerView', e.target.value)}
+            />
+            <p className="bld-field-note">Use the Desktop/Tablet/Mobile switcher above to set per device.</p>
+          </div>
+
+          <div className="bld-field">
+            <div className="bld-field-label-row">
+              <span className="bld-label">Slides</span>
+              <button type="button" className="bld-chip" onClick={() => onChange('carouselAddSlide', true)}>
+                + Add slide
+              </button>
+            </div>
+            <div className="bld-carousel-slides">
+              {(Array.isArray(selectedNode.props?.slides) ? selectedNode.props.slides : []).map((slide, idx) => (
+                <div
+                  key={String(slide?.id || idx)}
+                  className="bld-carousel-slide-row"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('text/plain', String(idx));
+                    e.dataTransfer.effectAllowed = 'move';
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const from = Number(e.dataTransfer.getData('text/plain'));
+                    const to = idx;
+                    onChange('carouselSlidesReorder', { from, to });
+                  }}
+                >
+                  <span className="bld-carousel-slide-handle" aria-hidden>
+                    ⋮⋮
+                  </span>
+                  <div className="bld-carousel-slide-meta">
+                    <div className="bld-carousel-slide-title">{String(slide?.title || `Slide ${idx + 1}`)}</div>
+                    <div className="bld-carousel-slide-sub">{slide?.imageSrc ? 'Image' : 'No image'} · drag to reorder</div>
+                  </div>
+                  <button type="button" className="bld-btn-reset" onClick={() => onChange('carouselRemoveSlide', idx)} title="Remove slide">
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bld-field">
+            <label className="bld-label">Slide editor</label>
+            <p className="bld-field-note" style={{ marginTop: 0 }}>
+              Edit slides here (no JSON needed). Drag reorder list above.
+            </p>
+            <div className="bld-carousel-editor">
+              {carouselSlides.map((slide, idx) => (
+                <details key={String(slide?.id || idx)} className="bld-carousel-editor__slide" open={idx === 0}>
+                  <summary className="bld-carousel-editor__summary">
+                    <span className="bld-carousel-editor__title">{String(slide?.title || `Slide ${idx + 1}`)}</span>
+                    <span className="bld-carousel-editor__meta">{slide?.imageSrc ? 'Image' : 'No image'}</span>
+                  </summary>
+                  <div className="bld-carousel-editor__body">
+                    <div className="bld-field-grid">
+                      <div className="bld-field">
+                        <label className="bld-label">Title</label>
+                        <input
+                          className="bld-input"
+                          value={String(slide?.title || '')}
+                          onChange={(e) => onChange('carouselSlidePatch', { index: idx, patch: { title: e.target.value } })}
+                        />
+                      </div>
+                      <div className="bld-field">
+                        <label className="bld-label">Subtitle</label>
+                        <input
+                          className="bld-input"
+                          value={String(slide?.subtitle || '')}
+                          onChange={(e) => onChange('carouselSlidePatch', { index: idx, patch: { subtitle: e.target.value } })}
+                        />
+                      </div>
+                      <div className="bld-field">
+                        <label className="bld-label">Image Alt</label>
+                        <input
+                          className="bld-input"
+                          value={String(slide?.imageAlt || '')}
+                          onChange={(e) => onChange('carouselSlidePatch', { index: idx, patch: { imageAlt: e.target.value } })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="bld-field">
+                      <label className="bld-label">Body</label>
+                      <textarea
+                        className="bld-input bld-textarea"
+                        rows={3}
+                        value={String(slide?.body || '')}
+                        onChange={(e) => onChange('carouselSlidePatch', { index: idx, patch: { body: e.target.value } })}
+                      />
+                    </div>
+
+                    <div className="bld-field-grid">
+                      <div className="bld-field">
+                        <label className="bld-label">Upload image</label>
+                        <input type="file" accept="image/*" className="bld-input" onChange={(e) => handleCarouselSlideImageUpload(idx, e)} />
+                      </div>
+                      <div className="bld-field">
+                        <label className="bld-label">Image URL</label>
+                        <input
+                          className="bld-input"
+                          value={String(slide?.imageSrc || '')}
+                          onChange={(e) =>
+                            onChange('carouselSlidePatch', {
+                              index: idx,
+                              patch: { imageSrc: e.target.value, image: e.target.value },
+                            })
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    <div className="bld-field-grid">
+                      <div className="bld-field">
+                        <label className="bld-label">Card title</label>
+                        <input
+                          className="bld-input"
+                          value={String(slide?.card?.title || '')}
+                          onChange={(e) =>
+                            onChange('carouselSlidePatch', { index: idx, patch: { card: { ...(slide?.card || {}), title: e.target.value } } })
+                          }
+                        />
+                      </div>
+                      <div className="bld-field">
+                        <label className="bld-label">Card body</label>
+                        <input
+                          className="bld-input"
+                          value={String(slide?.card?.body || '')}
+                          onChange={(e) =>
+                            onChange('carouselSlidePatch', { index: idx, patch: { card: { ...(slide?.card || {}), body: e.target.value } } })
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    <div className="bld-field-grid">
+                      <div className="bld-field">
+                        <label className="bld-label">Card align</label>
+                        <select
+                          className="bld-input"
+                          value={String(slide?.card?.align || 'left')}
+                          onChange={(e) =>
+                            onChange('carouselSlidePatch', { index: idx, patch: { card: { ...(slide?.card || {}), align: e.target.value } } })
+                          }
+                        >
+                          <option value="left">Left</option>
+                          <option value="center">Center</option>
+                          <option value="right">Right</option>
+                        </select>
+                      </div>
+                      <div className="bld-field">
+                        <label className="bld-label">Card theme</label>
+                        <select
+                          className="bld-input"
+                          value={String(slide?.card?.theme || 'dark')}
+                          onChange={(e) =>
+                            onChange('carouselSlidePatch', { index: idx, patch: { card: { ...(slide?.card || {}), theme: e.target.value } } })
+                          }
+                        >
+                          <option value="dark">Dark</option>
+                          <option value="light">Light</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="bld-field-grid">
+                      <div className="bld-field">
+                        <label className="bld-label">CTA label</label>
+                        <input
+                          className="bld-input"
+                          value={String(slide?.cta?.label || '')}
+                          onChange={(e) =>
+                            onChange('carouselSlidePatch', { index: idx, patch: { cta: { ...(slide?.cta || {}), label: e.target.value } } })
+                          }
+                        />
+                      </div>
+                      <div className="bld-field">
+                        <label className="bld-label">CTA link</label>
+                        <input
+                          className="bld-input"
+                          value={String(slide?.cta?.href || '')}
+                          onChange={(e) =>
+                            onChange('carouselSlidePatch', { index: idx, patch: { cta: { ...(slide?.cta || {}), href: e.target.value } } })
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    <div className="bld-field-grid">
+                      <div className="bld-field">
+                        <label className="bld-label">Button text</label>
+                        <input
+                          className="bld-input"
+                          value={String(slide?.buttonText || '')}
+                          onChange={(e) => onChange('carouselSlidePatch', { index: idx, patch: { buttonText: e.target.value } })}
+                        />
+                      </div>
+                      <div className="bld-field">
+                        <label className="bld-label">Button URL</label>
+                        <input
+                          className="bld-input"
+                          value={String(slide?.buttonUrl || '')}
+                          onChange={(e) => onChange('carouselSlidePatch', { index: idx, patch: { buttonUrl: e.target.value } })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </details>
+              ))}
+            </div>
+          </div>
+
+          <details className="bld-acc" style={{ marginTop: 10 }}>
+            <summary>Advanced: Slides JSON</summary>
+            <div className="bld-field" style={{ marginTop: 10 }}>
+              <textarea
+                className="bld-input"
+                rows={8}
+                value={form.carouselSlidesJson || '[]'}
+                onChange={(e) => onChange('carouselSlidesJson', e.target.value)}
+              />
+              {jsonErrors.carouselSlidesJson ? <p className="bld-field-error">{jsonErrors.carouselSlidesJson}</p> : null}
+              <p className="bld-field-note">
+                Supports: <code>title</code>, <code>body</code>, <code>imageSrc</code>, <code>card</code>, <code>cta</code>.
+              </p>
+            </div>
+          </details>
+        </>
+      ) : null}
+      {isTable ? (
+        <>
+          <div className="bld-field">
+            <label className="bld-label">Columns JSON</label>
+            <textarea
+              className="bld-input"
+              rows={6}
+              value={form.tableColumnsJson || '[]'}
+              onChange={(e) => onChange('tableColumnsJson', e.target.value)}
+            />
+            {jsonErrors.tableColumnsJson ? <p className="bld-field-error">{jsonErrors.tableColumnsJson}</p> : null}
+          </div>
+        </>
+      ) : null}
+      {isForm ? (
+        <>
+          <div className="bld-field">
+            <label className="bld-label">Submit Label</label>
+            <input className="bld-input" value={form.submitLabel || ''} onChange={(e) => onChange('submitLabel', e.target.value)} />
+          </div>
+          <div className="bld-form-builder">
+            <div className="bld-form-builder__head">
+              <div className="bld-form-builder__title">Fields</div>
+              <button type="button" className="bld-btn" onClick={() => onChange('formAddField')}>
+                + Add field
+              </button>
+            </div>
+
+            {formFields.length ? (
+              <div className="bld-form-fields">
+                {formFields.map((f, idx) => (
+                  <div
+                    key={String(f?.id || f?.name || idx)}
+                    className="bld-form-field-row"
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('text/plain', String(idx));
+                      e.dataTransfer.effectAllowed = 'move';
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'move';
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const from = Number(e.dataTransfer.getData('text/plain'));
+                      const to = idx;
+                      if (!Number.isInteger(from) || from < 0) return;
+                      if (from === to) return;
+                      onChange('formReorderFields', { from, to });
+                    }}
+                    title="Drag to reorder"
+                  >
+                    <span className="bld-form-field-handle" aria-hidden>
+                      ⋮⋮
+                    </span>
+                    <div className="bld-form-field-meta">
+                      <div className="bld-form-field-title">
+                        {String(f?.label || f?.name || `Field ${idx + 1}`)}
+                        {f?.required ? <span className="bld-form-field-req"> *</span> : null}
+                      </div>
+                      <div className="bld-form-field-sub">
+                        {String(f?.type || 'text')} · {String(f?.width || '100%')}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="bld-btn-reset"
+                      onClick={() => onChange('formRemoveField', idx)}
+                      title="Remove field"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="bld-panel__hint">No fields yet. Click “Add field”.</p>
+            )}
+
+            {formFields.map((f, idx) => (
+              <details key={`edit-${String(f?.id || f?.name || idx)}`} className="bld-form-editor__field" open={idx === 0}>
+                <summary className="bld-form-editor__summary">
+                  <span className="bld-form-editor__title">{String(f?.label || f?.name || `Field ${idx + 1}`)}</span>
+                  <span className="bld-form-editor__meta">{String(f?.type || 'text')}</span>
+                </summary>
+                <div className="bld-form-editor__grid">
+                  <div className="bld-field">
+                    <label className="bld-label">Name</label>
+                    <input
+                      className="bld-input"
+                      value={String(f?.name || '')}
+                      onChange={(e) =>
+                        onChange('formPatchField', {
+                          index: idx,
+                          patch: { name: e.target.value },
+                        })
+                      }
+                      placeholder="email"
+                    />
+                    <p className="bld-field-note">Used as the key in submissions. Letters/numbers/underscore recommended.</p>
+                  </div>
+                  <div className="bld-field">
+                    <label className="bld-label">Label</label>
+                    <input
+                      className="bld-input"
+                      value={String(f?.label || '')}
+                      onChange={(e) =>
+                        onChange('formPatchField', {
+                          index: idx,
+                          patch: { label: e.target.value },
+                        })
+                      }
+                      placeholder="Email"
+                    />
+                  </div>
+                  <div className="bld-field">
+                    <label className="bld-label">Type</label>
+                    <select
+                      className="bld-input"
+                      value={String(f?.type || 'text')}
+                      onChange={(e) =>
+                        onChange('formPatchField', {
+                          index: idx,
+                          patch: { type: e.target.value },
+                        })
+                      }
+                    >
+                      <option value="text">Text</option>
+                      <option value="email">Email</option>
+                      <option value="phone">Phone</option>
+                      <option value="number">Number</option>
+                      <option value="date">Date</option>
+                      <option value="textarea">Textarea</option>
+                      <option value="select">Select</option>
+                      <option value="checkbox">Checkbox</option>
+                      <option value="radio">Radio</option>
+                      <option value="switch">Switch</option>
+                    </select>
+                  </div>
+                  <div className="bld-field">
+                    <label className="bld-label">Placeholder</label>
+                    <input
+                      className="bld-input"
+                      value={String(f?.placeholder || '')}
+                      onChange={(e) =>
+                        onChange('formPatchField', {
+                          index: idx,
+                          patch: { placeholder: e.target.value },
+                        })
+                      }
+                      placeholder="Enter value"
+                    />
+                  </div>
+                  <div className="bld-field">
+                    <label className="bld-label">Width</label>
+                    <select
+                      className="bld-input"
+                      value={String(f?.width || '100%')}
+                      onChange={(e) =>
+                        onChange('formPatchField', {
+                          index: idx,
+                          patch: { width: e.target.value },
+                        })
+                      }
+                    >
+                      <option value="100%">100%</option>
+                      <option value="75%">75%</option>
+                      <option value="66.66%">66.66%</option>
+                      <option value="50%">50%</option>
+                      <option value="33.33%">33.33%</option>
+                      <option value="25%">25%</option>
+                      <option value="auto">auto</option>
+                    </select>
+                  </div>
+                  <div className="bld-field bld-field--row">
+                    <label className="bld-label">Required</label>
+                    <label className="bld-toggle">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(f?.required)}
+                        onChange={(e) =>
+                          onChange('formPatchField', {
+                            index: idx,
+                            patch: { required: e.target.checked },
+                          })
+                        }
+                      />
+                      <span>Required</span>
+                    </label>
+                  </div>
+
+                  {String(f?.type || '') === 'select' || String(f?.type || '') === 'radio' ? (
+                    <div className="bld-field" style={{ gridColumn: '1 / -1' }}>
+                      <label className="bld-label">Options (one per line)</label>
+                      <textarea
+                        className="bld-input bld-textarea"
+                        rows={4}
+                        value={Array.isArray(f?.options) ? f.options.map((o) => (typeof o === 'string' ? o : String(o?.label || o?.value || ''))).join('\n') : ''}
+                        onChange={(e) =>
+                          onChange('formPatchField', {
+                            index: idx,
+                            patch: {
+                              options: String(e.target.value || '')
+                                .split('\n')
+                                .map((s) => s.trim())
+                                .filter(Boolean)
+                                .slice(0, 50),
+                            },
+                          })
+                        }
+                        placeholder={"Option A\nOption B"}
+                      />
+                    </div>
+                  ) : null}
+
+                  <details className="bld-acc" style={{ gridColumn: '1 / -1' }}>
+                    <summary>Validation</summary>
+                    <div className="bld-form-validation">
+                      <div className="bld-field">
+                        <label className="bld-label">Min</label>
+                        <input
+                          className="bld-input"
+                          value={String(f?.validation?.min ?? '')}
+                          onChange={(e) =>
+                            onChange('formPatchField', {
+                              index: idx,
+                              patch: { validation: { ...(f?.validation || {}), min: e.target.value } },
+                            })
+                          }
+                          placeholder="e.g. 2"
+                        />
+                      </div>
+                      <div className="bld-field">
+                        <label className="bld-label">Max</label>
+                        <input
+                          className="bld-input"
+                          value={String(f?.validation?.max ?? '')}
+                          onChange={(e) =>
+                            onChange('formPatchField', {
+                              index: idx,
+                              patch: { validation: { ...(f?.validation || {}), max: e.target.value } },
+                            })
+                          }
+                          placeholder="e.g. 50"
+                        />
+                      </div>
+                      <div className="bld-field" style={{ gridColumn: '1 / -1' }}>
+                        <label className="bld-label">Regex (advanced)</label>
+                        <input
+                          className="bld-input"
+                          value={String(f?.validation?.regex ?? '')}
+                          onChange={(e) =>
+                            onChange('formPatchField', {
+                              index: idx,
+                              patch: { validation: { ...(f?.validation || {}), regex: e.target.value } },
+                            })
+                          }
+                          placeholder="e.g. ^[A-Z0-9]{6}$"
+                        />
+                      </div>
+                      <div className="bld-field" style={{ gridColumn: '1 / -1' }}>
+                        <label className="bld-label">Custom error message</label>
+                        <input
+                          className="bld-input"
+                          value={String(f?.validation?.message ?? '')}
+                          onChange={(e) =>
+                            onChange('formPatchField', {
+                              index: idx,
+                              patch: { validation: { ...(f?.validation || {}), message: e.target.value } },
+                            })
+                          }
+                          placeholder="Optional"
+                        />
+                      </div>
+                    </div>
+                  </details>
+                </div>
+              </details>
+            ))}
+
+            <details className="bld-acc" style={{ marginTop: 10 }}>
+              <summary>Notifications (placeholders)</summary>
+              <div className="bld-field" style={{ marginTop: 10 }}>
+                <label className="bld-label">Webhook URL</label>
+                <input
+                  className="bld-input"
+                  value={String(formNotifications.webhookUrl || '')}
+                  onChange={(e) => onChange('formSetNotifications', { webhookUrl: e.target.value })}
+                  placeholder="https://example.com/webhook"
+                />
+                <p className="bld-field-note">Stored with the form. Sending will be wired later (no 3rd-party dependency).</p>
+              </div>
+              <div className="bld-field">
+                <label className="bld-label">Email notify (to)</label>
+                <input
+                  className="bld-input"
+                  value={String(formNotifications.emailTo || '')}
+                  onChange={(e) => onChange('formSetNotifications', { emailTo: e.target.value })}
+                  placeholder="you@domain.com"
+                />
+              </div>
+            </details>
+
+            <details className="bld-acc" style={{ marginTop: 10 }}>
+              <summary>Advanced: Fields JSON</summary>
+              <div className="bld-field" style={{ marginTop: 10 }}>
+                <textarea
+                  className="bld-input"
+                  rows={8}
+                  value={form.formFieldsJson || '[]'}
+                  onChange={(e) => onChange('formFieldsJson', e.target.value)}
+                />
+                {jsonErrors.formFieldsJson ? <p className="bld-field-error">{jsonErrors.formFieldsJson}</p> : null}
+              </div>
+            </details>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}

@@ -1,0 +1,22 @@
+/* Base app shell; builder uses its own imported CSS in BuilderShell */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* `overflow-x: hidden` on scrolling ancestors disables position:sticky. Scoped relaxation when sticky header is on. */
+html:has(.live-site[data-sticky-header='true']),
+body:has(.live-site[data-sticky-header='true']) {
+  overflow-x: clip;
+}
+
+@supports not (overflow: clip) {
+  html:has(.live-site[data-sticky-header='true']),
+  body:has(.live-site[data-sticky-header='true']) {
+    overflow-x: visible;
+  }
+}
