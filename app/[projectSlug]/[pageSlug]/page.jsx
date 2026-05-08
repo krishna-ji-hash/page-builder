@@ -43,13 +43,17 @@ export async function generateMetadata({ params }) {
   };
 }
 
-export default async function PublicSitePage({ params }) {
+export default async function PublicSitePage({ params, searchParams }) {
   const { projectSlug, pageSlug } = await resolveMaybeAsyncParams(params);
   if (!isPublicSlug(projectSlug) || !isPublicSlug(pageSlug)) {
     return <div style={{ padding: 40 }}>Page not found</div>;
   }
 
-  const page = await getPublishedPage(projectSlug, pageSlug);
+  // Next.js 15: `searchParams` should be awaited before property access.
+  const sp = searchParams ? await Promise.resolve(searchParams) : null;
+  const pageParam = typeof sp?.page === 'string' ? Number(sp.page) : 0;
+  const pageContext = Number.isInteger(pageParam) && pageParam > 0 ? { cms: { page: pageParam } } : null;
+  const page = await getPublishedPage(projectSlug, pageSlug, pageContext);
 
   if (!page) {
     return <div style={{ padding: 40 }}>Page not found</div>;

@@ -27,6 +27,7 @@ import { useBuilderTheme } from '@/context/BuilderThemeContext';
 import { mergeNodeStyleWithSiteTheme } from '@/lib/siteDesignTheme';
 import Carousel from '@/components/runtime/Carousel';
 import Menu from '@/components/runtime/Menu';
+import { applyBindingsToString } from '@/lib/cms/cmsBindings';
 import ResizeHandle from './canvas/ResizeHandle';
 import InlineEdit from './canvas/InlineEdit';
 import AddSectionModal from './canvas/AddSectionModal';
@@ -37,6 +38,7 @@ import GapHandlesOverlay from './canvas/GapHandlesOverlay';
 import SpacingGuidesOverlay from './canvas/SpacingGuidesOverlay';
 import GridOverlay from './canvas/GridOverlay';
 import RichTextEditor from './RichTextEditor';
+import { getGlobalLinkMeta } from '@/lib/globalComponentLinkMeta';
 
 function applyDeviceStylePatch(existingStyle, device, patch, nodeType = null, siteTheme = null) {
   const normalizedCurrent = normalizeResponsiveStyle(existingStyle || {}, { nodeType, siteTheme });
@@ -180,8 +182,10 @@ function renderNodeContent(
     menuStyle,
     widgetCss,
     device,
+    cmsBindingContext,
   }
 ) {
+  const bind = (s) => (cmsBindingContext ? applyBindingsToString(String(s || ''), cmsBindingContext) : s);
   if (node.nodeType === 'heading') {
     const anim = getRichTextAnimationStyle(node.props?.animation || {});
     const HeadingTag = String(node.props?.tag || 'h1').toLowerCase() === 'h2' ? 'h2' : 'h1';
@@ -203,7 +207,7 @@ function renderNodeContent(
         style={{ ...(widgetCss || {}), ...(anim.style || {}) }}
         onDoubleClick={(event) => onInlineEditStart(node, event)}
       >
-        {node.props?.text || 'Heading'}
+        {cmsBindingContext ? bind(node.props?.text || 'Heading') : node.props?.text || 'Heading'}
       </HeadingTag>
     );
   }
@@ -227,7 +231,7 @@ function renderNodeContent(
         style={{ ...(widgetCss || {}), ...(anim.style || {}) }}
         onDoubleClick={(event) => onInlineEditStart(node, event)}
       >
-        {node.props?.text || 'Text block content'}
+        {cmsBindingContext ? bind(node.props?.text || 'Text block content') : node.props?.text || 'Text block content'}
       </p>
     );
   }
@@ -252,7 +256,7 @@ function renderNodeContent(
         style={{ ...(widgetCss || {}), ...(anim.style || {}) }}
         onDoubleClick={(event) => onInlineEditStart(node, event)}
       >
-        {node.props?.text || 'Button'}
+        {cmsBindingContext ? bind(node.props?.text || 'Button') : node.props?.text || 'Button'}
       </button>
     );
   }
@@ -280,11 +284,13 @@ function renderNodeContent(
         ? { height: `${Number(node.props?.imageHeightPx || 0)}px` }
         : {}),
     };
+    const src = cmsBindingContext ? bind(node.props?.src || '') : node.props?.src || '';
+    const alt = cmsBindingContext ? bind(node.props?.alt || '') : node.props?.alt || '';
     return (
       <figure className="bld-demo-image-wrap" style={widgetCss || undefined}>
         <img
-          src={node.props?.src || 'https://via.placeholder.com/800x400'}
-          alt={node.props?.alt || node.displayName}
+          src={src || node.props?.src || 'https://via.placeholder.com/800x400'}
+          alt={alt || node.props?.alt || node.displayName}
           className="bld-demo-image"
           style={imageStyle || undefined}
         />
@@ -669,6 +675,9 @@ function NodeRenderer({
   hoveredNodeId,
   onHoverNode,
   onSaveGlobalSection,
+  onConvertToGlobalComponent,
+  onDetachFromGlobalComponent,
+  onEditGlobalComponent,
   onAlignMenuRightInRow,
   onUploadLogoInRow,
   onStretchSectionFullWidth,
@@ -687,6 +696,7 @@ function NodeRenderer({
   onAddSectionPreviewLeave,
   onFreeMoveBrush,
   freeMoveBrushActive = false,
+  cmsContext = null,
 }) {
   const isSelected = node.id === selectedNodeId;
   const handleSelect = (event) => {
@@ -717,6 +727,27 @@ function NodeRenderer({
   const canResizeNode = isFreeMode ? true : !isContainer;
   const supportsInlineTextEdit =
     node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'button';
+
+  const repeatCfg =
+    node?.props?.meta?.cms?.repeat && typeof node.props.meta.cms.repeat === 'object' && !Array.isArray(node.props.meta.cms.repeat)
+      ? node.props.meta.cms.repeat
+      : null;
+  const repeatCollectionSlug = typeof repeatCfg?.collectionSlug === 'string' ? repeatCfg.collectionSlug : '';
+  const repeatEnabled = Boolean(repeatCfg);
+
+  // Builder preview: use a single sample item (no structural duplication in canvas).
+  const effectiveCmsContext =
+    cmsContext && typeof cmsContext === 'object'
+      ? cmsContext
+      : null;
+  const childCmsContext =
+    repeatEnabled && repeatCollectionSlug
+      ? {
+          ...(effectiveCmsContext || {}),
+          sys: { ...(effectiveCmsContext?.sys || {}), collection: repeatCollectionSlug },
+          // item is injected by BuilderCanvas root after preview fetch; keep through.
+        }
+      : effectiveCmsContext;
   const headingTag = String(node.props?.tag || 'h1').toLowerCase() === 'h2' ? 'h2' : 'h1';
   const [isInlineEditing, setIsInlineEditing] = useState(false);
   const [isRichTextEditing, setIsRichTextEditing] = useState(false);
@@ -790,6 +821,8 @@ function NodeRenderer({
   const externalPreview = previewCssByNodeId?.[node.id] || null;
   const inlineStyle = interactionPreviewStyle || externalPreview || nodeCss || undefined;
   const isRow = node.nodeType === 'row';
+  const linkedMeta = isRow ? getGlobalLinkMeta(node) : null;
+  const isLinkedGlobal = Boolean(linkedMeta);
   const isRowEmpty = isRow && !node.children?.length;
   const isDirectionalContainer = node.nodeType === 'column' || node.nodeType === 'stack';
   const supportsDirectManipulation = true;
@@ -1502,17 +1535,17 @@ function NodeRenderer({
         title="Add element"
         aria-label="Add element"
         onClick={openAddForRow}
-        disabled={isCreatingNode}
+        disabled={isCreatingNode || isLinkedGlobal}
       >
-        + Add Element
+        {isLinkedGlobal ? 'Linked section' : '+ Add Element'}
       </button>
       <button
         type="button"
         className="bld-row-placeholder__pick-hint"
         onClick={openAddForRow}
-        disabled={isCreatingNode}
+        disabled={isCreatingNode || isLinkedGlobal}
       >
-        Try: Heading • Image • Button
+        {isLinkedGlobal ? 'Edit Global or Detach to modify content' : 'Try: Heading • Image • Button'}
       </button>
     </div>
   );
@@ -1767,7 +1800,7 @@ function NodeRenderer({
       label: 'Add element…',
       onSelect: openAddForRow,
       useMouseDown: false,
-      disabled: isCreatingNode,
+      disabled: isCreatingNode || isLinkedGlobal,
     });
   }
   rowMoreMenuItems.push({
@@ -1807,6 +1840,33 @@ function NodeRenderer({
       key: 'global-footer',
       label: 'Save as global footer',
       onSelect: () => onSaveGlobalSection({ rowId: node.id, role: 'footer' }),
+      useMouseDown: false,
+      disabled: isSavingNode || isCreatingNode,
+    });
+  }
+  if (isRow && parentNodeType === null && !isLinkedGlobal && onConvertToGlobalComponent) {
+    rowMoreMenuItems.push({
+      key: 'convert-global',
+      label: 'Convert to Global Component',
+      onSelect: () => onConvertToGlobalComponent?.(node.id),
+      useMouseDown: false,
+      disabled: isSavingNode || isCreatingNode,
+    });
+  }
+  if (isLinkedGlobal && onEditGlobalComponent) {
+    rowMoreMenuItems.push({
+      key: 'edit-global',
+      label: 'Edit Global Component',
+      onSelect: () => onEditGlobalComponent?.(linkedMeta.globalComponentId),
+      useMouseDown: false,
+      disabled: isSavingNode || isCreatingNode,
+    });
+  }
+  if (isLinkedGlobal && onDetachFromGlobalComponent) {
+    rowMoreMenuItems.push({
+      key: 'detach-global',
+      label: 'Detach from Global',
+      onSelect: () => onDetachFromGlobalComponent?.(node.id),
       useMouseDown: false,
       disabled: isSavingNode || isCreatingNode,
     });
@@ -1933,6 +1993,18 @@ function NodeRenderer({
                   Section{' '}
                   <span className="bld-node__type">{node.displayName || node.nodeType}</span>
                   {rowRole ? <span className="bld-node__section-tag">{rowRole}</span> : null}
+                  {isLinkedGlobal ? (
+                    <span
+                      className="bld-node__section-tag"
+                      title={
+                        linkedMeta?.globalComponentName
+                          ? `Linked: ${linkedMeta.globalComponentName}`
+                          : 'Linked global component'
+                      }
+                    >
+                      Linked{linkedMeta?.globalComponentName ? `: ${linkedMeta.globalComponentName}` : ''}
+                    </span>
+                  ) : null}
                   {overflowLocal?.horizontal || overflowLocal?.vertical || overflowLocal?.flexWrapUnexpected ? (
                     <span className="bld-node__overflow" title="Layout overflow detected" aria-label="Overflow">
                       Overflow
@@ -2012,9 +2084,19 @@ function NodeRenderer({
               />
               <div className="bld-node-children">
                 {node.children.map((childNode) => (
-                    <NodeRenderer
+                  <NodeRenderer
                     key={childNode.id}
                     node={childNode}
+                    cmsContext={
+                      childCmsContext?.item
+                        ? childCmsContext
+                        : repeatEnabled && repeatCollectionSlug && cmsPreviewByCollection?.[repeatCollectionSlug]?.item
+                          ? {
+                              item: cmsPreviewByCollection[repeatCollectionSlug].item,
+                              sys: { slug: cmsPreviewByCollection[repeatCollectionSlug].item?.slug || '', collection: repeatCollectionSlug },
+                            }
+                          : childCmsContext
+                    }
                     rowIndex={null}
                     rowSemanticTag={null}
                     selectedNodeId={selectedNodeId}
@@ -2042,6 +2124,9 @@ function NodeRenderer({
                     hoveredNodeId={hoveredNodeId}
                     onHoverNode={onHoverNode}
                     onSaveGlobalSection={onSaveGlobalSection}
+                    onConvertToGlobalComponent={onConvertToGlobalComponent}
+                    onDetachFromGlobalComponent={onDetachFromGlobalComponent}
+                    onEditGlobalComponent={onEditGlobalComponent}
                     onAlignMenuRightInRow={onAlignMenuRightInRow}
                     onUploadLogoInRow={onUploadLogoInRow}
                     onStretchSectionFullWidth={onStretchSectionFullWidth}
@@ -2207,6 +2292,7 @@ function NodeRenderer({
                   menuStyle: deviceStyle,
                   widgetCss: inlineStyle,
                   device,
+                  cmsBindingContext: childCmsContext?.item ? { item: childCmsContext.item, sys: childCmsContext.sys || {} } : null,
                 })}
               </div>
             ) : (
@@ -2226,6 +2312,7 @@ function NodeRenderer({
                 menuStyle: deviceStyle,
                 widgetCss: inlineStyle,
                 device,
+                cmsBindingContext: childCmsContext?.item ? { item: childCmsContext.item, sys: childCmsContext.sys || {} } : null,
               })
             )}
             {null}
@@ -2387,6 +2474,9 @@ function NodeRenderer({
                     hoveredNodeId={hoveredNodeId}
                     onHoverNode={onHoverNode}
                     onSaveGlobalSection={onSaveGlobalSection}
+                    onConvertToGlobalComponent={onConvertToGlobalComponent}
+                    onDetachFromGlobalComponent={onDetachFromGlobalComponent}
+                    onEditGlobalComponent={onEditGlobalComponent}
                     onAlignMenuRightInRow={onAlignMenuRightInRow}
                     onUploadLogoInRow={onUploadLogoInRow}
                     onStretchSectionFullWidth={onStretchSectionFullWidth}
@@ -2528,6 +2618,9 @@ export default function BuilderCanvas({
   onCreateSection,
   projectType = 'website',
   onSaveGlobalSection,
+  onConvertToGlobalComponent,
+  onDetachFromGlobalComponent,
+  onEditGlobalComponent,
   onAlignMenuRightInRow,
   onUploadLogoInRow,
   onStretchSectionFullWidth,
@@ -2543,6 +2636,7 @@ export default function BuilderCanvas({
   activeSpacingEdit,
   onOverflowDiagnosticsChange,
   showGrid = false,
+  projectId,
 }) {
   const { siteTheme, currentPageSlug } = useBuilderTheme();
   const pageVars = currentPageSlug ? siteTheme?.pageVars?.[currentPageSlug] : null;
@@ -2564,6 +2658,7 @@ export default function BuilderCanvas({
   const [canvasFreeMoveActive, setCanvasFreeMoveActive] = useState(false);
   const [reorderFlashNodeId, setReorderFlashNodeId] = useState(null);
   const [previewCssByNodeId, setPreviewCssByNodeId] = useState({});
+  const [cmsPreviewByCollection, setCmsPreviewByCollection] = useState({});
   const reorderFlashTimerRef = useRef(null);
   const hoverEnterTimerRef = useRef(null);
   const addSectionPreviewTimerRef = useRef(null);
@@ -2588,6 +2683,46 @@ export default function BuilderCanvas({
 
   const effectivePreviewCssByNodeId = externalPreviewCssByNodeId || previewCssByNodeId;
   const effectiveSetPreviewCssForNode = externalOnSetPreviewCssForNode || setPreviewCssForNode;
+
+  // CMS preview: fetch a single sample item per repeater collection (cached; not per render).
+  useEffect(() => {
+    const pid = Number(projectId);
+    if (!Number.isInteger(pid) || pid <= 0) return;
+    const slugs = new Set();
+    const walk = (nodes) => {
+      for (const n of nodes || []) {
+        const rep = n?.props?.meta?.cms?.repeat;
+        const slug = typeof rep?.collectionSlug === 'string' ? rep.collectionSlug.trim() : '';
+        if (slug) slugs.add(slug);
+        if (Array.isArray(n?.children) && n.children.length) walk(n.children);
+      }
+    };
+    walk(tree);
+    const wanted = Array.from(slugs);
+    if (!wanted.length) return;
+    let cancelled = false;
+    (async () => {
+      const updates = {};
+      for (const slug of wanted) {
+        if (cmsPreviewByCollection?.[slug]?.item) continue;
+        try {
+          const res = await fetch(`/api/projects/${pid}/cms/collections/${slug}/items?status=published&limit=1`);
+          const json = await res.json().catch(() => ({}));
+          const item = Array.isArray(json?.items) && json.items[0] ? json.items[0] : null;
+          if (item) updates[slug] = { item };
+        } catch {
+          // ignore
+        }
+      }
+      if (cancelled) return;
+      if (Object.keys(updates).length) {
+        setCmsPreviewByCollection((prev) => ({ ...(prev || {}), ...(updates || {}) }));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, tree, cmsPreviewByCollection]);
 
   const overflowByNodeIdRef = useRef({});
   const overflowFlushTimerRef = useRef(null);
@@ -3214,6 +3349,14 @@ export default function BuilderCanvas({
                     <NodeRenderer
                       key={node.id}
                       node={node}
+                      cmsContext={
+                        node?.props?.meta?.cms?.repeat?.collectionSlug && cmsPreviewByCollection?.[node.props.meta.cms.repeat.collectionSlug]?.item
+                          ? {
+                              item: cmsPreviewByCollection[node.props.meta.cms.repeat.collectionSlug].item,
+                              sys: { slug: cmsPreviewByCollection[node.props.meta.cms.repeat.collectionSlug].item?.slug || '' },
+                            }
+                          : null
+                      }
                       rowIndex={index}
                       selectedNodeId={selectedNodeId}
                       onSelectNode={onSelectNode}
@@ -3248,6 +3391,9 @@ export default function BuilderCanvas({
                       hoveredNodeId={hoveredNodeId}
                       onHoverNode={onHoverNodeIntent}
                       onSaveGlobalSection={onSaveGlobalSection}
+                      onConvertToGlobalComponent={onConvertToGlobalComponent}
+                      onDetachFromGlobalComponent={onDetachFromGlobalComponent}
+                      onEditGlobalComponent={onEditGlobalComponent}
                       onAlignMenuRightInRow={onAlignMenuRightInRow}
                       onUploadLogoInRow={onUploadLogoInRow}
                       onStretchSectionFullWidth={onStretchSectionFullWidth}

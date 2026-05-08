@@ -12,12 +12,15 @@ import { isValidNodeHierarchy } from '@/lib/builderHierarchy';
 import { normalizeResponsiveStyle } from '@/lib/styleNormalizer';
 import { getDeviceStyle } from '@/lib/styleToCss';
 import { materializeSectionTemplate, SECTION_TEMPLATES } from '@/lib/sectionTemplates';
+import { getFullPageTemplateById } from '@/lib/fullPageTemplates';
+import { flattenTemplateToBulkNodes } from '@/lib/sectionTemplates';
 import { normalizeSiteTheme, themeSpacingPx } from '@/lib/siteDesignTheme';
 import { BuilderThemeProvider } from '@/context/BuilderThemeContext';
 import BuilderTopbar from './BuilderTopbar';
 import BuilderSidebar from './BuilderSidebar';
 import BuilderCanvas from './BuilderCanvas';
 import BuilderInspector from './BuilderInspector';
+import { getGlobalLinkMeta, isLinkedGlobalPlaceholder, treeContainsLinkedGlobals } from '@/lib/globalComponentLinkMeta';
 import '@/styles/builder/builder-shell.css';
 import '@/styles/builder/builder-rail.css';
 import '@/styles/builder/builder-topbar.css';
@@ -36,6 +39,10 @@ function cloneTreeSnapshot(snapshot) {
   } catch {
     return JSON.parse(JSON.stringify(snapshot || []));
   }
+}
+
+function countRootRows(nodes) {
+  return Array.isArray(nodes) ? nodes.filter((n) => n?.nodeType === 'row').length : 0;
 }
 
 function updateNodeInTree(nodes, nodeId, updater) {
@@ -436,11 +443,15 @@ export default function BuilderShell({ pageId }) {
   /** Default Strict so rows (headers) keep flex — Free mode uses absolute coords and breaks space-between. */
   const [isFreeMode, setIsFreeMode] = useState(false);
   const [leftPanelTab, setLeftPanelTab] = useState('elements'); // elements | templates | globals | layers
+  const [sectionsCollapsed, setSectionsCollapsed] = useState(false);
+  const [interiorCollapsed, setInteriorCollapsed] = useState(false);
   const [page, setPage] = useState(null);
   const [draftVersion, setDraftVersion] = useState(null);
   const [tree, setTree] = useState([]);
   const [projectPages, setProjectPages] = useState([]);
   const [reusableBlocks, setReusableBlocks] = useState([]);
+  const [globalComponents, setGlobalComponents] = useState([]);
+  const globalComponentCacheRef = useRef(new Map());
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [previewCssByNodeId, setPreviewCssByNodeId] = useState({});
   const [activeSpacingEdit, setActiveSpacingEdit] = useState(null);
@@ -462,6 +473,62 @@ export default function BuilderShell({ pageId }) {
   const [redoStack, setRedoStack] = useState([]); // { ts:number, tree:any[] }[]
   const [copiedNodeId, setCopiedNodeId] = useState(null);
   const [copyToastMessage, setCopyToastMessage] = useState(null);
+
+  const fetchGlobalComponents = useCallback(async () => {
+    const projectId = Number(page?.projectId);
+    if (!Number.isInteger(projectId) || projectId <= 0) return [];
+    const res = await fetch(`/api/projects/${projectId}/global-components`, { cache: 'no-store' });
+    const data = await readJsonSafe(res);
+    if (!res.ok) throw new Error(data?.error || 'Failed to load global components');
+    const items = Array.isArray(data?.items) ? data.items : [];
+    setGlobalComponents(items);
+    return items;
+  }, [page?.projectId]);
+
+  const ensureGlobalComponentsLoaded = useCallback(async () => {
+    if (globalComponents?.length) return;
+    try {
+      await fetchGlobalComponents();
+    } catch {
+      // ignore — optional library
+    }
+  }, [fetchGlobalComponents, globalComponents?.length]);
+
+  useEffect(() => {
+    if (leftPanelTab !== 'globals') return;
+    ensureGlobalComponentsLoaded();
+  }, [leftPanelTab, ensureGlobalComponentsLoaded]);
+
+  const getGlobalComponentSnapshotCached = useCallback(
+    async (componentId) => {
+      const projectId = Number(page?.projectId);
+      const cid = Number(componentId);
+      if (!Number.isInteger(projectId) || projectId <= 0) return null;
+      if (!Number.isInteger(cid) || cid <= 0) return null;
+      const cache = globalComponentCacheRef.current;
+      if (cache?.has(cid)) return cache.get(cid);
+      const res = await fetch(`/api/projects/${projectId}/global-components/${cid}`, { cache: 'no-store' });
+      const data = await readJsonSafe(res);
+      if (!res.ok) throw new Error(data?.error || 'Failed to load global component');
+      const item = data?.item || null;
+      if (item) cache.set(cid, item);
+      return item;
+    },
+    [page?.projectId]
+  );
+
+  const openGlobalComponentEditor = useCallback(
+    (componentId) => {
+      const projectId = Number(page?.projectId);
+      const cid = Number(componentId);
+      if (!Number.isInteger(projectId) || projectId <= 0) return;
+      if (!Number.isInteger(cid) || cid <= 0) return;
+      const returnTo = `/admin/builder/${pid}`;
+      const url = `/admin/projects/${projectId}/global-components/${cid}?returnTo=${encodeURIComponent(returnTo)}`;
+      if (typeof window !== 'undefined') window.open(url, '_blank', 'noopener,noreferrer');
+    },
+    [page?.projectId, pid]
+  );
 
   const setPreviewCssForNode = useCallback((nodeId, css, opts = {}) => {
     if (opts?.clearAll) {
@@ -1281,6 +1348,49 @@ export default function BuilderShell({ pageId }) {
       setTree(data.tree);
     }
     return data;
+  };
+
+  const deleteRootRowsInOrder = async (treeSnapshot) => {
+    const roots = Array.isArray(treeSnapshot) ? treeSnapshot : [];
+    for (const node of roots) {
+      if (!node?.id) continue;
+      // eslint-disable-next-line no-await-in-loop
+      await deleteNodeRequest(node.id);
+    }
+  };
+
+  const bulkInsertTemplateRootsAtIndex = async ({ roots, insertIndex }) => {
+    const flattened = flattenTemplateToBulkNodes(roots, 0);
+    // Offset ONLY root positionIndex values (rows without parentRef).
+    const offset = Number.isInteger(Number(insertIndex)) ? Number(insertIndex) : 0;
+    const nodes = flattened.map((n) => (n.parentRef ? n : { ...n, positionIndex: Number(n.positionIndex) + offset }));
+    return await bulkCreateNodesRequest(nodes);
+  };
+
+  const handleApplyFullPageTemplate = async ({ templateId, mode }) => {
+    const tpl = getFullPageTemplateById(templateId);
+    if (!tpl?.roots?.length) return;
+    if (isCreatingNode) return;
+    const beforeTree = tree;
+    pushHistorySnapshot(beforeTree);
+    setIsCreatingNode(true);
+    setErrorMessage('');
+    try {
+      if (String(mode) === 'replace') {
+        await deleteRootRowsInOrder(tree);
+        await bulkInsertTemplateRootsAtIndex({ roots: tpl.roots, insertIndex: 0 });
+      } else {
+        const insertIndex = countRootRows(tree || []);
+        await bulkInsertTemplateRootsAtIndex({ roots: tpl.roots, insertIndex });
+      }
+      await reloadBuilder();
+      setHasUnpublishedEdits(true);
+    } catch (error) {
+      setUndoStack((prev) => prev.slice(0, -1));
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsCreatingNode(false);
+    }
   };
 
   const deleteNodeRequest = async (nodeId) => {
@@ -2355,6 +2465,139 @@ export default function BuilderShell({ pageId }) {
     }
   };
 
+  const handleConvertToGlobalComponent = async (rowId) => {
+    const projectId = Number(page?.projectId);
+    if (!Number.isInteger(projectId) || projectId <= 0) return;
+    const rid = Number(rowId);
+    if (!Number.isInteger(rid) || rid <= 0) return;
+    const row = findNodeInTree(tree, rid);
+    if (!row || row.nodeType !== 'row') return;
+    if (isLinkedGlobalPlaceholder(row)) {
+      setErrorMessage('This section is already linked to a global component.');
+      return;
+    }
+    if (treeContainsLinkedGlobals([row])) {
+      setErrorMessage('Cannot convert: this section contains linked global components (nested globals are blocked).');
+      return;
+    }
+
+    const defaultName = row.displayName ? `Global: ${row.displayName}` : 'Global Component';
+    const name = typeof window !== 'undefined' ? window.prompt('Global component name', defaultName) : defaultName;
+    if (!name) return;
+
+    pushHistorySnapshot(cloneTreeSnapshot(tree));
+    setIsSavingNode(true);
+    setErrorMessage('');
+    try {
+      const res = await fetch(`/api/projects/${projectId}/global-components`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'section',
+          name,
+          nodes: [row],
+        }),
+      });
+      const data = await readJsonSafe(res);
+      if (!res.ok) throw new Error(data?.error || 'Failed to create global component');
+      const created = data?.item;
+      if (!created?.id) throw new Error('Global component creation returned no id');
+
+      // Remove existing section subtree to keep pages normalized (no expanded content stored in-page).
+      const rowLatest = findNodeInTree(tree, rid) || row;
+      const children = Array.isArray(rowLatest.children) ? rowLatest.children : [];
+      for (const child of children) {
+        // eslint-disable-next-line no-await-in-loop
+        await deleteNodeRequest(child.id);
+      }
+
+      // Convert the row into a placeholder reference.
+      await handleNodeUpdate({
+        nodeId: rid,
+        payload: {
+          displayName: row.displayName || 'Global Section',
+          props: {
+            ...(row.props || {}),
+            meta: {
+              ...((row.props?.meta && typeof row.props.meta === 'object') ? row.props.meta : {}),
+              globalMode: 'linked',
+              globalComponentId: created.id,
+              globalComponentName: created.name || name,
+            },
+          },
+        },
+      });
+
+      globalComponentCacheRef.current?.set?.(Number(created.id), created);
+      await fetchGlobalComponents().catch(() => {});
+      setSelectedNodeId(rid);
+      setHasUnpublishedEdits(true);
+    } catch (e) {
+      setErrorMessage(e instanceof Error ? e.message : String(e));
+    } finally {
+      setIsSavingNode(false);
+    }
+  };
+
+  const handleDetachFromGlobalComponent = async (rowId) => {
+    const projectId = Number(page?.projectId);
+    if (!Number.isInteger(projectId) || projectId <= 0) return;
+    const rid = Number(rowId);
+    if (!Number.isInteger(rid) || rid <= 0) return;
+    const row = findNodeInTree(tree, rid);
+    if (!row || row.nodeType !== 'row') return;
+    const meta = getGlobalLinkMeta(row);
+    if (!meta?.globalComponentId) return;
+
+    pushHistorySnapshot(cloneTreeSnapshot(tree));
+    setIsSavingNode(true);
+    setErrorMessage('');
+    try {
+      const gc = await getGlobalComponentSnapshotCached(meta.globalComponentId);
+      const snapNodes = Array.isArray(gc?.snapshot?.nodes) ? gc.snapshot.nodes : [];
+      if (!snapNodes.length) throw new Error('Global component snapshot is empty');
+
+      const fixed = reconcileStructuralParents(autoFixTree(snapNodes));
+      validateTree(fixed);
+
+      const ctx = getSiblingContext(tree, rid);
+      if (!ctx) throw new Error('Could not resolve section position for detach');
+      const baseInsertIndex = Number(ctx.index) || 0;
+      const parentNodeId = ctx.parentId ?? null;
+
+      const ordered = [];
+      const walk = (n, parentRef = null, rootOffset = 0) => {
+        const tempId = `gc-detach-${meta.globalComponentId}-${n.id}`;
+        const entry = {
+          tempId,
+          parentRef: parentRef || null,
+          parentNodeId: parentRef == null ? parentNodeId : undefined,
+          nodeType: n.nodeType,
+          displayName: n.displayName || n.nodeType,
+          positionIndex: parentRef == null ? baseInsertIndex + rootOffset : Number(n.positionIndex) || 0,
+          props: n.props || {},
+          style_json: n.style_json || (n.props ? n.props.style_json : undefined),
+          dataJson: n.dataJson ?? null,
+          actionsJson: n.actionsJson ?? null,
+        };
+        ordered.push(entry);
+        for (const child of n.children || []) {
+          walk(child, tempId, 0);
+        }
+      };
+      for (let i = 0; i < fixed.length; i += 1) walk(fixed[i], null, i);
+
+      await bulkCreateNodesRequest(ordered);
+      await deleteNodeRequest(rid);
+      await reloadBuilder();
+      setHasUnpublishedEdits(true);
+    } catch (e) {
+      setErrorMessage(e instanceof Error ? e.message : String(e));
+    } finally {
+      setIsSavingNode(false);
+    }
+  };
+
   const handleRenameReusableBlock = async (blockId) => {
     const projectId = Number(page?.projectId);
     if (!Number.isInteger(projectId) || projectId <= 0) return;
@@ -3325,9 +3568,26 @@ export default function BuilderShell({ pageId }) {
                 </div>
               ) : null}
               {pageSectionRows.length > 0 ? (
-                <div className="bld-left__sections" role="region" aria-label="Sections on this page">
-                  <div className="bld-left__sections-head">Sections</div>
-                  <ul className="bld-left__sections-list">
+                <div
+                  className={`bld-left__sections ${sectionsCollapsed ? 'is-collapsed' : ''}`}
+                  role="region"
+                  aria-label="Sections on this page"
+                >
+                  <div className="bld-left__sections-head">
+                    <span>Sections</span>
+                    <button
+                      type="button"
+                      className="bld-left__collapse"
+                      aria-label={sectionsCollapsed ? 'Expand sections list' : 'Collapse sections list'}
+                      aria-expanded={!sectionsCollapsed}
+                      onClick={() => setSectionsCollapsed((p) => !p)}
+                    >
+                      <span aria-hidden className={`bld-left__chev ${sectionsCollapsed ? 'is-collapsed' : ''}`}>
+                        ▾
+                      </span>
+                    </button>
+                  </div>
+                  <ul className="bld-left__sections-list" hidden={sectionsCollapsed}>
                     {pageSectionRows.map((row, idx) => {
                       const isActive =
                         activeSectionRowId != null && Number(activeSectionRowId) === Number(row.id);
@@ -3383,8 +3643,26 @@ export default function BuilderShell({ pageId }) {
                 </div>
               ) : null}
               {pageSectionRows.length > 0 && interiorScopeRow ? (
-                <div className="bld-left__interior" role="region" aria-label="Inside this section">
-                  <div className="bld-left__interior-head">Inside this section</div>
+                <div
+                  className={`bld-left__interior ${interiorCollapsed ? 'is-collapsed' : ''}`}
+                  role="region"
+                  aria-label="Inside this section"
+                >
+                  <div className="bld-left__interior-head">
+                    <span>Inside this section</span>
+                    <button
+                      type="button"
+                      className="bld-left__collapse"
+                      aria-label={interiorCollapsed ? 'Expand inside this section' : 'Collapse inside this section'}
+                      aria-expanded={!interiorCollapsed}
+                      onClick={() => setInteriorCollapsed((p) => !p)}
+                    >
+                      <span aria-hidden className={`bld-left__chev ${interiorCollapsed ? 'is-collapsed' : ''}`}>
+                        ▾
+                      </span>
+                    </button>
+                  </div>
+                  <div hidden={interiorCollapsed}>
                   {isRowMarkedHeader(interiorScopeRow) ? (
                     <div className="bld-left__interior-field">
                       <label className="bld-left__interior-label" htmlFor={`bld-header-layout-${interiorScopeRow.id}`}>
@@ -3494,6 +3772,7 @@ export default function BuilderShell({ pageId }) {
                     onSelectNode={handleNodeSelect}
                     overflowByNodeId={overflowByNodeId}
                   />
+                  </div>
                 </div>
               ) : pageSectionRows.length > 0 ? (
                 <div className="bld-left__interior-hint">
@@ -3595,6 +3874,7 @@ export default function BuilderShell({ pageId }) {
                       await handleInsertFooterSectionTemplate();
                     }
                   }}
+                  onApplyFullPageTemplate={handleApplyFullPageTemplate}
                   onUpdateNode={handleNodeUpdate}
                   onDeleteNode={handleDeleteNode}
                   onReorderNode={handleReorderNode}
@@ -3616,6 +3896,15 @@ export default function BuilderShell({ pageId }) {
                   onInsertGlobalSection={handleInsertGlobalSection}
                   onExportPage={handleExportPage}
                   globalSections={page?.projectConfig?.globalSections}
+                  globalComponents={globalComponents}
+                  onRefreshGlobalComponents={async () => {
+                    try {
+                      await fetchGlobalComponents();
+                    } catch (e) {
+                      setErrorMessage(e instanceof Error ? e.message : String(e));
+                    }
+                  }}
+                  onOpenGlobalComponentEditor={openGlobalComponentEditor}
                 />
               </div>
             </div>
@@ -3693,6 +3982,9 @@ export default function BuilderShell({ pageId }) {
               onAlignMenuRightFromSelection={handleAlignMenuRightFromSelection}
               onUpdateNode={handleNodeUpdate}
               onDuplicateNode={handleDuplicateNode}
+              onConvertToGlobalComponent={handleConvertToGlobalComponent}
+              onDetachFromGlobalComponent={handleDetachFromGlobalComponent}
+              onEditGlobalComponent={openGlobalComponentEditor}
               flashPasteNodeId={flashPasteNodeId}
               onCopyNodeId={(nodeId) => {
                 setCopiedNodeId(Number(nodeId));
@@ -3722,11 +4014,14 @@ export default function BuilderShell({ pageId }) {
               selectedNode={selectedNode}
               onUpdateNode={handleNodeUpdate}
               projectPages={projectPages}
+              projectId={page?.projectId}
               activeTab={inspectorTab}
               onActiveTabChange={setInspectorTab}
               onSetPreviewCssForNode={setPreviewCssForNode}
               onSetActiveSpacingEdit={setActiveSpacingEdit}
               overflowDiagnostics={overflowByNodeId?.[selectedNodeId] || null}
+              onEditGlobalComponent={openGlobalComponentEditor}
+              onDetachFromGlobalComponent={handleDetachFromGlobalComponent}
             />
           </aside>
         </div>

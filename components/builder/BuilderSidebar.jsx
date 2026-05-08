@@ -4,6 +4,9 @@ import { useMemo, useState } from 'react';
 import { isValidNodeHierarchy } from '@/lib/builderHierarchy';
 import { getWidgetsForProjectType } from '@/lib/builder/widgetRegistry';
 import { useBuilderTheme } from '@/context/BuilderThemeContext';
+import TemplateMarketplace from './templates/TemplateMarketplace';
+import FullPageTemplateMarketplace from './templates/FullPageTemplateMarketplace';
+import { getGlobalLinkMeta, isLinkedGlobalPlaceholder } from '@/lib/globalComponentLinkMeta';
 
 const ELEMENT_CARDS = [
   { id: 'heading', label: 'Heading', icon: 'H', supported: true },
@@ -73,6 +76,23 @@ function LayerTree({
             <button type="button" className="bld-layer-tree__pick" onClick={() => onSelectNode?.(node.id)}>
               <span className="bld-layer-tree__name">{node.displayName}</span>
               <span className="bld-layer-tree__type">{nodeTypeLabel(node.nodeType)}</span>
+              {isLinkedGlobalPlaceholder(node) ? (
+                <span
+                  className="bld-chip"
+                  style={{ marginLeft: 8, padding: '2px 8px', cursor: 'default' }}
+                  title={
+                    getGlobalLinkMeta(node)?.globalComponentName
+                      ? `Linked: ${getGlobalLinkMeta(node).globalComponentName}`
+                      : 'Linked global component'
+                  }
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                >
+                  Linked
+                </span>
+              ) : null}
             </button>
             <div className="bld-layer-tree__actions">
               <button
@@ -176,6 +196,7 @@ export default function BuilderSidebar({
   onInsertHeaderTemplate,
   onCreateComponentPreset,
   onInsertSectionTemplate,
+  onApplyFullPageTemplate,
   onUpdateNode,
   onDeleteNode,
   onReorderNode,
@@ -194,6 +215,9 @@ export default function BuilderSidebar({
   onInsertGlobalSection,
   onExportPage,
   globalSections,
+  globalComponents = [],
+  onRefreshGlobalComponents,
+  onOpenGlobalComponentEditor,
 }) {
   const { tokens, setTokens } = useBuilderTheme();
   const hasGlobalHeader = Boolean(globalSections?.header);
@@ -449,6 +473,32 @@ export default function BuilderSidebar({
               Templates: insert starter sections and page templates.
             </div>
             <details className="bld-acc" open>
+              <summary>
+                Marketplace (beta)
+                <span className="bld-acc__meta">Cards • search • favorites</span>
+              </summary>
+              <div className="bld-acc__body">
+                <TemplateMarketplace
+                  disabled={isCreatingNode}
+                  onInsertStarterTemplate={onInsertStarterTemplate}
+                  onInsertHeaderTemplate={onInsertHeaderTemplate}
+                  onInsertSectionTemplate={onInsertSectionTemplate}
+                />
+              </div>
+            </details>
+            <details className="bld-acc" open>
+              <summary>
+                Full Page Templates
+                <span className="bld-acc__meta">Insert / replace • responsive preview</span>
+              </summary>
+              <div className="bld-acc__body">
+                <FullPageTemplateMarketplace
+                  disabled={isCreatingNode}
+                  onApplyFullPageTemplate={onApplyFullPageTemplate}
+                />
+              </div>
+            </details>
+            <details className="bld-acc" open>
               <summary>Starters</summary>
               <div className="bld-acc__body bld-acc__body--grid">
                 <button
@@ -672,6 +722,47 @@ export default function BuilderSidebar({
                   Nothing saved yet. Use a section row’s ⋯ menu on the canvas → Save as global header/footer.
                 </div>
               ) : null}
+            </details>
+            <details className="bld-acc" open>
+              <summary>
+                Linked Components Library
+                <span className="bld-acc__meta">{Array.isArray(globalComponents) ? globalComponents.length : 0} items</span>
+              </summary>
+              <div className="bld-acc__body">
+                <div className="bld-sidebar__hint">
+                  Convert any section into a linked global component. Linked sections must be edited in the global editor.
+                </div>
+                <div className="bld-acc__body bld-acc__body--grid">
+                  <button type="button" className="bld-block-card" onClick={() => onRefreshGlobalComponents?.()} disabled={isCreatingNode}>
+                    <span className="bld-block-card__icon">↻</span>
+                    <span className="bld-block-card__label">Refresh</span>
+                  </button>
+                </div>
+                {Array.isArray(globalComponents) && globalComponents.length ? (
+                  <div className="bld-acc__body">
+                    {globalComponents.map((c) => (
+                      <div key={c.id} className="bld-reusable-card">
+                        <div className="bld-reusable-card__title" title={c.name}>
+                          {c.name}
+                        </div>
+                        <div className="bld-reusable-card__meta">
+                          {c.type || 'generic'} • links: {Number(c.linkedPagesCount || 0)}
+                        </div>
+                        <div className="bld-reusable-card__meta">
+                          Updated: {c.updatedAt ? new Date(c.updatedAt).toLocaleString() : '—'}
+                        </div>
+                        <div className="bld-reusable-card__actions">
+                          <button type="button" className="bld-chip" onClick={() => onOpenGlobalComponentEditor?.(c.id)}>
+                            Edit
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bld-sidebar__hint">No global components yet. Convert a section to create one.</div>
+                )}
+              </div>
             </details>
             <details className="bld-acc" open>
               <summary>Export</summary>

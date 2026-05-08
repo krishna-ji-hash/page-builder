@@ -1,8 +1,50 @@
 'use client';
 
 import { MENU_ALIGNS, MENU_VARIANTS } from '@/lib/menuNav';
+import { useMemo, useState } from 'react';
+import MediaLibraryModal from '@/components/builder/media/MediaLibraryModal';
+import MenuTreeEditor from '@/components/builder/inspector/MenuTreeEditor';
+import CmsBindingsPanel from '@/components/builder/inspector/CmsBindingsPanel';
 
-export default function ContentPanel({ selectedNode, form, onChange, jsonErrors = {}, projectPages = [] }) {
+export default function ContentPanel({ selectedNode, form, onChange, jsonErrors = {}, projectPages = [], projectId }) {
+  const [mediaOpen, setMediaOpen] = useState(false);
+  const [mediaAllowedKinds, setMediaAllowedKinds] = useState(null);
+  const [mediaPickTarget, setMediaPickTarget] = useState(null);
+
+  const canUseMedia = useMemo(() => Number.isInteger(Number(projectId)) && Number(projectId) > 0, [projectId]);
+
+  const openMedia = ({ target, allowedKinds }) => {
+    if (!canUseMedia) return;
+    setMediaPickTarget(target);
+    setMediaAllowedKinds(Array.isArray(allowedKinds) ? allowedKinds : null);
+    setMediaOpen(true);
+  };
+
+  const handlePicked = (item) => {
+    if (!item?.publicUrl) return;
+    const kind = String(item?.kind || '');
+    // Safety: only image/svg allowed for these fields.
+    if (kind !== 'image' && kind !== 'svg') return;
+    if (mediaPickTarget === 'image') {
+      onChange('src', item.publicUrl);
+      if (!form.alt?.trim() && item.altText) onChange('alt', item.altText);
+      if (item.title) onChange('imageTitle', item.title);
+    } else if (typeof mediaPickTarget === 'object' && mediaPickTarget?.type === 'carouselSlide') {
+      const idx = Number(mediaPickTarget.index);
+      if (!Number.isInteger(idx) || idx < 0) return;
+      onChange('carouselSlidePatch', {
+        index: idx,
+        patch: {
+          imageSrc: item.publicUrl,
+          image: item.publicUrl,
+          imageAlt: item.altText || '',
+          imageTitle: item.title || '',
+        },
+      });
+    }
+    setMediaOpen(false);
+  };
+
   const handleImageUpload = (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -77,6 +119,7 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
   return (
     <div className="bld-panel">
       <div className="bld-panel__head">Content</div>
+      <CmsBindingsPanel selectedNode={selectedNode} projectId={projectId} onChange={onChange} />
       {isTextLike ? (
         <div className="bld-field">
           <label className="bld-label">{isButton ? 'Label' : 'Text'}</label>
@@ -193,9 +236,34 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
             <input type="file" accept="image/*" className="bld-input" onChange={handleImageUpload} />
           </div>
           <div className="bld-field">
+            <label className="bld-label">Media Library</label>
+            <button
+              type="button"
+              className="bld-chip"
+              disabled={!canUseMedia}
+              title={!canUseMedia ? 'Media library needs a project context' : 'Choose from Media Library'}
+              onClick={() => openMedia({ target: 'image', allowedKinds: ['image', 'svg'] })}
+            >
+              Choose from Media Library
+            </button>
+            <p className="bld-field-note">Keeps URL input for compatibility; Media Library stores uploads with metadata.</p>
+          </div>
+          <div className="bld-field">
             <label className="bld-label">Image URL</label>
             <input className="bld-input" value={form.src || ''} onChange={(e) => onChange('src', e.target.value)} />
           </div>
+          {form.src ? (
+            <div className="bld-field">
+              <label className="bld-label">Preview</label>
+              <div className="bld-media-inlinePreview" style={{ backgroundImage: `url(\"${form.src}\")`, backgroundSize: 'cover', backgroundPosition: 'center' }} />
+              <div className="bld-field-grid" style={{ gridTemplateColumns: '1fr auto', marginTop: 8 }}>
+                <div />
+                <button type="button" className="bld-chip bld-chip--danger" onClick={() => { onChange('src', ''); onChange('alt', ''); }}>
+                  Clear image
+                </button>
+              </div>
+            </div>
+          ) : null}
           <div className="bld-field">
             <label className="bld-label">Alt</label>
             <input className="bld-input" value={form.alt || ''} onChange={(e) => onChange('alt', e.target.value)} />
@@ -271,25 +339,11 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
               placeholder="Main navigation"
             />
           </div>
-          <div className="bld-field">
-            <label className="bld-label">Menu Items JSON (supports nested children)</label>
-            <textarea
-              className="bld-input"
-              rows={7}
-              value={form.menuItemsJson || '[]'}
-              onChange={(e) => onChange('menuItemsJson', e.target.value)}
-              placeholder={
-                '[\n' +
-                '  { "id": "home", "label": "Home", "to": "/" },\n' +
-                '  { "id": "services", "label": "Services", "to": "/services", "children": [\n' +
-                '    { "id": "web", "label": "Web Design", "to": "/services/web" },\n' +
-                '    { "id": "seo", "label": "SEO", "to": "/services/seo" }\n' +
-                '  ]}\n' +
-                ']'
-              }
-            />
-            {jsonErrors.menuItemsJson ? <p className="bld-field-error">{jsonErrors.menuItemsJson}</p> : null}
-          </div>
+          <MenuTreeEditor
+            value={Array.isArray(selectedNode.props?.items) ? selectedNode.props.items : []}
+            onChange={(nextItems) => onChange('menuItemsJson', JSON.stringify(nextItems || [], null, 2))}
+          />
+          {jsonErrors.menuItemsJson ? <p className="bld-field-error">{jsonErrors.menuItemsJson}</p> : null}
           <details className="bld-acc" style={{ marginTop: 10 }}>
             <summary>Advanced: Mega + Mobile</summary>
             <div className="bld-field" style={{ marginTop: 10 }}>
@@ -332,6 +386,15 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
                 value={form.menuMobileTitle || ''}
                 onChange={(e) => onChange('menuMobileTitle', e.target.value)}
                 placeholder="Menu"
+              />
+            </div>
+            <div className="bld-field">
+              <label className="bld-label">Hamburger label</label>
+              <input
+                className="bld-input"
+                value={form.menuMobileHamburgerLabel || ''}
+                onChange={(e) => onChange('menuMobileHamburgerLabel', e.target.value)}
+                placeholder="Open menu"
               />
             </div>
           </details>
@@ -591,6 +654,33 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
                           }
                         />
                       </div>
+                    </div>
+                    {slide?.imageSrc ? (
+                      <div className="bld-field">
+                        <label className="bld-label">Preview</label>
+                        <div className="bld-media-inlinePreview" style={{ backgroundImage: `url(\"${slide.imageSrc}\")`, backgroundSize: 'cover', backgroundPosition: 'center' }} />
+                        <div className="bld-field-grid" style={{ gridTemplateColumns: '1fr auto', marginTop: 8 }}>
+                          <div />
+                          <button
+                            type="button"
+                            className="bld-chip bld-chip--danger"
+                            onClick={() => onChange('carouselSlidePatch', { index: idx, patch: { imageSrc: '', image: '', imageAlt: '' } })}
+                          >
+                            Clear image
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                    <div className="bld-field">
+                      <label className="bld-label">Media Library</label>
+                      <button
+                        type="button"
+                        className="bld-chip"
+                        disabled={!canUseMedia}
+                        onClick={() => openMedia({ target: { type: 'carouselSlide', index: idx }, allowedKinds: ['image', 'svg'] })}
+                      >
+                        Choose from Media Library
+                      </button>
                     </div>
 
                     <div className="bld-field-grid">
@@ -1029,6 +1119,13 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
           </div>
         </>
       ) : null}
+      <MediaLibraryModal
+        open={mediaOpen}
+        projectId={Number(projectId) || 0}
+        allowedKinds={mediaAllowedKinds}
+        onClose={() => setMediaOpen(false)}
+        onPick={handlePicked}
+      />
     </div>
   );
 }

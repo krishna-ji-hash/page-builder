@@ -83,6 +83,7 @@
 .bld-builder-root input,
 .bld-builder-root textarea {
   font: inherit;
+  font-size: smaller;
 }
 
 .bld-shell {
@@ -158,7 +159,8 @@
 
 .bld-left__tabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* 5 tabs: Elements, Templates, Reusable, Globals, Layers */
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
   padding: 8px 10px;
   border-bottom: 1px solid var(--bld-border);
@@ -221,6 +223,10 @@
 }
 
 .bld-left__sections-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -229,6 +235,51 @@
   margin: 0 2px 6px;
 }
 
+.bld-left__interior-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.bld-left__collapse {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--bld-border) 80%, transparent);
+  background: color-mix(in srgb, var(--bld-surface) 88%, var(--bld-canvas-chrome));
+  color: var(--bld-text-soft);
+  border-radius: 8px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.bld-left__collapse:hover {
+  border-color: var(--bld-primary);
+  color: var(--bld-text);
+}
+
+.bld-left__chev {
+  display: inline-block;
+  transition: transform 140ms ease;
+  transform-origin: 50% 50%;
+  line-height: 1;
+  font-size: 12px;
+}
+
+.bld-left__chev.is-collapsed {
+  transform: rotate(-90deg);
+}
+
+.bld-left__sections.is-collapsed .bld-left__sections-list {
+  display: none;
+}
+
+.bld-left__interior.is-collapsed > :not(.bld-left__interior-head) {
+  display: none;
+}
 .bld-left__sections-list {
   list-style: none;
   margin: 0;
@@ -518,6 +569,8 @@
   min-width: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  /* Avoid bottom content feeling “cut off” on shorter viewports. */
+  padding-bottom: 10px;
 }
 
 .bld-left__library-scroll .bld-sidebar {

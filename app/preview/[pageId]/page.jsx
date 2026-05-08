@@ -2,6 +2,10 @@ import { RuntimeProvider } from '@/components/runtime/RuntimeProvider';
 import { renderTree } from '@/lib/liveRenderer';
 import { normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesignTheme';
 import { buildRenderNodesWithGlobals } from '@/lib/globalSectionMerge';
+import { expandLinkedGlobalComponents } from '@/lib/globalComponentExpand';
+import { expandCms } from '@/lib/cms/cmsExpand';
+import { getGlobalComponentsByIds } from '@/services/builder/globalComponentsService';
+import * as cmsService from '@/services/builder/cmsService';
 import { resolveMaybeAsyncParams } from '@/lib/routeParams';
 import { getBuilderState } from '@/services/builder/builderService';
 import '@/styles/live/live-site.css';
@@ -46,7 +50,28 @@ export default async function DraftPreviewPage({ params }) {
   const globalFooter = state.page.projectConfig?.globalSections?.footer
     ? cloneGlobalNode(state.page.projectConfig.globalSections.footer, 'global-footer')
     : null;
-  const renderNodes = buildRenderNodesWithGlobals(state.tree, globalHeader, globalFooter, cloneGlobalNode);
+  let renderBase = state.tree;
+  // Expand linked global components before renderTree (render pipeline unchanged).
+  const ids = [];
+  const walk = (nodes) => {
+    for (const n of nodes || []) {
+      const meta = n?.props?.meta || n?.meta || null;
+      if (meta?.globalMode === 'linked' && meta?.globalComponentId) ids.push(Number(meta.globalComponentId));
+      if (Array.isArray(n?.children) && n.children.length) walk(n.children);
+    }
+  };
+  walk(renderBase);
+  const uniq = Array.from(new Set(ids.filter((n) => Number.isInteger(n) && n > 0)));
+  if (uniq.length) {
+    const comps = await getGlobalComponentsByIds(state.page.projectId, uniq);
+    const map = new Map(comps.map((c) => [c.id, c.snapshot]));
+    renderBase = expandLinkedGlobalComponents(renderBase, (id) => map.get(id) || null);
+  }
+
+  // Expand CMS repeaters/bindings before renderTree (render pipeline unchanged).
+  renderBase = await expandCms(renderBase, { projectId: state.page.projectId, cmsService });
+
+  const renderNodes = buildRenderNodesWithGlobals(renderBase, globalHeader, globalFooter, cloneGlobalNode);
   const currentPath = `/${state.page.projectSlug}/${state.page.slug}`;
   const projectPages = (state.projectPages || []).map((page) => ({
     slug: page.slug,

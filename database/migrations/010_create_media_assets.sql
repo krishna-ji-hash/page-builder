@@ -1,0 +1,25 @@
+CREATE TABLE IF NOT EXISTS media_assets (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  project_id BIGINT UNSIGNED NOT NULL,
+  folder VARCHAR(255) NULL,
+  kind VARCHAR(32) NOT NULL,
+  mime_type VARCHAR(191) NOT NULL,
+  original_name VARCHAR(255) NOT NULL,
+  storage_name VARCHAR(255) NOT NULL,
+  storage_path VARCHAR(1024) NOT NULL,
+  public_url VARCHAR(1024) NOT NULL,
+  thumb_url VARCHAR(1024) NULL,
+  width INT NULL,
+  height INT NULL,
+  bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  title VARCHAR(255) NULL,
+  alt_text VARCHAR(255) NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  INDEX idx_media_assets_project (project_id, id),
+  INDEX idx_media_assets_project_created (project_id, created_at),
+  INDEX idx_media_assets_project_folder (project_id, folder),
+  CONSTRAINT fk_media_assets_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+

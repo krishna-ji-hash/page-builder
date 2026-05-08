@@ -1,6 +1,10 @@
 import { unstable_noStore as noStore } from 'next/cache';
 import { getDbPool } from '@/lib/db';
 import { parsePublishedSnapshot } from '@/lib/publishedSnapshot';
+import { getGlobalComponentsByIds } from '@/services/builder/globalComponentsService';
+import { expandLinkedGlobalComponents } from '@/lib/globalComponentExpand';
+import { expandCms } from '@/lib/cms/cmsExpand';
+import * as cmsService from '@/services/builder/cmsService';
 
 function parseJsonValue(value, fallback = null) {
   if (value == null) return fallback;
@@ -12,7 +16,7 @@ function parseJsonValue(value, fallback = null) {
   }
 }
 
-async function getPublishedPageRaw(projectSlug, pageSlug) {
+async function getPublishedPageRaw(projectSlug, pageSlug, pageContext = null) {
   const pool = getDbPool();
   const [rows] = await pool.query(
     `
@@ -56,6 +60,30 @@ async function getPublishedPageRaw(projectSlug, pageSlug) {
     [row.project_id]
   );
 
+  // Expand linked global components before rendering (renderTree unchanged).
+  if (Array.isArray(snapshotJson) && snapshotJson.length) {
+    const ids = [];
+    const walk = (nodes) => {
+      for (const n of nodes || []) {
+        const meta = n?.props?.meta || n?.meta || null;
+        if (meta?.globalMode === 'linked' && meta?.globalComponentId) ids.push(Number(meta.globalComponentId));
+        if (Array.isArray(n?.children) && n.children.length) walk(n.children);
+      }
+    };
+    walk(snapshotJson);
+    const uniq = Array.from(new Set(ids.filter((n) => Number.isInteger(n) && n > 0)));
+    if (uniq.length) {
+      const comps = await getGlobalComponentsByIds(row.project_id, uniq);
+      const map = new Map(comps.map((c) => [c.id, c.snapshot]));
+      snapshotJson = expandLinkedGlobalComponents(snapshotJson, (id) => map.get(id) || null);
+    }
+  }
+
+  // Expand CMS repeaters/bindings before rendering (renderTree unchanged).
+  if (Array.isArray(snapshotJson) && snapshotJson.length) {
+    snapshotJson = await expandCms(snapshotJson, { projectId: row.project_id, cmsService, pageContext });
+  }
+
   return {
     id: row.id,
     name: row.title,
@@ -77,7 +105,7 @@ async function getPublishedPageRaw(projectSlug, pageSlug) {
   };
 }
 
-export async function getPublishedPage(projectSlug, pageSlug) {
+export async function getPublishedPage(projectSlug, pageSlug, pageContext = null) {
   noStore();
-  return getPublishedPageRaw(projectSlug, pageSlug);
+  return getPublishedPageRaw(projectSlug, pageSlug, pageContext);
 }

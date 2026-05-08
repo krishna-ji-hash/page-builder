@@ -71,6 +71,11 @@
     max-height: min(48vh, 520px);
     order: 2;
   }
+
+  /* 5 library tabs need breathing room on narrow screens. */
+  .bld-left__tabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 767px) {

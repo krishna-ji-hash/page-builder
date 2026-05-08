@@ -29,6 +29,7 @@ export default function StylePanel({
   selectedNode,
   form,
   onChange,
+  projectId,
   onPreviewStylePatch,
   onCommitStylePatch,
   onClearPreviewStyle,
@@ -71,7 +72,7 @@ export default function StylePanel({
         <ColorControls form={form} onUpdate={onChange} showBackground={false} />
       </Section>
       <Section title="Background">
-        <BackgroundControls form={form} onUpdate={onChange} />
+        <BackgroundControls form={form} onUpdate={onChange} projectId={projectId} />
       </Section>
       <Section title="Spacing">
         <SpacingControls

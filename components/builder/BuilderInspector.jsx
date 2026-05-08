@@ -20,6 +20,7 @@ import StylePanel from './inspector/StylePanel';
 import AdvancedPanel from './inspector/AdvancedPanel';
 import ThemePanel from './inspector/ThemePanel';
 import OverflowSuggestions from './inspector/OverflowSuggestions';
+import { getGlobalLinkMeta, isLinkedGlobalPlaceholder } from '@/lib/globalComponentLinkMeta';
 
 function inspectorRoleLabel(node) {
   if (!node?.nodeType) return '';
@@ -169,6 +170,7 @@ export default function BuilderInspector({
   selectedNode,
   onUpdateNode,
   projectPages = [],
+  projectId,
   activeTab: activeTabProp,
   onActiveTabChange,
   /** `rail` = embedded under library; `panel` / `default` = dedicated right column. */
@@ -176,6 +178,8 @@ export default function BuilderInspector({
   onSetPreviewCssForNode,
   onSetActiveSpacingEdit,
   overflowDiagnostics,
+  onEditGlobalComponent,
+  onDetachFromGlobalComponent,
 }) {
   const [internalTab, setInternalTab] = useState('content');
   const activeTab = activeTabProp || internalTab;
@@ -271,6 +275,7 @@ export default function BuilderInspector({
     menuMegaColumns: 2,
     menuMobileEnabled: true,
     menuMobileTitle: '',
+    menuMobileHamburgerLabel: '',
     richTextHtml: '',
     animationPreset: 'none',
     animationDuration: 0.6,
@@ -365,6 +370,9 @@ export default function BuilderInspector({
       textDecoration: style?.typography?.textDecoration || 'none',
       textColor: style?.colors?.textColor || style?.typography?.color || '#0f172a',
       bgColor: style?.colors?.backgroundColor || style?.background?.backgroundColor || '#ffffff',
+      bgImageUrl: style?.background?.backgroundImage || '',
+      bgImageAlt: style?.background?.meta?.altText || '',
+      bgImageTitle: style?.background?.meta?.title || '',
       marginTop: marginObj.top,
       marginRight: marginObj.right,
       marginBottom: marginObj.bottom,
@@ -436,6 +444,8 @@ export default function BuilderInspector({
       menuMegaColumns: Number(selectedNode.props?.mega?.columns ?? 2),
       menuMobileEnabled: selectedNode.props?.mobile?.enabled !== false,
       menuMobileTitle: typeof selectedNode.props?.mobile?.title === 'string' ? selectedNode.props.mobile.title : '',
+      menuMobileHamburgerLabel:
+        typeof selectedNode.props?.mobile?.hamburgerLabel === 'string' ? selectedNode.props.mobile.hamburgerLabel : '',
       richTextHtml: selectedNode.props?.content || '',
       animationPreset: selectedNode.props?.animation?.preset || 'none',
       animationDuration: Number(selectedNode.props?.animation?.duration ?? 0.6),
@@ -509,6 +519,7 @@ export default function BuilderInspector({
 
   const updateNode = async (id, changes) => {
     if (!onUpdateNode) return;
+    if (isLinkedGlobalPlaceholder(selectedNode)) return;
     await onUpdateNode({ nodeId: id, payload: changes });
   };
 
@@ -520,6 +531,67 @@ export default function BuilderInspector({
         ...changes,
       },
     });
+  };
+
+  const updateCmsMeta = async (patch) => {
+    if (!selectedNode) return;
+    const prevMeta =
+      selectedNode.props?.meta && typeof selectedNode.props.meta === 'object' && !Array.isArray(selectedNode.props.meta)
+        ? selectedNode.props.meta
+        : {};
+    const prevCms =
+      prevMeta.cms && typeof prevMeta.cms === 'object' && !Array.isArray(prevMeta.cms) ? prevMeta.cms : {};
+    const nextMeta = {
+      ...prevMeta,
+      cms: { ...prevCms, ...(patch || {}) },
+    };
+    await updateProps({ meta: nextMeta });
+  };
+
+  const updateCmsRepeat = async (patch) => {
+    if (!selectedNode) return;
+    const prevMeta =
+      selectedNode.props?.meta && typeof selectedNode.props.meta === 'object' && !Array.isArray(selectedNode.props.meta)
+        ? selectedNode.props.meta
+        : {};
+    const prevCms =
+      prevMeta.cms && typeof prevMeta.cms === 'object' && !Array.isArray(prevMeta.cms) ? prevMeta.cms : {};
+    const prevRepeat =
+      prevCms.repeat && typeof prevCms.repeat === 'object' && !Array.isArray(prevCms.repeat) ? prevCms.repeat : {};
+    await updateCmsMeta({ repeat: { ...prevRepeat, ...(patch || {}) } });
+  };
+
+  const setCmsBinding = async ({ propKey, path }) => {
+    if (!selectedNode) return;
+    const key = String(propKey || '').trim();
+    if (!key) return;
+    const p = String(path || '').trim();
+    const prevMeta =
+      selectedNode.props?.meta && typeof selectedNode.props.meta === 'object' && !Array.isArray(selectedNode.props.meta)
+        ? selectedNode.props.meta
+        : {};
+    const prevCms =
+      prevMeta.cms && typeof prevMeta.cms === 'object' && !Array.isArray(prevMeta.cms) ? prevMeta.cms : {};
+    const prevBindings =
+      prevCms.bindings && typeof prevCms.bindings === 'object' && !Array.isArray(prevCms.bindings) ? prevCms.bindings : {};
+    const nextBindings = { ...(prevBindings || {}) };
+    if (!p) delete nextBindings[key];
+    else nextBindings[key] = p;
+    await updateCmsMeta({ bindings: nextBindings });
+    // Write placeholder into prop for parity with runtime binding.
+    if (p) {
+      await updateProps({ [key]: `{{${p}}}` });
+      if (key === 'text') setForm((prev) => ({ ...prev, text: `{{${p}}}` }));
+      if (key === 'href') setForm((prev) => ({ ...prev, href: `{{${p}}}` }));
+      if (key === 'src') setForm((prev) => ({ ...prev, src: `{{${p}}}` }));
+      if (key === 'alt') setForm((prev) => ({ ...prev, alt: `{{${p}}}` }));
+    }
+  };
+
+  const clearCmsBinding = async ({ propKey }) => {
+    const key = String(propKey || '').trim();
+    if (!key) return;
+    await setCmsBinding({ propKey: key, path: '' });
   };
 
   const updateCarouselSettings = async (patch) => {
@@ -652,6 +724,42 @@ export default function BuilderInspector({
     if (key === 'size') await updateProps({ size: value });
     if (key === 'src') await updateProps({ src: value });
     if (key === 'alt') await updateProps({ alt: value });
+
+    // CMS bindings + repeater controls (additive; stored in props.meta.cms).
+    if (key === 'cmsContextCollectionSlug') {
+      await updateCmsMeta({ contextCollectionSlug: String(value || '') });
+      return;
+    }
+    if (key === 'cmsRepeatEnabled') {
+      const enabled = Boolean(value);
+      if (!enabled) {
+        await updateCmsMeta({ repeat: null });
+      } else {
+        await updateCmsRepeat({ collectionSlug: '', limit: 0, sortBy: 'published_at', sortDir: 'desc', status: 'published', emptyMessage: '' });
+      }
+      return;
+    }
+    if (key === 'cmsRepeatPatch') {
+      const patch = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+      await updateCmsRepeat(patch);
+      return;
+    }
+    if (key === 'cmsSetBinding') {
+      const payload = value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+      if (!payload) return;
+      await setCmsBinding(payload);
+      return;
+    }
+    if (key === 'cmsClearBinding') {
+      const payload = value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+      if (!payload) return;
+      await clearCmsBinding(payload);
+      return;
+    }
+    if (key === 'cmsClearAllBindings') {
+      await updateCmsMeta({ bindings: {} });
+      return;
+    }
     if (key === 'menuDirection' && selectedNode.nodeType === 'menu') await updateProps({ orientation: value });
     if (key === 'menuAriaLabel' && selectedNode.nodeType === 'menu') await updateProps({ ariaLabel: value });
     if (key === 'menuUseProjectPages' && selectedNode.nodeType === 'menu') {
@@ -675,6 +783,9 @@ export default function BuilderInspector({
     }
     if (key === 'menuMobileTitle' && selectedNode.nodeType === 'menu') {
       await updateProps({ mobile: { ...(selectedNode.props?.mobile || {}), title: String(value || '') } });
+    }
+    if (key === 'menuMobileHamburgerLabel' && selectedNode.nodeType === 'menu') {
+      await updateProps({ mobile: { ...(selectedNode.props?.mobile || {}), hamburgerLabel: String(value || '') } });
     }
     if (key === 'menuTextColor' && selectedNode.nodeType === 'menu') {
       await updateStyle({
@@ -1178,6 +1289,17 @@ export default function BuilderInspector({
       },
       background: {
         backgroundColor: nextForm.bgColor,
+        backgroundImage: nextForm.bgImageUrl ? String(nextForm.bgImageUrl) : undefined,
+        backgroundSize: nextForm.bgImageUrl ? 'cover' : undefined,
+        backgroundPosition: nextForm.bgImageUrl ? 'center' : undefined,
+        backgroundRepeat: nextForm.bgImageUrl ? 'no-repeat' : undefined,
+        meta:
+          nextForm.bgImageUrl
+            ? {
+                altText: String(nextForm.bgImageAlt || ''),
+                title: String(nextForm.bgImageTitle || ''),
+              }
+            : undefined,
       },
       spacing: {
         margin: nextMargin,
@@ -1328,6 +1450,37 @@ export default function BuilderInspector({
               <span className="bld-inspector__chrome-name" title={selectedNode.displayName || selectedNode.nodeType}>
                 {selectedNode.displayName || selectedNode.nodeType}
               </span>
+              {isLinkedGlobalPlaceholder(selectedNode) ? (
+                <span
+                  className="bld-chip"
+                  style={{ marginLeft: 10, padding: '2px 8px', cursor: 'default' }}
+                  title={
+                    getGlobalLinkMeta(selectedNode)?.globalComponentName
+                      ? `Linked: ${getGlobalLinkMeta(selectedNode).globalComponentName}`
+                      : 'Linked global component'
+                  }
+                >
+                  Linked
+                </span>
+              ) : null}
+              {isLinkedGlobalPlaceholder(selectedNode) ? (
+                <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                  <button
+                    type="button"
+                    className="bld-chip"
+                    onClick={() => onEditGlobalComponent?.(getGlobalLinkMeta(selectedNode)?.globalComponentId)}
+                  >
+                    Edit Global
+                  </button>
+                  <button
+                    type="button"
+                    className="bld-chip bld-chip--danger"
+                    onClick={() => onDetachFromGlobalComponent?.(selectedNode.id)}
+                  >
+                    Detach
+                  </button>
+                </span>
+              ) : null}
             </div>
           ) : (
             <div className="bld-inspector__chrome-placeholder">
@@ -1335,6 +1488,14 @@ export default function BuilderInspector({
             </div>
           )}
         </div>
+        {isLinkedGlobalPlaceholder(selectedNode) ? (
+          <div className="bld-panel" style={{ paddingTop: 10, paddingBottom: 10 }}>
+            <div className="bld-field-note" style={{ margin: 0 }}>
+              This section is <strong>linked</strong> to a global component. To prevent accidental desync, editing is
+              disabled here—use <strong>Edit Global</strong> or <strong>Detach</strong>.
+            </div>
+          </div>
+        ) : null}
         {showDeviceBar ? (
           <InspectorResponsiveBar
             device={device}
@@ -1357,6 +1518,7 @@ export default function BuilderInspector({
           onChange={handleContentChange}
           jsonErrors={jsonErrors}
           projectPages={projectPages}
+          projectId={projectId}
         />
       ) : null}
       {activeTab === 'style' ? (
@@ -1364,6 +1526,7 @@ export default function BuilderInspector({
           selectedNode={selectedNode}
           form={form}
           onChange={handleStyleChange}
+          projectId={projectId}
           onPreviewStylePatch={previewStylePatch}
           onCommitStylePatch={commitStylePatch}
           onClearPreviewStyle={clearPreviewCss}

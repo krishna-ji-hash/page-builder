@@ -9,6 +9,15 @@
   color: var(--color-text, #0f172a);
   background: var(--color-background, #f8fafc);
   box-sizing: border-box;
+
+  /* Motion tokens (shared across runtime templates) */
+  --motion-fast: 140ms;
+  --motion-base: 200ms;
+  --motion-slow: 280ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.2, 0.9, 0.2, 1);
+  --hover-lift: -2px;
+  --hover-scale: 1.01;
 }
 
 .live-site__main {
@@ -87,6 +96,7 @@
   z-index: 5000 !important;
   background: var(--color-background, #f8fafc);
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.08);
+  transition: box-shadow var(--motion-base) var(--ease-out), background-color var(--motion-base) var(--ease-out);
 }
 
 /* Keep live output visually aligned with builder canvas defaults. */
@@ -270,10 +280,28 @@
   cursor: pointer;
   font-size: 22px;
   line-height: 1;
+  transition:
+    transform var(--motion-base) var(--ease-spring),
+    background-color var(--motion-base) var(--ease-out),
+    box-shadow var(--motion-base) var(--ease-out),
+    opacity var(--motion-base) var(--ease-out),
+    border-color var(--motion-base) var(--ease-out);
 }
 
 .live-carousel__arrow:hover {
   background: rgba(2, 6, 23, 0.72);
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.28);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22);
+}
+
+.live-carousel__arrow:active {
+  transform: translateY(0px);
+}
+
+.live-carousel__arrow:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-primary, #2563eb) 70%, #fff 30%);
+  outline-offset: 2px;
 }
 
 .live-carousel__dots {
@@ -291,10 +319,27 @@
   border: 1px solid rgba(255, 255, 255, 0.25);
   background: rgba(255, 255, 255, 0.10);
   cursor: pointer;
+  transition:
+    transform var(--motion-base) var(--ease-spring),
+    background-color var(--motion-base) var(--ease-out),
+    border-color var(--motion-base) var(--ease-out),
+    width var(--motion-base) var(--ease-out),
+    opacity var(--motion-base) var(--ease-out);
+}
+
+.live-carousel__dot:hover {
+  transform: scale(1.15);
+  border-color: rgba(255, 255, 255, 0.38);
+}
+
+.live-carousel__dot:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-primary, #2563eb) 70%, #fff 30%);
+  outline-offset: 3px;
 }
 
 .live-carousel__dot.is-active {
   background: rgba(255, 255, 255, 0.82);
+  width: 18px;
 }
 
 /* Card carousel variant */
@@ -307,6 +352,32 @@
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--color-border, #e2e8f0) 85%, transparent);
   background: var(--color-surface, #ffffff);
+  transition:
+    transform var(--motion-base) var(--ease-spring),
+    box-shadow var(--motion-base) var(--ease-out),
+    border-color var(--motion-base) var(--ease-out);
+}
+
+.live-carousel__card-slide:hover {
+  transform: translateY(var(--hover-lift));
+  border-color: color-mix(in srgb, var(--color-border, #e2e8f0) 55%, var(--color-primary, #2563eb) 45%);
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.16);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-site[data-sticky-header='true'] .live-doc > header,
+  .live-site[data-sticky-header='true'] .live-doc > [data-site-header='true'],
+  .live-site[data-sticky-header='true'] .live-doc > main.live-node.bld-row:first-child,
+  .live-carousel__arrow,
+  .live-carousel__dot,
+  .live-carousel__card-slide {
+    transition: none !important;
+  }
+  .live-carousel__arrow:hover,
+  .live-carousel__dot:hover,
+  .live-carousel__card-slide:hover {
+    transform: none;
+  }
 }
 .live-carousel__card-img {
   width: 100%;
@@ -355,6 +426,13 @@
   max-width: 100%;
   min-width: 0;
   width: 100%;
+  overflow-x: clip;
+}
+
+/* Root sections should never create horizontal page scroll (allow internal overflow where needed). */
+.live-doc > :where(header.live-node, footer.live-node, main.live-node, section.live-node, [data-site-footer='true']) {
+  max-width: 100%;
+  min-width: 0;
   overflow-x: clip;
 }
 
@@ -469,6 +547,18 @@
   overflow-x: auto;
   max-width: 100%;
   min-width: 0;
+}
+
+/* Footer menus should wrap instead of forcing horizontal overflow/scroll. */
+.live-doc > :where(footer.live-node, [data-site-footer='true']) nav.menu,
+.live-doc > :where(footer.live-node, [data-site-footer='true']) .menu {
+  overflow-x: visible;
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+.live-doc > :where(footer.live-node, [data-site-footer='true']) .menu-item {
+  white-space: normal;
 }
 
 .live-doc .menu {
