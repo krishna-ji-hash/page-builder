@@ -615,6 +615,7 @@ export default function BuilderShell({ pageId }) {
     setOverflowByNodeId(nextMap);
   }, []);
   const [flashPasteNodeId, setFlashPasteNodeId] = useState(null);
+  const [flashReorderNodeId, setFlashReorderNodeId] = useState(null);
   const [isLayoutDebug, setIsLayoutDebug] = useState(false);
   const [showGrid, setShowGrid] = useState(false);
 
@@ -629,6 +630,12 @@ export default function BuilderShell({ pageId }) {
     const t = window.setTimeout(() => setFlashPasteNodeId(null), 2200);
     return () => window.clearTimeout(t);
   }, [flashPasteNodeId]);
+
+  useEffect(() => {
+    if (flashReorderNodeId == null) return undefined;
+    const t = window.setTimeout(() => setFlashReorderNodeId(null), 900);
+    return () => window.clearTimeout(t);
+  }, [flashReorderNodeId]);
 
   useEffect(() => {
     if (!saveAckVisible) return undefined;
@@ -1704,7 +1711,10 @@ export default function BuilderShell({ pageId }) {
         positionIndex: Number.isInteger(Number(insertIndex)) ? Number(insertIndex) : null,
       });
       await reloadBuilder();
-      if (rootIds?.length) setSelectedNodeId(rootIds[0]);
+      if (rootIds?.length) {
+        setSelectedNodeId(rootIds[0]);
+        setFlashReorderNodeId(rootIds[0]);
+      }
       setHasUnpublishedEdits(true);
     } catch (error) {
       setUndoStack((prev) => prev.slice(0, -1));
@@ -4070,7 +4080,11 @@ export default function BuilderShell({ pageId }) {
                     }
                     if (id === 'footer') {
                       await handleInsertFooterSectionTemplate();
+                      return;
                     }
+                    // Default: use the generic section template pipeline
+                    // (keeps builder architecture intact; supports new templates like `heroLanding`).
+                    await handleInsertSectionTemplate(id);
                   }}
                   onApplyFullPageTemplate={handleApplyFullPageTemplate}
                   onUpdateNode={handleNodeUpdate}
@@ -4184,6 +4198,7 @@ export default function BuilderShell({ pageId }) {
               onDetachFromGlobalComponent={handleDetachFromGlobalComponent}
               onEditGlobalComponent={openGlobalComponentEditor}
               flashPasteNodeId={flashPasteNodeId}
+              flashReorderNodeId={flashReorderNodeId}
               onCopyNodeId={(nodeId) => {
                 setCopiedNodeId(Number(nodeId));
                 setCopyToastMessage('Copied. Ctrl+V pastes under the selected layer.');

@@ -176,11 +176,13 @@
   padding: 6px 3px;
   min-height: 30px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 4px;
   cursor: pointer;
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.02em;
   line-height: 1.15;
   text-align: center;
@@ -203,6 +205,63 @@
   background: color-mix(in srgb, var(--bld-primary) 22%, var(--bld-surface));
   color: var(--bld-text);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--bld-primary) 35%, transparent);
+}
+
+.bld-left__tabIcon {
+  width: 20px;
+  height: 20px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 900;
+  border: 1px solid color-mix(in srgb, var(--bld-border) 75%, transparent);
+  background: color-mix(in srgb, var(--bld-surface-2) 88%, transparent);
+  color: color-mix(in srgb, var(--bld-text) 86%, var(--bld-text-soft));
+}
+
+.bld-left__tab.is-active .bld-left__tabIcon {
+  border-color: color-mix(in srgb, var(--bld-primary) 55%, var(--bld-border));
+  background: color-mix(in srgb, var(--bld-primary) 14%, var(--bld-surface-2));
+  color: var(--bld-text);
+}
+
+.bld-left__tabLabel {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bld-left__guide {
+  flex-shrink: 0;
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--bld-border) 70%, transparent);
+  background: color-mix(in srgb, var(--bld-surface) 86%, var(--bld-canvas-chrome));
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.bld-left__guideStep {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  border: 1px solid color-mix(in srgb, var(--bld-border) 78%, transparent);
+  background: color-mix(in srgb, var(--bld-surface-2) 86%, transparent);
+  color: color-mix(in srgb, var(--bld-text-soft) 92%, var(--bld-text));
+}
+
+.bld-left__guideStep.is-active {
+  border-color: color-mix(in srgb, var(--bld-primary) 55%, var(--bld-border));
+  background: color-mix(in srgb, var(--bld-primary) 14%, var(--bld-surface-2));
+  color: var(--bld-text);
 }
 
 .bld-left__crumb {
@@ -547,6 +606,16 @@
   padding: 8px 8px 6px;
   border-bottom: 1px solid var(--bld-border);
   background: var(--bld-canvas-chrome);
+}
+
+.bld-left__quickHead {
+  width: 100%;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--bld-text-soft);
+  padding: 2px 2px 0;
 }
 
 .bld-left__quick .bld-btn {

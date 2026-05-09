@@ -160,6 +160,13 @@ function nodeTypeLabel(nodeType) {
   return 'Widget';
 }
 
+function friendlyHierarchyTitle({ nodeType, selectedNode }) {
+  const target = nodeTypeLabel(nodeType);
+  const parent = selectedNode?.nodeType ? nodeTypeLabel(selectedNode.nodeType) : 'the page';
+  if (!selectedNode) return `Select a Section, Column, or Stack first to add a ${target}.`;
+  return `${target}s can only be added inside compatible containers. Current selection: ${parent}.`;
+}
+
 function ToolPanel({ title, description, onBack }) {
   return (
     <div className="bld-sidebar" role="complementary" aria-label={title}>
@@ -445,7 +452,7 @@ export default function BuilderSidebar({
                             : !canCreateUnderSelection
                               ? 'Select a Section, Column, or Stack first'
                               : !hierarchyValid
-                                ? `Invalid hierarchy: ${nodeType} cannot be added inside ${selectedNode?.nodeType || 'root'}`
+                                ? friendlyHierarchyTitle({ nodeType, selectedNode })
                                 : block.label
                       }
                       onClick={() =>
@@ -463,6 +470,11 @@ export default function BuilderSidebar({
                     >
                       <span className="bld-block-card__icon">{block.icon}</span>
                       <span className="bld-block-card__label">{block.label}</span>
+                      {!disabled && canQuickAddWidget ? (
+                        <span className="bld-block-card__meta">Quick add</span>
+                      ) : !hierarchyValid && selectedNode ? (
+                        <span className="bld-block-card__meta">Not allowed here</span>
+                      ) : null}
                     </button>
                   );
                 })}
@@ -471,9 +483,6 @@ export default function BuilderSidebar({
           </>
         ) : activeTab === 'templates' ? (
           <>
-            <div className="bld-sidebar__hint">
-              Templates: insert starter sections and page templates.
-            </div>
             <details className="bld-acc" open>
               <summary>
                 Full Page Templates
@@ -553,9 +562,33 @@ export default function BuilderSidebar({
                   <span className="bld-block-card__icon">H</span>
                   <span className="bld-block-card__label">Hero</span>
                 </button>
+                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('heroLanding')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">HL</span>
+                  <span className="bld-block-card__label">Hero Landing</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('trustLogos')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">SP</span>
+                  <span className="bld-block-card__label">Social Proof</span>
+                </button>
                 <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('features')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">≡</span>
                   <span className="bld-block-card__label">Features</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('benefits')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">BEN</span>
+                  <span className="bld-block-card__label">Benefits</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('testimonials')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">★</span>
+                  <span className="bld-block-card__label">Testimonials</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('faq')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">FAQ</span>
+                  <span className="bld-block-card__label">FAQ</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('cta')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">CTA</span>
+                  <span className="bld-block-card__label">CTA</span>
                 </button>
                 <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('footer')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">FTR</span>

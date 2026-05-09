@@ -2418,7 +2418,15 @@ function NodeRenderer({
             ) : null}
             {isContainer && !node.children?.length ? (
               <div className="bld-node-empty" onPointerDown={stopDragBubble}>
-                <p className="bld-node-empty__text">Empty {node.nodeType}. Add content to start building.</p>
+                <p className="bld-node-empty__text">
+                  {node.nodeType === 'row'
+                    ? 'This section is empty. Start by adding columns, then place elements inside.'
+                    : node.nodeType === 'column'
+                      ? 'This column is empty. Add a stack or drop elements here.'
+                      : node.nodeType === 'stack'
+                        ? 'This stack is empty. Drop in a heading, text, image, or button to get started.'
+                        : `Empty ${node.nodeType}. Add content to start building.`}
+                </p>
                 <div className="bld-node-empty__actions">
                   <button
                     type="button"
@@ -2427,7 +2435,7 @@ function NodeRenderer({
                     onClick={openAddForNode}
                     disabled={isCreatingNode}
                   >
-                    + Add Element
+                    + Add element
                   </button>
                   <button
                     type="button"
@@ -2436,7 +2444,7 @@ function NodeRenderer({
                     onClick={openAddForNode}
                     disabled={isCreatingNode}
                   >
-                    Try: Heading • Image • Button
+                    Try: Section → Column → Stack → Elements
                   </button>
                 </div>
                 <p className="bld-node-empty__hint">Move, duplicate, and delete live in the toolbar; use ⋯ for more.</p>
