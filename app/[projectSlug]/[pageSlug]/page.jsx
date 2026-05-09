@@ -4,6 +4,8 @@ import { renderTree } from '@/lib/liveRenderer';
 import { normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesignTheme';
 import { buildRenderNodesWithGlobals } from '@/lib/globalSectionMerge';
 import { isPublicSlug, resolveMaybeAsyncParams } from '@/lib/routeParams';
+import { resolveSeoMetadata } from '@/lib/seo/seoEngine';
+import JsonLd from '@/components/seo/JsonLd';
 import '@/styles/live/live-site.css';
 import '@/styles/shared/menu.css';
 import '@/styles/shared/button.css';
@@ -33,14 +35,14 @@ export async function generateMetadata({ params }) {
   const page = await getPublishedPage(projectSlug, pageSlug);
   if (!page) return {};
 
-  return {
-    title: page.seo?.title || page.name,
-    description: page.seo?.description || '',
-    openGraph: {
-      title: page.seo?.title || page.name,
-      description: page.seo?.description || '',
-    },
-  };
+  const currentPath = `/${projectSlug}/${pageSlug}`;
+  const { metadata } = resolveSeoMetadata({
+    projectConfig: page.projectConfig,
+    pageName: page.name,
+    currentPath,
+    pageSeo: page.seo,
+  });
+  return metadata;
 }
 
 export default async function PublicSitePage({ params, searchParams }) {
@@ -90,6 +92,12 @@ export default async function PublicSitePage({ params, searchParams }) {
   const sectionPadBottomPx =
     pageVars && Number.isFinite(Number(pageVars.sectionPadBottomPx)) ? Number(pageVars.sectionPadBottomPx) : null;
   const stickyHeader = Boolean(pageVars?.stickyHeader);
+  const { schemaJsonLd } = resolveSeoMetadata({
+    projectConfig: page.projectConfig,
+    pageName: page.name,
+    currentPath,
+    pageSeo: page.seo,
+  });
 
   return (
     <div
@@ -105,6 +113,7 @@ export default async function PublicSitePage({ params, searchParams }) {
         fontFamily: siteTheme.typography.fontFamily,
       }}
     >
+      <JsonLd data={schemaJsonLd} />
       <div className="live-doc">
         <RuntimeProvider>
           {renderTree(renderNodes, {
@@ -113,6 +122,7 @@ export default async function PublicSitePage({ params, searchParams }) {
             siteTheme,
             pageId: page.id,
             projectId: page.projectId,
+            projectSlug,
           })}
         </RuntimeProvider>
       </div>

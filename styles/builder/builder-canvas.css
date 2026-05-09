@@ -2952,7 +2952,7 @@
 .bld-modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 1200;
+  z-index: 20000;
   background: rgba(2, 6, 23, 0.5);
   display: grid;
   place-items: center;
@@ -2965,7 +2965,10 @@
   border: 1px solid color-mix(in srgb, var(--bld-border) 82%, #000 18%);
   background: var(--bld-surface);
   box-shadow: 0 24px 44px rgba(2, 6, 23, 0.32);
-  overflow: visible;
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .bld-modal--widget {
@@ -2979,6 +2982,13 @@
   gap: 10px;
   padding: 12px 14px;
   border-bottom: 1px solid var(--bld-border);
+  flex: 0 0 auto;
+}
+
+.bld-modal__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
 }
 
 .bld-modal__head h3 {

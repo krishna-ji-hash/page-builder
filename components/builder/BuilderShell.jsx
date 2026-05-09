@@ -21,6 +21,10 @@ import BuilderSidebar from './BuilderSidebar';
 import BuilderCanvas from './BuilderCanvas';
 import BuilderInspector from './BuilderInspector';
 import { getGlobalLinkMeta, isLinkedGlobalPlaceholder, treeContainsLinkedGlobals } from '@/lib/globalComponentLinkMeta';
+import { loadAppsForProject } from '@/lib/registry/appLoader';
+import PageSeoModal from './seo/PageSeoModal';
+import AuditModal from './audits/AuditModal';
+import AuditBadgesOverlay from './audits/AuditBadgesOverlay';
 import '@/styles/builder/builder-shell.css';
 import '@/styles/builder/builder-rail.css';
 import '@/styles/builder/builder-topbar.css';
@@ -473,6 +477,68 @@ export default function BuilderShell({ pageId }) {
   const [redoStack, setRedoStack] = useState([]); // { ts:number, tree:any[] }[]
   const [copiedNodeId, setCopiedNodeId] = useState(null);
   const [copyToastMessage, setCopyToastMessage] = useState(null);
+  const [enabledAppIds, setEnabledAppIds] = useState([]);
+  const [isSeoOpen, setIsSeoOpen] = useState(false);
+  const [isAuditOpen, setIsAuditOpen] = useState(false);
+  const [lastAuditIssues, setLastAuditIssues] = useState([]);
+  const [mediaMetaByUrl, setMediaMetaByUrl] = useState(() => new Map());
+
+  // Preload media metadata once per project (used by audits; no backend calls during scan).
+  useEffect(() => {
+    const projectId = Number(page?.projectId);
+    if (!Number.isInteger(projectId) || projectId <= 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const all = [];
+        for (const p of [1, 2]) {
+          const res = await fetch(`/api/projects/${projectId}/media?page=${p}&pageSize=120&sort=created_desc`, {
+            cache: 'no-store',
+          });
+          const data = await readJsonSafe(res);
+          if (!res.ok) break;
+          const items = Array.isArray(data?.items) ? data.items : [];
+          all.push(...items);
+          if (items.length < 120) break;
+        }
+        if (cancelled) return;
+        const map = new Map();
+        all.forEach((m) => {
+          if (m?.publicUrl) {
+            map.set(String(m.publicUrl), m);
+          }
+        });
+        setMediaMetaByUrl(map);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [page?.projectId]);
+
+  // Phase 13: preload enabled apps once per project (lazy imports, safe registry reset).
+  useEffect(() => {
+    const projectId = Number(page?.projectId);
+    if (!Number.isInteger(projectId) || projectId <= 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/projects/${projectId}/apps`, { cache: 'no-store' });
+        const json = await res.json().catch(() => ({}));
+        const ids = Array.isArray(json?.enabledAppIds) ? json.enabledAppIds : [];
+        if (cancelled) return;
+        setEnabledAppIds(ids);
+        await loadAppsForProject({ projectId, enabledAppIds: ids });
+      } catch {
+        // ignore; builder still works with core widgets
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [page?.projectId]);
 
   const fetchGlobalComponents = useCallback(async () => {
     const projectId = Number(page?.projectId);
@@ -739,6 +805,23 @@ export default function BuilderShell({ pageId }) {
   const previewUrl = pageIdValid ? `/preview/${pid}` : null;
   const canOpenLivePreview = Boolean(liveUrl && page?.publishedVersionId);
   const projectTemplates = Array.isArray(page?.projectConfig?.pageTemplates) ? page.projectConfig.pageTemplates : [];
+
+  // Auto-seed an empty page with a full-page template once (UX: user can start styling immediately).
+  useEffect(() => {
+    if (!pageIdValid) return;
+    if (isLoading) return;
+    if (errorMessage) return;
+    if (tree?.length) return;
+    if (isCreatingNode) return;
+    if (typeof window === 'undefined') return;
+
+    const key = `bld:auto-seed:v1:page:${pid}`;
+    if (window.localStorage.getItem(key) === '1') return;
+    window.localStorage.setItem(key, '1');
+
+    // Seed with the conversion outline (matches the landing-page flow screenshot).
+    void handleApplyFullPageTemplate({ templateId: 'conversion-landing-outline', mode: 'replace' });
+  }, [pageIdValid, pid, isLoading, errorMessage, tree?.length, isCreatingNode]);
 
   useEffect(() => {
     const projectId = Number(page?.projectId);
@@ -3492,6 +3575,8 @@ export default function BuilderShell({ pageId }) {
         <BuilderTopbar
           projectName={page?.projectSlug || 'default'}
           pageName={page?.title || 'Page'}
+          onOpenSeo={() => setIsSeoOpen(true)}
+          onOpenAudit={() => setIsAuditOpen(true)}
           clipboardNodeTypeLabel={clipboardNodeTypeLabel}
           saveAckVisible={saveAckVisible}
           device={device}
@@ -3520,6 +3605,119 @@ export default function BuilderShell({ pageId }) {
           onToggleLayoutDebug={() => setIsLayoutDebug((prev) => !prev)}
           showGrid={showGrid}
           onToggleGrid={() => setShowGrid((p) => !p)}
+        />
+
+        <PageSeoModal
+          open={isSeoOpen}
+          pageId={pid}
+          pageSlug={page?.slug || ''}
+          projectSlug={page?.projectSlug || 'default'}
+          projectConfig={page?.projectConfig || null}
+          tree={tree}
+          onClose={() => setIsSeoOpen(false)}
+          onSelectNode={(nodeId) => {
+            if (!nodeId) return;
+            setSelectedNodeId(Number(nodeId));
+            setLeftPanelTab('layers');
+          }}
+        />
+
+        <AuditModal
+          open={isAuditOpen}
+          pageId={pid}
+          device={device}
+          projectConfig={page?.projectConfig || null}
+          pageSeo={page?.seo || null}
+          tree={tree}
+          mediaMetaByUrl={mediaMetaByUrl}
+          onClose={() => setIsAuditOpen(false)}
+          onSelectNode={(nodeId) => {
+            if (!nodeId) return;
+            setSelectedNodeId(Number(nodeId));
+            setLeftPanelTab('layers');
+          }}
+          onReportChange={(report) => {
+            setLastAuditIssues(Array.isArray(report?.issues) ? report.issues : []);
+          }}
+          onQuickFix={async ({ nodeId, fix }) => {
+            if (!nodeId || !fix) return;
+            const node = findNodeInTree(tree, Number(nodeId));
+            if (!node) return;
+
+            const applyStylePatch = (deviceKey, group, key, value) => {
+              const cur = node.style_json && typeof node.style_json === 'object' ? node.style_json : {};
+              const layer = (cur[deviceKey] && typeof cur[deviceKey] === 'object') ? cur[deviceKey] : {};
+              const nextGroup = { ...((layer[group] && typeof layer[group] === 'object') ? layer[group] : {}), [key]: value };
+              return {
+                ...cur,
+                [deviceKey]: {
+                  ...layer,
+                  [group]: nextGroup,
+                },
+              };
+            };
+
+            let payload = null;
+            if (fix.type === 'setProp') {
+              payload = { props: { ...(fix.props || {}) } };
+            } else if (fix.type === 'width100') {
+              payload = { style_json: applyStylePatch(fix.device || device, 'size', 'width', '100%') };
+            } else if (fix.type === 'reduceGap') {
+              payload = { style_json: applyStylePatch(fix.device || 'mobile', 'layout', 'gap', `${Number(fix.valuePx || 16)}px`) };
+            } else if (fix.type === 'enableWrap') {
+              payload = { style_json: applyStylePatch(fix.device || device, 'layout', 'flexWrap', 'wrap') };
+            } else if (fix.type === 'stackMobile') {
+              const s1 = applyStylePatch('mobile', 'layout', 'flexDirection', 'column');
+              const s2 = (() => {
+                const layer = (s1.mobile && typeof s1.mobile === 'object') ? s1.mobile : {};
+                return { ...s1, mobile: { ...layer, layout: { ...(layer.layout || {}), flexWrap: 'nowrap' } } };
+              })();
+              payload = { style_json: s2 };
+            } else if (fix.type === 'reducePadding') {
+              const px = Number(fix.valuePx || 16);
+              const v = `${Math.max(0, px)}px`;
+              payload = {
+                style_json: applyStylePatch(fix.device || 'mobile', 'spacing', 'padding', `${v} ${v} ${v} ${v}`),
+              };
+            } else if (fix.type === 'reduceMargin') {
+              const px = Number(fix.valuePx || 0);
+              const v = `${Math.max(0, px)}px`;
+              payload = {
+                style_json: applyStylePatch(fix.device || 'mobile', 'spacing', 'margin', `0 ${v} 0 ${v}`),
+              };
+            } else if (fix.type === 'reduceFontMobile') {
+              const px = Math.max(8, Math.min(128, Number(fix.valuePx || 14)));
+              payload = { style_json: applyStylePatch('mobile', 'typography', 'fontSize', `${Math.round(px)}px`) };
+            } else if (fix.type === 'reduceSlidesPerViewMobile') {
+              const current = node.props?.slidesPerView && typeof node.props.slidesPerView === 'object' ? node.props.slidesPerView : {};
+              payload = { props: { slidesPerView: { ...current, mobile: 1 } } };
+            } else if (fix.type === 'applyAspectRatio') {
+              const w = Number(fix.width);
+              const h = Number(fix.height);
+              if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return;
+              const ratio = `${Math.round(w)} / ${Math.round(h)}`;
+              payload = { style_json: applyStylePatch(fix.device || 'desktop', 'size', 'aspectRatio', ratio) };
+            } else if (fix.type === 'setMinHeightCls') {
+              const px = Math.max(80, Math.min(640, Number(fix.valuePx || 240)));
+              payload = { style_json: applyStylePatch(fix.device || device, 'size', 'minHeight', `${Math.round(px)}px`) };
+            } else if (fix.type === 'reduceCarouselSlidesRendered') {
+              payload = { props: { maxSlidesRendered: Number(fix.value || 8) } };
+            }
+
+            if (!payload) return;
+            await handleNodeUpdate({ nodeId: node.id, payload });
+          }}
+        />
+
+        <AuditBadgesOverlay
+          open={isAuditOpen}
+          issues={lastAuditIssues}
+          onClickNode={(nodeId) => {
+            if (!nodeId) return;
+            setSelectedNodeId(Number(nodeId));
+            setLeftPanelTab('layers');
+            setIsAuditOpen(true);
+          }}
         />
 
         <div className="bld-shell__body">

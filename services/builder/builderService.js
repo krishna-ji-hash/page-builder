@@ -281,6 +281,7 @@ async function getPageById(pageId, connection) {
             p.title,
             p.published_version_id,
             p.project_id,
+            p.seo_json,
             pr.slug AS project_slug,
             pr.type AS project_type,
             pr.config_json
@@ -444,6 +445,7 @@ export async function getBuilderState(pageId) {
       projectId: page.project_id,
       slug: page.slug,
       title: page.title,
+      seo: parseJsonColumn(page.seo_json) || {},
       publishedVersionId: page.published_version_id,
       projectSlug: page.project_slug,
       projectType: page.projectType || 'website',
@@ -1417,6 +1419,60 @@ export async function deletePageSafely(pageId) {
     await connection.query(`DELETE FROM pages WHERE id = ?`, [id]);
 
     return { id, projectId: existing.project_id, deleted: true };
+  });
+}
+
+export async function deleteProjectSafely(projectId) {
+  const pid = Number(projectId);
+  if (!Number.isInteger(pid) || pid <= 0) throw new Error('Invalid projectId');
+
+  return withTransaction(async (connection) => {
+    const [rows] = await connection.query(
+      `SELECT id FROM projects WHERE id = ? LIMIT 1`,
+      [pid]
+    );
+    if (!rows.length) return null;
+
+    // Pages (and their nodes/versions) are NOT cascade-deleted from projects.
+    const [pageRows] = await connection.query(
+      `SELECT id FROM pages WHERE project_id = ?`,
+      [pid]
+    );
+    const pageIds = pageRows.map((r) => Number(r.id)).filter((x) => Number.isInteger(x) && x > 0);
+
+    if (pageIds.length) {
+      const placeholders = pageIds.map(() => '?').join(',');
+      // builder_nodes has FK → page_versions, so delete nodes first.
+      await connection.query(
+        `DELETE FROM builder_nodes WHERE page_id IN (${placeholders})`,
+        pageIds
+      );
+      // page_versions holds drafts/published snapshots.
+      await connection.query(
+        `DELETE FROM page_versions WHERE page_id IN (${placeholders})`,
+        pageIds
+      );
+      // form_submissions cascades from pages, but this keeps deletes deterministic.
+      await connection.query(
+        `DELETE FROM pages WHERE id IN (${placeholders})`,
+        pageIds
+      );
+    }
+
+    // CMS tables are project-scoped but not FK-cascaded from projects.
+    await connection.query(
+      `DELETE FROM cms_items WHERE collection_id IN (SELECT id FROM cms_collections WHERE project_id = ?)`,
+      [pid]
+    );
+    await connection.query(`DELETE FROM cms_collections WHERE project_id = ?`, [pid]);
+
+    // Project apps are project-scoped and not FK-cascaded.
+    await connection.query(`DELETE FROM project_apps WHERE project_id = ?`, [pid]);
+
+    // These are ON DELETE CASCADE: global_components, reusable_blocks, media_assets, form_submissions (project_id).
+    await connection.query(`DELETE FROM projects WHERE id = ?`, [pid]);
+
+    return { id: pid, deleted: true };
   });
 }
 

@@ -26,6 +26,7 @@ async function getPublishedPageRaw(projectSlug, pageSlug, pageContext = null) {
       p.slug,
       p.project_id,
       p.published_version_id,
+      p.seo_json,
       pr.slug AS project_slug,
       pr.config_json,
       pv.snapshot_json
@@ -52,6 +53,7 @@ async function getPublishedPageRaw(projectSlug, pageSlug, pageContext = null) {
   }
 
   const projectConfig = parseJsonValue(row.config_json, {}) || {};
+  const pageSeo = parseJsonValue(row.seo_json, {}) || {};
   const [pageRows] = await pool.query(
     `SELECT slug, title
      FROM pages
@@ -91,10 +93,7 @@ async function getPublishedPageRaw(projectSlug, pageSlug, pageContext = null) {
     projectId: row.project_id,
     projectSlug: row.project_slug,
     publishedVersionId: row.published_version_id,
-    seo: {
-      title: row.title,
-      description: '',
-    },
+    seo: pageSeo,
     snapshot_json: snapshotJson,
     projectConfig,
     projectPages: pageRows.map((page) => ({

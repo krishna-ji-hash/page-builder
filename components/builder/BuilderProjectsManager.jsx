@@ -45,6 +45,7 @@ export default function BuilderProjectsManager() {
   const [creatingPageProjectId, setCreatingPageProjectId] = useState(null);
   const [isUpdatingPage, setIsUpdatingPage] = useState(false);
   const [deletingPageId, setDeletingPageId] = useState(null);
+  const [deletingProjectId, setDeletingProjectId] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
   const [editPageDraft, setEditPageDraft] = useState(null);
 
@@ -213,7 +214,30 @@ export default function BuilderProjectsManager() {
     }
   };
 
+  const handleDeleteProject = async (project) => {
+    if (!project?.id) return;
+    const confirmed = window.confirm(
+      `Delete project "${project.name}"?\n\nThis deletes ALL pages and builder data in this project.`
+    );
+    if (!confirmed) return;
+    setDeletingProjectId(project.id);
+    setError('');
+    setSuccessMessage('');
+    try {
+      const response = await fetch(`/api/projects/${project.id}`, { method: 'DELETE' });
+      const data = await readJsonSafe(response);
+      if (!response.ok) throw new Error(buildApiErrorMessage(data, 'Failed to delete project'));
+      await loadProjects();
+      setSuccessMessage('Project deleted successfully.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDeletingProjectId(null);
+    }
+  };
+
   const pages = openProject ? pagesByProject[openProject.id] || [] : [];
+  const canDeleteAnyPage = pages.length > 1;
 
   return (
     <main className="pm-shell">
@@ -270,16 +294,27 @@ export default function BuilderProjectsManager() {
           <ul className="pm-list">
             {projects.map((project) => (
               <li key={project.id}>
-                <button
-                  className={`pm-project-item ${Number(openProjectId) === Number(project.id) ? 'is-active' : ''}`}
-                  type="button"
-                  onClick={() => setOpenProjectId(project.id)}
-                >
-                  <div className="pm-project-item__name">{project.name}</div>
-                  <div className="pm-project-item__meta">
-                    /{project.slug} · {project.type} · {project.pageCount} pages
-                  </div>
-                </button>
+                <div className={`pm-project-item-row ${Number(openProjectId) === Number(project.id) ? 'is-active' : ''}`}>
+                  <button
+                    className="pm-project-item"
+                    type="button"
+                    onClick={() => setOpenProjectId(project.id)}
+                  >
+                    <div className="pm-project-item__name">{project.name}</div>
+                    <div className="pm-project-item__meta">
+                      /{project.slug} · {project.type} · {project.pageCount} pages
+                    </div>
+                  </button>
+                  <button
+                    className="pm-btn pm-btn--danger pm-btn--sm"
+                    type="button"
+                    onClick={() => handleDeleteProject(project)}
+                    disabled={deletingProjectId === project.id}
+                    title="Delete project (removes all its pages)"
+                  >
+                    {deletingProjectId === project.id ? 'Deleting…' : 'Delete'}
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
@@ -333,7 +368,12 @@ export default function BuilderProjectsManager() {
                           title: page.title,
                         })
                       }
-                      disabled={isUpdatingPage || deletingPageId === page.id}
+                      disabled={isUpdatingPage || deletingPageId === page.id || !canDeleteAnyPage}
+                      title={
+                        canDeleteAnyPage
+                          ? 'Delete page'
+                          : 'This project has only 1 page. Create another page first or delete the project.'
+                      }
                     >
                       {deletingPageId === page.id ? 'Deleting…' : 'Delete'}
                     </button>

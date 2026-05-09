@@ -2628,7 +2628,7 @@ export default function BuilderCanvas({
   onAlignMenuRightFromSelection,
   isFreeMode = false,
   isLayoutDebug = false,
-  minimalPageChrome = false,
+  minimalPageChrome = true,
   onCopyNodeId,
   flashPasteNodeId = null,
   previewCssByNodeId: externalPreviewCssByNodeId,

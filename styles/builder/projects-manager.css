@@ -107,6 +107,21 @@
   cursor: pointer;
 }
 
+.pm-project-item-row {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.pm-project-item-row .pm-project-item {
+  flex: 1 1 auto;
+}
+
+.pm-btn--sm {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
 .pm-project-item.is-active {
   border-color: #2563eb;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);

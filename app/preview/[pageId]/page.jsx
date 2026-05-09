@@ -112,6 +112,7 @@ export default async function DraftPreviewPage({ params }) {
             siteTheme,
             pageId: state.page.id,
             projectId: state.page.projectId,
+            projectSlug: state.page.projectSlug,
           })}
         </RuntimeProvider>
       </div>

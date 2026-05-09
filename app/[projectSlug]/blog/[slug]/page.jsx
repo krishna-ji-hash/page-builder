@@ -6,6 +6,8 @@ import { normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesig
 import { resolveMaybeAsyncParams, isPublicSlug } from '@/lib/routeParams';
 import { getItemBySlug } from '@/services/builder/cmsService';
 import { applyBindingsToTree, applyBindingsToString } from '@/lib/cms/cmsBindings';
+import { resolveSeoMetadata } from '@/lib/seo/seoEngine';
+import JsonLd from '@/components/seo/JsonLd';
 import '@/styles/live/live-site.css';
 import '@/styles/shared/menu.css';
 import '@/styles/shared/button.css';
@@ -24,29 +26,15 @@ export async function generateMetadata({ params }) {
   const item = await getItemBySlug(page.projectId, 'blog', slug, { status: 'published' });
   if (!item) return {};
 
-  const ctx = { item, sys: { slug, collection: 'blog' } };
-  const titleT = page?.seo?.titleTemplate || '{{item.title}}';
-  const descT = page?.seo?.descriptionTemplate || '{{item.data.description}}';
-  const ogTitleT = page?.seo?.ogTitleTemplate || titleT;
-  const ogImageT = page?.seo?.ogImageTemplate || '{{item.data.ogImage}}';
-
-  const title = applyBindingsToString(String(titleT || ''), ctx) || item.title || item.slug;
-  const description = applyBindingsToString(String(descT || ''), ctx) || '';
-  const ogTitle = applyBindingsToString(String(ogTitleT || ''), ctx) || title;
-  const ogImage = applyBindingsToString(String(ogImageT || ''), ctx) || '';
-  const canonical = `/${projectSlug}/blog/${slug}`;
-
-  return {
-    title,
-    description,
-    alternates: { canonical },
-    openGraph: {
-      title: ogTitle,
-      description,
-      ...(ogImage ? { images: [ogImage] } : {}),
-      url: canonical,
-    },
-  };
+  const currentPath = `/${projectSlug}/blog/${slug}`;
+  const { metadata } = resolveSeoMetadata({
+    projectConfig: page.projectConfig,
+    pageName: page.name,
+    currentPath,
+    pageSeo: page.seo,
+    cmsContext: { item, sys: { slug, collection: 'blog' } },
+  });
+  return metadata;
 }
 
 export default async function BlogPostRoute({ params }) {
@@ -65,6 +53,13 @@ export default async function BlogPostRoute({ params }) {
   const siteTheme = normalizeSiteTheme(page.projectConfig?.siteTheme);
   const siteCssVars = siteThemeToCssVariableStyle(siteTheme);
   const currentPath = `/${projectSlug}/blog/${slug}`;
+  const { schemaJsonLd } = resolveSeoMetadata({
+    projectConfig: page.projectConfig,
+    pageName: page.name,
+    currentPath,
+    pageSeo: page.seo,
+    cmsContext: { item, sys: { slug, collection: 'blog' } },
+  });
 
   // Bind `{{item.*}}` and `{{sys.*}}` into the page snapshot (single pass).
   const boundNodes = applyBindingsToTree(page.snapshot_json, {
@@ -83,6 +78,7 @@ export default async function BlogPostRoute({ params }) {
         fontFamily: siteTheme.typography.fontFamily,
       }}
     >
+      <JsonLd data={schemaJsonLd} />
       <div className="live-doc">
         <RuntimeProvider>
           {renderTree(boundNodes, {
@@ -91,6 +87,7 @@ export default async function BlogPostRoute({ params }) {
             siteTheme,
             pageId: page.id,
             projectId: page.projectId,
+            projectSlug,
           })}
         </RuntimeProvider>
       </div>

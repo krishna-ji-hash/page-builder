@@ -25,6 +25,8 @@ function buildStatusLabel({
 export default function BuilderTopbar({
   projectName,
   pageName,
+  onOpenSeo,
+  onOpenAudit,
   clipboardNodeTypeLabel = null,
   saveAckVisible = false,
   device,
@@ -119,6 +121,12 @@ export default function BuilderTopbar({
       <div className="bld-topbar__right">
         <div className="bld-topbar__actions">
           <ThemeToggle />
+          <button type="button" className="bld-btn bld-btn--ghost" onClick={onOpenSeo} title="Edit page SEO">
+            SEO
+          </button>
+          <button type="button" className="bld-btn bld-btn--ghost" onClick={onOpenAudit} title="Run audits (responsive, performance, accessibility)">
+            Audit
+          </button>
           <button type="button" className="bld-btn bld-btn--ghost" onClick={onUndo} disabled={!canUndo}>
             Undo
           </button>

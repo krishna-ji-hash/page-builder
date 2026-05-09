@@ -4,8 +4,7 @@ import { useMemo, useState } from 'react';
 import { isValidNodeHierarchy } from '@/lib/builderHierarchy';
 import { getWidgetsForProjectType } from '@/lib/builder/widgetRegistry';
 import { useBuilderTheme } from '@/context/BuilderThemeContext';
-import TemplateMarketplace from './templates/TemplateMarketplace';
-import FullPageTemplateMarketplace from './templates/FullPageTemplateMarketplace';
+import { FULL_PAGE_TEMPLATES } from '@/lib/fullPageTemplates';
 import { getGlobalLinkMeta, isLinkedGlobalPlaceholder } from '@/lib/globalComponentLinkMeta';
 
 const ELEMENT_CARDS = [
@@ -224,6 +223,9 @@ export default function BuilderSidebar({
   const hasGlobalFooter = Boolean(globalSections?.footer);
   const canCreateUnderSelection = Boolean(selectedNode && validParentTypes.has(selectedNode.nodeType));
   const [collapsedLayerMap, setCollapsedLayerMap] = useState({});
+  const [selectedFullPageTemplateId, setSelectedFullPageTemplateId] = useState(
+    FULL_PAGE_TEMPLATES?.[0]?.id || ''
+  );
 
   const toggleLayerCollapse = (nodeId) =>
     setCollapsedLayerMap((prev) => ({ ...prev, [nodeId]: !prev[nodeId] }));
@@ -474,28 +476,47 @@ export default function BuilderSidebar({
             </div>
             <details className="bld-acc" open>
               <summary>
-                Marketplace (beta)
-                <span className="bld-acc__meta">Cards • search • favorites</span>
-              </summary>
-              <div className="bld-acc__body">
-                <TemplateMarketplace
-                  disabled={isCreatingNode}
-                  onInsertStarterTemplate={onInsertStarterTemplate}
-                  onInsertHeaderTemplate={onInsertHeaderTemplate}
-                  onInsertSectionTemplate={onInsertSectionTemplate}
-                />
-              </div>
-            </details>
-            <details className="bld-acc" open>
-              <summary>
                 Full Page Templates
-                <span className="bld-acc__meta">Insert / replace • responsive preview</span>
+                <span className="bld-acc__meta">Simple list (no cards)</span>
               </summary>
               <div className="bld-acc__body">
-                <FullPageTemplateMarketplace
-                  disabled={isCreatingNode}
-                  onApplyFullPageTemplate={onApplyFullPageTemplate}
-                />
+                <div className="bld-field">
+                  <label className="bld-label">Choose template</label>
+                  <select
+                    className="bld-input"
+                    value={selectedFullPageTemplateId}
+                    onChange={(e) => setSelectedFullPageTemplateId(e.target.value)}
+                    disabled={isCreatingNode}
+                  >
+                    {(FULL_PAGE_TEMPLATES || []).map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="bld-acc__body bld-acc__body--grid">
+                  <button
+                    type="button"
+                    className="bld-block-card"
+                    onClick={() => onApplyFullPageTemplate?.({ templateId: selectedFullPageTemplateId, mode: 'insert' })}
+                    disabled={isCreatingNode || !selectedFullPageTemplateId}
+                    title="Insert full page template (keeps existing sections)"
+                  >
+                    <span className="bld-block-card__icon">＋</span>
+                    <span className="bld-block-card__label">Insert</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="bld-block-card"
+                    onClick={() => onApplyFullPageTemplate?.({ templateId: selectedFullPageTemplateId, mode: 'replace' })}
+                    disabled={isCreatingNode || !selectedFullPageTemplateId}
+                    title="Replace page with selected template"
+                  >
+                    <span className="bld-block-card__icon">↻</span>
+                    <span className="bld-block-card__label">Replace</span>
+                  </button>
+                </div>
               </div>
             </details>
             <details className="bld-acc" open>
