@@ -32,11 +32,6 @@ function cmsRepeat(node) {
   return isPlainObject(cms.repeat) ? cms.repeat : null;
 }
 
-function bindingExpr(path) {
-  const p = String(path || '').trim();
-  return p ? `{{${p}}}` : '';
-}
-
 function fieldOptionsFromSchema(schema) {
   const fields = Array.isArray(schema?.fields) ? schema.fields : [];
   const opts = [
@@ -132,7 +127,7 @@ export default function CmsBindingsPanel({ selectedNode, projectId, onChange }) 
         </span>
       </div>
 
-      {!canUseCms ? <div className="bld-field-note">CMS needs a project context.</div> : null}
+      {!canUseCms ? <div className="bld-field-note">Project</div> : null}
       {error ? <div className="bld-field-note" style={{ color: '#b91c1c' }}>{error}</div> : null}
 
       {canUseCms ? (
@@ -150,7 +145,7 @@ export default function CmsBindingsPanel({ selectedNode, projectId, onChange }) 
               </option>
             ))}
           </select>
-          <p className="bld-field-note">This controls which fields show in binding dropdowns (uses repeater collection by default).</p>
+          <p className="bld-field-note">Schema</p>
         </div>
       ) : null}
 
@@ -159,7 +154,7 @@ export default function CmsBindingsPanel({ selectedNode, projectId, onChange }) 
           <label className="bld-label">Repeater</label>
           <div className="bld-field-grid" style={{ gridTemplateColumns: '1fr auto', alignItems: 'center' }}>
             <div className="bld-field-note" style={{ margin: 0 }}>
-              Repeat the first child as a template (preview shows sample item only).
+              Template
             </div>
             <label style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
               <input
@@ -330,7 +325,7 @@ export default function CmsBindingsPanel({ selectedNode, projectId, onChange }) 
         <div className="bld-field" style={{ marginTop: 12 }}>
           <label className="bld-label">Bindings</label>
           {!contextCollectionSlug ? (
-            <div className="bld-field-note">Pick a binding context collection (or enable repeater) to see fields.</div>
+            <div className="bld-field-note">Context</div>
           ) : null}
 
           {selectedNode.nodeType === 'heading' || selectedNode.nodeType === 'text' ? (
@@ -432,7 +427,7 @@ export default function CmsBindingsPanel({ selectedNode, projectId, onChange }) 
           ) : null}
 
           <p className="bld-field-note" style={{ marginTop: 6 }}>
-            Bindings write placeholders into widget props (e.g. <code>{bindingExpr('item.title')}</code>) and are expanded before render.
+            Placeholders
           </p>
         </div>
       ) : null}

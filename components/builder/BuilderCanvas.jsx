@@ -289,7 +289,7 @@ function renderNodeContent(
     return (
       <figure className="bld-demo-image-wrap" style={widgetCss || undefined}>
         <img
-          src={src || node.props?.src || 'https://via.placeholder.com/800x400'}
+          src={src || node.props?.src || '/builder-placeholder.svg'}
           alt={alt || node.props?.alt || node.displayName}
           className="bld-demo-image"
           style={imageStyle || undefined}
@@ -387,21 +387,45 @@ function renderNodeContent(
   }
   if (node.nodeType === 'carousel') {
     const slides = Array.isArray(node.props?.slides) ? node.props.slides : [];
+    const carouselVariant =
+      typeof node.props?.variant === 'string' && node.props.variant
+        ? node.props.variant
+        : typeof node.props?.settings?.variant === 'string'
+          ? node.props.settings.variant
+          : undefined;
+    const carouselImageFit = node.props?.imageFit ?? node.props?.settings?.imageFit;
+    const carouselShowOverlay = node.props?.showOverlay ?? node.props?.settings?.showOverlay;
+    const carouselImageObjectPosition = node.props?.imageObjectPosition ?? node.props?.settings?.imageObjectPosition;
+    const carouselTickerDurationSec = node.props?.tickerDurationSec ?? node.props?.settings?.tickerDurationSec;
+    const carouselTransitionEasing = node.props?.transitionEasing ?? node.props?.settings?.transitionEasing;
+    const carouselScrollDirection = node.props?.scrollDirection ?? node.props?.settings?.scrollDirection;
+    const carouselPauseOnHover = node.props?.pauseOnHover ?? node.props?.settings?.pauseOnHover;
+    const carouselAutoplay = node.props?.autoplay ?? node.props?.settings?.autoplay;
+    const carouselLoop = node.props?.loop ?? node.props?.settings?.loop;
+    const carouselInterval =
+      node.props?.interval ?? node.props?.settings?.autoplayMs ?? node.props?.settings?.interval;
     return (
       <div className="bld-demo-carousel" style={widgetCss || undefined}>
         <Carousel
           slides={slides.length ? slides : [{ title: 'Slide', body: 'Carousel preview' }]}
           settings={node.props?.settings}
           device={device || 'desktop'}
-          variant={node.props?.variant}
-          autoplay={node.props?.autoplay}
-          loop={node.props?.loop}
+          variant={carouselVariant}
+          autoplay={carouselAutoplay}
+          loop={carouselLoop}
           showArrows={node.props?.showArrows}
           showDots={node.props?.showDots}
           speed={node.props?.speed}
-          interval={node.props?.interval}
+          interval={carouselInterval}
           slidesPerView={node.props?.slidesPerView}
           gap={node.props?.gap}
+          imageFit={carouselImageFit}
+          showOverlay={carouselShowOverlay}
+          imageObjectPosition={carouselImageObjectPosition}
+          tickerDurationSec={carouselTickerDurationSec}
+          transitionEasing={carouselTransitionEasing}
+          scrollDirection={carouselScrollDirection}
+          pauseOnHover={carouselPauseOnHover}
           style={{ width: '100%', maxWidth: '100%' }}
         />
       </div>

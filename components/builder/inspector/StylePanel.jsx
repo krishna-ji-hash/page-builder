@@ -56,6 +56,11 @@ export default function StylePanel({
   return (
     <div className="bld-panel">
       <div className="bld-panel__head">Style</div>
+      {selectedNode.nodeType === 'row' ? (
+        <p className="bld-panel__hint" style={{ margin: '0 0 12px' }}>
+          Poora section chhota / patla: pehle yahi Style tab me Spacing → Padding (top + bottom) kam karein. Phir Size → Height px — 0 = auto. Agar ab bhi zyada uncha ho to canvas par andar ki column ya image select karke un par bhi Style → Size ya Content me image height dekhein (section template kabhi column par min-height laga deta hai).
+        </p>
+      ) : null}
       <Section title="Visibility by breakpoint" defaultOpen>
         <ResponsiveVisibilityControls
           desktopHidden={visibilityByDevice.desktop}

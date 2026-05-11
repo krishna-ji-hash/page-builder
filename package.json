@@ -2,8 +2,9 @@
   "name": "builder-custom",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "dev:clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true}); console.log('Cleared .next cache')\" && next dev",
+    "dev": "node scripts/dev.mjs",
+    "dev:simple": "next dev",
+    "dev:clean": "node scripts/clean-next.mjs && node scripts/dev.mjs",
     "build": "next build",
     "start": "next start",
     "db:up": "docker compose up -d",

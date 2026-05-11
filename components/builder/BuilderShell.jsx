@@ -104,8 +104,8 @@ function walkNodes(nodes, visit) {
   }
 }
 
-function sanitizeStyleForStrictMode(styleJson) {
-  const normalized = normalizeResponsiveStyle(styleJson || {});
+function sanitizeStyleForStrictMode(styleJson, nodeType = null) {
+  const normalized = normalizeResponsiveStyle(styleJson || {}, nodeType ? { nodeType } : {});
   const deviceKeys = ['desktop', 'tablet', 'mobile'];
   const next = { ...normalized };
   for (const key of deviceKeys) {
@@ -413,7 +413,7 @@ function humanizeClientError(error) {
     msg.includes('Load failed') ||
     msg.includes('fetch resource')
   ) {
-    return 'Could not reach the server. Check that the app is running (npm run dev), the URL is correct, and your network connection.';
+    return 'Could not reach the server. Check that the app is running (npm run dev), the URL matches this app (same host/port), and your network is OK. If the app is running but this persists, start MySQL (npm run db:up), copy .env from .env.example, and run npm run db:migrate (or use npm run dev so migrations run first).';
   }
   return msg;
 }
@@ -677,7 +677,7 @@ export default function BuilderShell({ pageId }) {
         setTree((currentTree) =>
           mapTreeNodes(currentTree, (node) => ({
             ...node,
-            style_json: sanitizeStyleForStrictMode(node.style_json),
+            style_json: sanitizeStyleForStrictMode(node.style_json, node?.nodeType),
           }))
         );
         setHasUnpublishedEdits(true);
@@ -686,14 +686,25 @@ export default function BuilderShell({ pageId }) {
     });
   }, []);
 
+  // Must use the same normalizeResponsiveStyle(nodeType) path as treeNeedsStrictSanitize, or this
+  // effect can re-run forever (tree dep → setTree → new tree ref → still "needs" sanitize).
+  const strictSanitizePassRef = useRef(0);
+  useEffect(() => {
+    strictSanitizePassRef.current = 0;
+  }, [pid]);
   useEffect(() => {
     if (isFreeMode) return;
     if (!tree?.length) return;
-    if (!treeNeedsStrictSanitize(tree)) return;
+    if (!treeNeedsStrictSanitize(tree)) {
+      strictSanitizePassRef.current = 0;
+      return;
+    }
+    if (strictSanitizePassRef.current >= 2) return;
+    strictSanitizePassRef.current += 1;
     setTree((currentTree) =>
       mapTreeNodes(currentTree, (node) => ({
         ...node,
-        style_json: sanitizeStyleForStrictMode(node.style_json),
+        style_json: sanitizeStyleForStrictMode(node.style_json, node?.nodeType),
       }))
     );
     setHasUnpublishedEdits(true);
@@ -718,16 +729,23 @@ export default function BuilderShell({ pageId }) {
     });
   }, []);
 
-  const reloadBuilder = useCallback(async () => {
+  const reloadBuilder = useCallback(async (signal) => {
     setErrorMessage('');
-    const response = await fetch(`/api/pages/${pid}/builder`);
+    let response;
+    try {
+      response = await fetch(`/api/pages/${pid}/builder`, { cache: 'no-store', signal });
+    } catch (err) {
+      if (err?.name === 'AbortError') return;
+      throw err;
+    }
     const data = await readJsonSafe(response);
     if (!response.ok) {
       throw new Error(formatLoadError(data, response));
     }
+    if (signal?.aborted) return;
+    const nextTree = reconcileStructuralParents(autoFixTree(data.tree || []));
     setPage(data.page);
     setDraftVersion(data.draftVersion || null);
-    const nextTree = reconcileStructuralParents(autoFixTree(data.tree || []));
     setTree(nextTree);
     setProjectPages(Array.isArray(data.projectPages) ? data.projectPages : []);
     setSelectedNodeId((prev) => {
@@ -744,15 +762,17 @@ export default function BuilderShell({ pageId }) {
       return;
     }
 
+    const ac = new AbortController();
     let cancelled = false;
     const loadBuilder = async () => {
       setIsLoading(true);
       setErrorMessage('');
       try {
-        await reloadBuilder();
+        await reloadBuilder(ac.signal);
       } catch (error) {
+        if (cancelled || error?.name === 'AbortError') return;
         if (!cancelled) {
-          setErrorMessage(error instanceof Error ? error.message : String(error));
+          setErrorMessage(humanizeClientError(error));
         }
       } finally {
         if (!cancelled) {
@@ -764,6 +784,7 @@ export default function BuilderShell({ pageId }) {
     loadBuilder();
     return () => {
       cancelled = true;
+      ac.abort();
     };
   }, [pageIdValid, reloadBuilder]);
 
@@ -1369,7 +1390,7 @@ export default function BuilderShell({ pageId }) {
                   : nodeType === 'button'
                     ? 'Click me'
                     : '',
-            src: nodeType === 'image' ? 'https://via.placeholder.com/800x400' : undefined,
+            src: nodeType === 'image' ? '/builder-placeholder.svg' : undefined,
             items:
               nodeType === 'menu'
                 ? [
@@ -2171,7 +2192,7 @@ export default function BuilderShell({ pageId }) {
         displayName: 'Logo',
         positionIndex: 0,
         props: {
-          src: 'https://via.placeholder.com/140x44?text=Logo',
+          src: '/builder-placeholder.svg',
           alt: 'Company logo',
         },
         style_json: {

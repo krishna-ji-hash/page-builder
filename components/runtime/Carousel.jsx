@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
@@ -108,24 +108,124 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
     const merged = normalizePropsToSettings({ ...restProps, settings }, device);
     return merged;
   }, [restProps, settings, device]);
+  const variantKey = String(cfg.variant || 'hero').toLowerCase();
+  const isTickerVariant = variantKey === 'ticker';
+  const isMarqueeVariant = variantKey === 'marquee';
+  const isTickerOrMarquee = isTickerVariant || isMarqueeVariant;
+  const isLogoVariant = variantKey === 'logo';
   const imageFitRaw = restProps?.imageFit ?? settings?.imageFit ?? 'cover';
-  const imageFit = String(imageFitRaw || 'cover').toLowerCase() === 'contain' ? 'contain' : 'cover';
+  const imageFitBase = String(imageFitRaw || 'cover').toLowerCase() === 'contain' ? 'contain' : 'cover';
+  const imageFit = isLogoVariant ? 'contain' : imageFitBase;
+  const imagePosRaw = String(restProps?.imageObjectPosition ?? settings?.imageObjectPosition ?? 'center')
+    .toLowerCase()
+    .trim();
+  const objectPositionMap = {
+    center: 'center',
+    top: 'center top',
+    bottom: 'center bottom',
+    left: 'left center',
+    right: 'right center',
+  };
+  const imageObjectPosition = objectPositionMap[imagePosRaw] || 'center';
+  const transitionEasingRaw = String(restProps?.transitionEasing ?? settings?.transitionEasing ?? 'ease')
+    .toLowerCase()
+    .trim();
+  const easingCssMap = {
+    ease: 'cubic-bezier(0.2, 0.8, 0.2, 1)',
+    linear: 'linear',
+    'ease-in-out': 'ease-in-out',
+    'ease-out': 'ease-out',
+  };
+  const transitionEasingCss = easingCssMap[transitionEasingRaw] || easingCssMap.ease;
   const showOverlayRaw = restProps?.showOverlay ?? settings?.showOverlay;
-  const showOverlay = showOverlayRaw === undefined ? true : Boolean(showOverlayRaw);
+  const variantForOverlay = variantKey || 'hero';
+  const overlayDefaultOn =
+    variantForOverlay !== 'image' &&
+    variantForOverlay !== 'logo' &&
+    variantForOverlay !== 'ticker' &&
+    variantForOverlay !== 'marquee';
+  const showOverlay =
+    showOverlayRaw === undefined ? overlayDefaultOn : Boolean(showOverlayRaw);
   const perView = clamp(cfg.perView, 1, 6);
   const maxIndex = Math.max(0, safeSlides.length - perView);
+  const nSlides = safeSlides.length;
+  const useSeamlessLoop = Boolean(cfg.loop) && nSlides > 1 && perView === 1;
+
+  const trackSlides = useMemo(() => {
+    if (!useSeamlessLoop) return safeSlides.map((slide) => ({ slide, key: String(slide.id) }));
+    const last = safeSlides[nSlides - 1];
+    const first = safeSlides[0];
+    return [
+      { slide: last, key: `${String(last.id)}--infinite-prev` },
+      ...safeSlides.map((s) => ({ slide: s, key: String(s.id) })),
+      { slide: first, key: `${String(first.id)}--infinite-next` },
+    ];
+  }, [useSeamlessLoop, safeSlides, nSlides]);
 
   const [index, setIndex] = useState(0);
+  const [instantTransition, setInstantTransition] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const indexRef = useRef(0);
   indexRef.current = index;
 
-  useEffect(() => {
-    setIndex((cur) => clamp(cur, 0, maxIndex));
-  }, [maxIndex]);
+  const tickerDurationSec = useMemo(() => {
+    const raw = Number(restProps?.tickerDurationSec ?? settings?.tickerDurationSec ?? 32);
+    return Math.max(8, Math.min(120, Number.isFinite(raw) ? raw : 32));
+  }, [restProps?.tickerDurationSec, settings?.tickerDurationSec]);
+
+  const tickerDupSlides = useMemo(() => {
+    if (!safeSlides.length) return [];
+    const copies = 2;
+    const out = [];
+    for (let c = 0; c < copies; c += 1) {
+      safeSlides.forEach((s) => {
+        out.push({ slide: s, key: `${s.id}--t${c}` });
+      });
+    }
+    return out;
+  }, [safeSlides]);
+
+  const scrollDirRaw = String(restProps?.scrollDirection ?? settings?.scrollDirection ?? '').toLowerCase().trim();
+  const scrollDirection =
+    scrollDirRaw === 'right' || scrollDirRaw === 'left' || scrollDirRaw === 'opposite'
+      ? scrollDirRaw
+      : isTickerVariant
+        ? 'opposite'
+        : isMarqueeVariant
+          ? 'right'
+          : 'left';
+  const effectiveScrollDir = isMarqueeVariant && scrollDirection === 'opposite' ? 'left' : scrollDirection;
+  const row1TrackClass =
+    effectiveScrollDir === 'right' ? 'live-carousel__ticker-track--rtl' : 'live-carousel__ticker-track--ltr';
+  const row2TrackClass =
+    effectiveScrollDir === 'opposite'
+      ? 'live-carousel__ticker-track--rtl'
+      : effectiveScrollDir === 'right'
+        ? 'live-carousel__ticker-track--rtl'
+        : 'live-carousel__ticker-track--ltr';
 
   useEffect(() => {
+    if (useSeamlessLoop) {
+      setInstantTransition(false);
+      setIndex(1);
+      return;
+    }
+    setIndex((cur) => clamp(cur, 0, maxIndex));
+  }, [maxIndex, useSeamlessLoop, nSlides]);
+
+  useEffect(() => {
+    if (isTickerOrMarquee) return undefined;
     if (!cfg.autoplay || isPaused || safeSlides.length <= 1) return undefined;
+    if (useSeamlessLoop) {
+      const t = setInterval(() => {
+        setIndex((cur) => {
+          if (cur < nSlides) return cur + 1;
+          if (cur === nSlides) return nSlides + 1;
+          return cur;
+        });
+      }, cfg.autoplayMs);
+      return () => clearInterval(t);
+    }
     const t = setInterval(() => {
       setIndex((cur) => {
         if (cur >= maxIndex) return cfg.loop ? 0 : cur;
@@ -133,30 +233,137 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
       });
     }, cfg.autoplayMs);
     return () => clearInterval(t);
-  }, [cfg.autoplay, cfg.autoplayMs, cfg.loop, isPaused, maxIndex, safeSlides.length]);
+  }, [
+    cfg.autoplay,
+    cfg.autoplayMs,
+    cfg.loop,
+    isPaused,
+    maxIndex,
+    nSlides,
+    safeSlides.length,
+    isTickerOrMarquee,
+    useSeamlessLoop,
+  ]);
+
+  useLayoutEffect(() => {
+    if (!instantTransition) return undefined;
+    let id2;
+    const id1 = requestAnimationFrame(() => {
+      id2 = requestAnimationFrame(() => setInstantTransition(false));
+    });
+    return () => {
+      cancelAnimationFrame(id1);
+      if (id2 != null) cancelAnimationFrame(id2);
+    };
+  }, [instantTransition, index]);
 
   if (!safeSlides.length) return null;
 
+  if (isTickerOrMarquee) {
+    const ariaLabel = isMarqueeVariant ? 'Smooth logo marquee' : 'Logo ticker';
+    return (
+      <section
+        style={{
+          ...(style || {}),
+          '--carousel-gap': `${cfg.gapPx}px`,
+          '--ticker-duration': `${tickerDurationSec}s`,
+        }}
+        className={`live-carousel live-carousel--ticker ${isMarqueeVariant ? 'live-carousel--marquee' : ''} ${isPaused ? 'is-paused' : ''}`.trim()}
+        aria-label={ariaLabel}
+        tabIndex={0}
+        onMouseEnter={() => (cfg.pauseOnHover ? setIsPaused(true) : null)}
+        onMouseLeave={() => (cfg.pauseOnHover ? setIsPaused(false) : null)}
+      >
+        <div className={`live-carousel__ticker ${isMarqueeVariant ? 'live-carousel__ticker--single' : ''}`.trim()}>
+          <div className="live-carousel__ticker-row">
+            <div className={`live-carousel__ticker-track ${row1TrackClass}`.trim()}>
+              {tickerDupSlides.map(({ slide, key }) => (
+                <div key={key} className="live-carousel__ticker-card">
+                  {slide.imageSrc ? (
+                    <img className="live-carousel__ticker-img" src={slide.imageSrc} alt={slide.imageAlt || slide.title || ''} />
+                  ) : (
+                    <span className="live-carousel__ticker-fallback">{slide.title}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+          {!isMarqueeVariant ? (
+            <div className="live-carousel__ticker-row">
+              <div className={`live-carousel__ticker-track ${row2TrackClass}`.trim()}>
+                {tickerDupSlides.map(({ slide, key }) => (
+                  <div key={`${key}-b`} className="live-carousel__ticker-card">
+                    {slide.imageSrc ? (
+                      <img className="live-carousel__ticker-img" src={slide.imageSrc} alt={slide.imageAlt || slide.title || ''} />
+                    ) : (
+                      <span className="live-carousel__ticker-fallback">{slide.title}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </section>
+    );
+  }
+
+  const handleTrackTransitionEnd = (e) => {
+    if (!useSeamlessLoop || e.propertyName !== 'transform') return;
+    const cur = indexRef.current;
+    if (cur === nSlides + 1) {
+      setInstantTransition(true);
+      setIndex(1);
+      return;
+    }
+    if (cur === 0) {
+      setInstantTransition(true);
+      setIndex(nSlides);
+    }
+  };
+
   const prev = () => {
     setIndex((cur) => {
+      if (useSeamlessLoop) {
+        if (cur > 1) return cur - 1;
+        if (cur === 1) return 0;
+        return cur;
+      }
       if (cur <= 0) return cfg.loop ? maxIndex : 0;
       return cur - 1;
     });
   };
   const next = () => {
     setIndex((cur) => {
+      if (useSeamlessLoop) {
+        if (cur < nSlides) return cur + 1;
+        if (cur === nSlides) return nSlides + 1;
+        return cur;
+      }
       if (cur >= maxIndex) return cfg.loop ? 0 : maxIndex;
       return cur + 1;
     });
   };
 
-  const pages = Math.max(1, maxIndex + 1);
-  const sectionClass = `live-carousel live-carousel--${cfg.variant || 'hero'} ${imageFit === 'contain' ? 'live-carousel--fit-contain' : ''}`.trim();
+  const pages = useSeamlessLoop ? nSlides : Math.max(1, maxIndex + 1);
+  const activeDotIndex = useSeamlessLoop ? ((index - 1 + nSlides) % nSlides + nSlides) % nSlides : index;
+  const fitModeClass =
+    isLogoVariant ? 'live-carousel--slide-intrinsic' : imageFit === 'contain' ? 'live-carousel--fit-contain' : '';
+  const sectionClass = `live-carousel live-carousel--${variantKey} ${fitModeClass}`.trim();
+  const slideModeClass =
+    variantKey === 'card'
+      ? ''
+      : variantKey === 'hero'
+        ? 'live-carousel__slide--hero'
+        : variantKey === 'logo'
+          ? 'live-carousel__slide--logo'
+          : 'live-carousel__slide--image';
   const vars = {
     '--carousel-gap': `${cfg.gapPx}px`,
     '--carousel-per-view': String(perView),
     '--carousel-speed': `${cfg.speedMs}ms`,
     '--carousel-image-fit': imageFit,
+    '--carousel-easing': transitionEasingCss,
   };
   const onKeyDown = (event) => {
     if (event.defaultPrevented) return;
@@ -168,10 +375,10 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
       next();
     } else if (event.key === 'Home') {
       event.preventDefault();
-      setIndex(0);
+      setIndex(useSeamlessLoop ? 1 : 0);
     } else if (event.key === 'End') {
       event.preventDefault();
-      setIndex(maxIndex);
+      setIndex(useSeamlessLoop ? nSlides : maxIndex);
     }
   };
 
@@ -184,19 +391,18 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
       onKeyDown={onKeyDown}
       onMouseEnter={() => (cfg.pauseOnHover ? setIsPaused(true) : null)}
       onMouseLeave={() => (cfg.pauseOnHover ? setIsPaused(false) : null)}
-      onFocus={() => (cfg.pauseOnHover ? setIsPaused(true) : null)}
-      onBlur={() => (cfg.pauseOnHover ? setIsPaused(false) : null)}
     >
       <div className="live-carousel__viewport">
         <div
           className="live-carousel__track"
           style={{
-            transform: `translateX(calc(${index} * (0px - (100% + var(--carousel-gap)) / var(--carousel-per-view))))`,
-            transitionDuration: `${cfg.speedMs}ms`,
+            transform: `translate3d(calc(${index} * (0px - (100% + var(--carousel-gap)) / var(--carousel-per-view))), 0, 0)`,
+            transition: instantTransition ? 'none' : `transform ${cfg.speedMs}ms ${transitionEasingCss}`,
           }}
+          onTransitionEnd={handleTrackTransitionEnd}
         >
-          {safeSlides.map((slide) => (
-            <div key={slide.id} className="live-carousel__item">
+          {trackSlides.map(({ slide, key }) => (
+            <div key={key} className="live-carousel__item">
               {cfg.variant === 'card' ? (
                 <article className="live-carousel__card-slide">
                   {slide.imageSrc ? (
@@ -204,7 +410,10 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
                       className="live-carousel__card-img"
                       src={slide.imageSrc}
                       alt={slide.imageAlt || slide.title}
-                      style={{ objectFit: imageFit }}
+                      style={{
+                        objectFit: imageFit,
+                        ...(imageFit === 'cover' ? { objectPosition: imageObjectPosition } : {}),
+                      }}
                     />
                   ) : null}
                   <div className="live-carousel__card-inner">
@@ -218,13 +427,16 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
                   </div>
                 </article>
               ) : (
-                <article className="live-carousel__slide">
+                <article className={`live-carousel__slide ${slideModeClass}`.trim()}>
                   {slide.imageSrc ? (
                     <img
                       className="live-carousel__img"
                       src={slide.imageSrc}
                       alt={slide.imageAlt || slide.title}
-                      style={{ objectFit: imageFit }}
+                      style={{
+                        objectFit: imageFit,
+                        ...(imageFit === 'cover' ? { objectPosition: imageObjectPosition } : {}),
+                      }}
                     />
                   ) : null}
                   {!showOverlay ? null : (
@@ -266,10 +478,10 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
             <button
               key={String(i)}
               type="button"
-              className={`live-carousel__dot ${i === index ? 'is-active' : ''}`.trim()}
-              onClick={() => setIndex(i)}
+              className={`live-carousel__dot ${i === activeDotIndex ? 'is-active' : ''}`.trim()}
+              onClick={() => setIndex(useSeamlessLoop ? i + 1 : i)}
               aria-label={`Go to slide ${i + 1}`}
-              aria-pressed={i === index}
+              aria-pressed={i === activeDotIndex}
             />
           ))}
         </div>

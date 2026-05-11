@@ -281,7 +281,7 @@ export default function BuilderInspector({
     animationDuration: 0.6,
     animationDelay: 0,
     carouselSlidesJson: '[]',
-    carouselVariant: 'hero',
+    carouselVariant: 'image',
     carouselAutoplay: false,
     carouselLoop: true,
     carouselArrows: true,
@@ -292,7 +292,11 @@ export default function BuilderInspector({
     carouselPerView: '1',
     carouselPauseOnHover: true,
     carouselImageFit: 'cover',
-    carouselShowOverlay: true,
+    carouselImageObjectPosition: 'center',
+    carouselTickerDurationSec: '32',
+    carouselScrollDirection: 'right',
+    carouselTransitionEasing: 'ease',
+    carouselShowOverlay: false,
   });
 
   const hasTabletOverrides = useMemo(
@@ -335,7 +339,7 @@ export default function BuilderInspector({
         inferredContainerWidthMode = 'full';
       }
     }
-    const nodeCarouselVariant = String(selectedNode.props?.variant || selectedNode.props?.settings?.variant || 'hero');
+    const nodeCarouselVariant = String(selectedNode.props?.variant || selectedNode.props?.settings?.variant || 'image');
     const pendingVariant = pendingCarouselVariantRef.current;
     const shouldUsePendingVariant =
       pendingVariant &&
@@ -491,9 +495,46 @@ export default function BuilderInspector({
         'carouselImageFit',
         String(selectedNode.props?.imageFit || selectedNode.props?.settings?.imageFit || 'cover')
       ),
+      carouselImageObjectPosition: pickPending(
+        'carouselImageObjectPosition',
+        String(
+          selectedNode.props?.imageObjectPosition ||
+            selectedNode.props?.settings?.imageObjectPosition ||
+            'center'
+        )
+      ),
+      carouselTickerDurationSec: pickPending(
+        'carouselTickerDurationSec',
+        String(
+          Number(
+            selectedNode.props?.tickerDurationSec ??
+              selectedNode.props?.settings?.tickerDurationSec ??
+              32
+          )
+        )
+      ),
+      carouselScrollDirection: pickPending(
+        'carouselScrollDirection',
+        (() => {
+          const v0 = String(selectedNode.props?.variant || selectedNode.props?.settings?.variant || 'image');
+          const def = v0 === 'ticker' ? 'opposite' : 'left';
+          const s = String(selectedNode.props?.scrollDirection || selectedNode.props?.settings?.scrollDirection || def);
+          if (s === 'right' || s === 'left' || s === 'opposite') return s;
+          return def;
+        })()
+      ),
+      carouselTransitionEasing: pickPending(
+        'carouselTransitionEasing',
+        String(selectedNode.props?.transitionEasing || selectedNode.props?.settings?.transitionEasing || 'ease')
+      ),
       carouselShowOverlay: pickPending(
         'carouselShowOverlay',
-        Boolean(selectedNode.props?.showOverlay ?? selectedNode.props?.settings?.showOverlay ?? true)
+        (() => {
+          const v = String(selectedNode.props?.variant || selectedNode.props?.settings?.variant || 'image');
+          const overlayDefault =
+            v === 'image' || v === 'logo' || v === 'ticker' || v === 'marquee' ? false : true;
+          return Boolean(selectedNode.props?.showOverlay ?? selectedNode.props?.settings?.showOverlay ?? overlayDefault);
+        })()
       ),
       carouselPerView: pickPending(
         'carouselPerView',
@@ -606,6 +647,22 @@ export default function BuilderInspector({
     await updateProps({ ...(patch || {}) });
   };
 
+  /** One props write: avoids stale `selectedNode` between back-to-back updates dropping top-level fields (e.g. variant). */
+  const updateCarouselMirrored = async (topLevelPatch, settingsPatch = {}) => {
+    if (!selectedNode || selectedNode.nodeType !== 'carousel') return;
+    const prevSettings =
+      selectedNode.props?.settings && typeof selectedNode.props.settings === 'object' && !Array.isArray(selectedNode.props.settings)
+        ? selectedNode.props.settings
+        : {};
+    await updateProps({
+      ...(topLevelPatch || {}),
+      settings: {
+        ...prevSettings,
+        ...(settingsPatch || {}),
+      },
+    });
+  };
+
   const updateStyle = async (styleChanges, styleJsonOverride) => {
     if (!selectedNode) return;
     await updateNode(selectedNode.id, {
@@ -713,9 +770,16 @@ export default function BuilderInspector({
   };
 
   const handleContentChange = async (key, value) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
+    if (key !== 'carouselEnsureSlide0Image') {
+      setForm((prev) => ({ ...prev, [key]: value }));
+    }
     if (!selectedNode) return;
-    if (selectedNode.nodeType === 'carousel' && typeof key === 'string' && key.startsWith('carousel')) {
+    if (
+      selectedNode.nodeType === 'carousel' &&
+      typeof key === 'string' &&
+      key.startsWith('carousel') &&
+      key !== 'carouselEnsureSlide0Image'
+    ) {
       const pending = pendingCarouselFormRef.current || {};
       pendingCarouselFormRef.current = { ...pending, [key]: { value, ts: Date.now() } };
     }
@@ -825,72 +889,89 @@ export default function BuilderInspector({
     }
     if (selectedNode.nodeType === 'carousel') {
       if (key === 'carouselVariant') {
-        const v = String(value || 'hero');
+        const v = String(value || 'image');
         pendingCarouselVariantRef.current = { value: v, ts: Date.now() };
-        await updateCarouselTopLevel({ variant: v });
-        await updateCarouselSettings({ variant: v });
+        await updateCarouselMirrored({ variant: v }, { variant: v });
         return;
       }
       if (key === 'carouselAutoplay') {
         const v = Boolean(value);
-        await updateCarouselTopLevel({ autoplay: v });
-        await updateCarouselSettings({ autoplay: v });
+        await updateCarouselMirrored({ autoplay: v }, { autoplay: v });
         return;
       }
       if (key === 'carouselLoop') {
         const v = Boolean(value);
-        await updateCarouselTopLevel({ loop: v });
-        await updateCarouselSettings({ loop: v });
+        await updateCarouselMirrored({ loop: v }, { loop: v });
         return;
       }
       if (key === 'carouselArrows') {
         const v = Boolean(value);
-        await updateCarouselTopLevel({ showArrows: v });
-        await updateCarouselSettings({ arrows: v });
+        await updateCarouselMirrored({ showArrows: v }, { arrows: v });
         return;
       }
       if (key === 'carouselDots') {
         const v = Boolean(value);
-        await updateCarouselTopLevel({ showDots: v });
-        await updateCarouselSettings({ dots: v });
+        await updateCarouselMirrored({ showDots: v }, { dots: v });
         return;
       }
       if (key === 'carouselSpeedMs') {
         if (value === '') return;
         const ms = Math.max(0, Number(value) || 0);
-        await updateCarouselTopLevel({ speed: ms });
-        await updateCarouselSettings({ speedMs: ms });
+        await updateCarouselMirrored({ speed: ms }, { speedMs: ms });
         return;
       }
       if (key === 'carouselIntervalMs') {
         if (value === '') return;
         const ms = Math.max(0, Number(value) || 0);
-        await updateCarouselTopLevel({ interval: ms });
-        await updateCarouselSettings({ autoplayMs: ms });
+        await updateCarouselMirrored({ interval: ms }, { autoplayMs: ms });
         return;
       }
       if (key === 'carouselPauseOnHover') {
         const v = Boolean(value);
-        await updateCarouselTopLevel({ pauseOnHover: v });
+        await updateCarouselMirrored({ pauseOnHover: v }, {});
         return;
       }
       if (key === 'carouselGapPx') {
         if (value === '') return;
         const gap = Math.max(0, Number(value) || 0);
-        await updateCarouselTopLevel({ gap });
-        await updateCarouselSettings({ gapPx: gap });
+        await updateCarouselMirrored({ gap }, { gapPx: gap });
         return;
       }
       if (key === 'carouselImageFit') {
         const fit = String(value || 'cover').toLowerCase() === 'contain' ? 'contain' : 'cover';
-        await updateCarouselTopLevel({ imageFit: fit });
-        await updateCarouselSettings({ imageFit: fit });
+        await updateCarouselMirrored({ imageFit: fit }, { imageFit: fit });
+        return;
+      }
+      if (key === 'carouselImageObjectPosition') {
+        const raw = String(value || 'center').toLowerCase().trim();
+        const allowed = new Set(['center', 'top', 'bottom', 'left', 'right']);
+        const pos = allowed.has(raw) ? raw : 'center';
+        await updateCarouselMirrored({ imageObjectPosition: pos }, { imageObjectPosition: pos });
+        return;
+      }
+      if (key === 'carouselTickerDurationSec') {
+        if (value === '') return;
+        const n = Math.max(8, Math.min(120, Math.floor(Number(value) || 32)));
+        await updateCarouselMirrored({ tickerDurationSec: n }, { tickerDurationSec: n });
+        return;
+      }
+      if (key === 'carouselTransitionEasing') {
+        const raw = String(value || 'ease').toLowerCase().trim();
+        const allowed = new Set(['ease', 'linear', 'ease-in-out', 'ease-out']);
+        const easing = allowed.has(raw) ? raw : 'ease';
+        await updateCarouselMirrored({ transitionEasing: easing }, { transitionEasing: easing });
+        return;
+      }
+      if (key === 'carouselScrollDirection') {
+        const raw = String(value || 'right').toLowerCase().trim();
+        const allowed = new Set(['left', 'right', 'opposite']);
+        const dir = allowed.has(raw) ? raw : 'right';
+        await updateCarouselMirrored({ scrollDirection: dir }, { scrollDirection: dir });
         return;
       }
       if (key === 'carouselShowOverlay') {
         const enabled = Boolean(value);
-        await updateCarouselTopLevel({ showOverlay: enabled });
-        await updateCarouselSettings({ showOverlay: enabled });
+        await updateCarouselMirrored({ showOverlay: enabled }, { showOverlay: enabled });
         return;
       }
       if (key === 'carouselPerView') {
@@ -899,8 +980,7 @@ export default function BuilderInspector({
         const prevSettings = selectedNode.props?.settings && typeof selectedNode.props.settings === 'object' ? selectedNode.props.settings : {};
         const perView = prevSettings.perView && typeof prevSettings.perView === 'object' ? prevSettings.perView : {};
         const prevSpv = selectedNode.props?.slidesPerView && typeof selectedNode.props.slidesPerView === 'object' ? selectedNode.props.slidesPerView : {};
-        await updateCarouselTopLevel({ slidesPerView: { ...prevSpv, [device]: n } });
-        await updateCarouselSettings({ perView: { ...perView, [device]: n } });
+        await updateCarouselMirrored({ slidesPerView: { ...prevSpv, [device]: n } }, { perView: { ...perView, [device]: n } });
         return;
       }
       if (key === 'carouselSlidesReorder') {
@@ -938,6 +1018,38 @@ export default function BuilderInspector({
             current.length
           ),
         ];
+        await updateProps({ slides: next });
+        setForm((prevForm) => ({ ...prevForm, carouselSlidesJson: JSON.stringify(next, null, 2) }));
+        return;
+      }
+      if (key === 'carouselEnsureSlide0Image') {
+        const src = String(value || '');
+        if (!src) return;
+        const current = Array.isArray(selectedNode.props?.slides) ? selectedNode.props.slides : [];
+        let next;
+        if (current.length === 0) {
+          next = [
+            normalizeCarouselSlide(
+              {
+                id: 'slide-1',
+                title: 'Slide 1',
+                subtitle: '',
+                body: '',
+                image: src,
+                imageSrc: src,
+                imageAlt: '',
+                buttonText: 'Learn More',
+                buttonUrl: '#',
+                card: { title: '', body: '', align: 'left', theme: 'dark' },
+                cta: { label: '', href: '' },
+              },
+              0
+            ),
+          ];
+        } else {
+          const merged = { ...(current[0] || {}), imageSrc: src, image: src };
+          next = current.map((s, i) => (i === 0 ? normalizeCarouselSlide(merged, 0) : normalizeCarouselSlide(s, i)));
+        }
         await updateProps({ slides: next });
         setForm((prevForm) => ({ ...prevForm, carouselSlidesJson: JSON.stringify(next, null, 2) }));
         return;

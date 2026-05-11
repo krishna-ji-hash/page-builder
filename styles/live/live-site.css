@@ -157,7 +157,7 @@
   gap: var(--carousel-gap);
   will-change: transform;
   transition-property: transform;
-  transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition-timing-function: var(--carousel-easing, cubic-bezier(0.2, 0.8, 0.2, 1));
 }
 
 .live-carousel__item {
@@ -171,9 +171,236 @@
   background: linear-gradient(135deg, #0b1220, #0f172a);
 }
 
+/* Image slider: compact gallery, bottom-aligned overlay, neutral image treatment */
+.live-carousel--image .live-carousel__slide {
+  min-height: 200px;
+  background: #0f1419;
+}
+.live-carousel--image .live-carousel__img {
+  filter: none;
+}
+.live-carousel--image .live-carousel__overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  padding: clamp(12px, 2.2vw, 18px);
+  pointer-events: none;
+}
+.live-carousel--image .live-carousel__overlay .live-carousel__card {
+  pointer-events: auto;
+  max-width: min(380px, 94%);
+  padding: 10px 14px;
+  border-radius: 12px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+}
+.live-carousel--image .live-carousel__title {
+  font-size: clamp(14px, 1.8vw, 18px);
+  margin-bottom: 4px;
+}
+.live-carousel--image .live-carousel__body {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Hero slider: tall cinematic strip, centered headline block */
+.live-carousel--hero .live-carousel__slide {
+  min-height: clamp(280px, 48vw, 560px);
+  background: linear-gradient(145deg, #05080f 0%, #0f172a 45%, #1a2332 100%);
+}
+.live-carousel--hero .live-carousel__img {
+  filter: saturate(1.08) contrast(1.04);
+}
+.live-carousel--hero .live-carousel__overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: clamp(18px, 4.5vw, 48px);
+  pointer-events: none;
+}
+.live-carousel--hero .live-carousel__overlay .live-carousel__card {
+  pointer-events: auto;
+  max-width: min(560px, 92%);
+  padding: 18px 20px;
+  border-radius: 16px;
+  box-shadow: 0 22px 56px rgba(0, 0, 0, 0.35);
+}
+.live-carousel--hero .live-carousel__title {
+  font-size: clamp(20px, 3.2vw, 34px);
+  margin-bottom: 10px;
+  letter-spacing: -0.03em;
+}
+.live-carousel--hero .live-carousel__body {
+  font-size: clamp(13px, 1.6vw, 16px);
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+/* Logo strip: natural image height, light row (logos / sponsors) */
+.live-carousel--logo {
+  background: #ffffff;
+  box-shadow: 0 6px 24px rgba(15, 23, 42, 0.08);
+}
+.live-carousel--logo.live-carousel--slide-intrinsic .live-carousel__slide,
+.live-carousel--logo .live-carousel__slide {
+  min-height: 0 !important;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+}
+.live-carousel--logo.live-carousel--slide-intrinsic .live-carousel__img,
+.live-carousel--logo .live-carousel__img {
+  position: relative;
+  inset: auto;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+  margin: 0 auto;
+  filter: none;
+}
+.live-carousel--logo .live-carousel__overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  padding: 10px 14px;
+  pointer-events: none;
+}
+.live-carousel--logo .live-carousel__overlay .live-carousel__card {
+  pointer-events: auto;
+  max-width: min(360px, 94%);
+  padding: 8px 12px;
+  border-radius: 10px;
+}
+.live-carousel--logo .live-carousel__dots {
+  background: rgba(248, 250, 252, 0.98);
+  border-top: 1px solid #e2e8f0;
+}
+.live-carousel--logo .live-carousel__dot {
+  border-color: rgba(15, 23, 42, 0.22);
+  background: rgba(15, 23, 42, 0.1);
+}
+.live-carousel--logo .live-carousel__dot.is-active {
+  background: rgba(15, 23, 42, 0.82);
+  border-color: rgba(15, 23, 42, 0.35);
+}
+
+/* Dual-row logo ticker: top row → left, bottom row → right, infinite loop */
+.live-carousel--ticker {
+  background: #f4f6f9;
+  padding: 14px 0;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.07);
+}
+.live-carousel--ticker .live-carousel__ticker {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.live-carousel--ticker .live-carousel__ticker-row {
+  overflow: hidden;
+  width: 100%;
+  mask-image: linear-gradient(to right, transparent, #000 5%, #000 95%, transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 5%, #000 95%, transparent);
+}
+.live-carousel--ticker .live-carousel__ticker-row:nth-child(2) {
+  padding-left: min(48px, 6vw);
+}
+.live-carousel--ticker .live-carousel__ticker-track {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  width: max-content;
+  gap: var(--carousel-gap, 12px);
+  will-change: transform;
+  backface-visibility: hidden;
+  transform: translateZ(0);
+}
+.live-carousel--ticker .live-carousel__ticker-track--ltr {
+  animation: live-carousel-ticker-ltr var(--ticker-duration, 32s) linear infinite;
+}
+.live-carousel--ticker .live-carousel__ticker-track--rtl {
+  animation: live-carousel-ticker-rtl var(--ticker-duration, 32s) linear infinite;
+}
+.live-carousel--ticker.is-paused .live-carousel__ticker-track--ltr,
+.live-carousel--ticker.is-paused .live-carousel__ticker-track--rtl {
+  animation-play-state: paused;
+}
+
+@keyframes live-carousel-ticker-ltr {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+@keyframes live-carousel-ticker-rtl {
+  from {
+    transform: translate3d(-50%, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.live-carousel__ticker-card {
+  flex: 0 0 auto;
+  width: 152px;
+  height: 78px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border: 1px solid #e5e9f0;
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+}
+.live-carousel__ticker-img {
+  max-width: 86%;
+  max-height: 72%;
+  object-fit: contain;
+  display: block;
+}
+.live-carousel__ticker-fallback {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-align: center;
+  padding: 0 6px;
+  line-height: 1.25;
+}
+
+/* Single-row smooth marquee: same ticker track, one row only */
+.live-carousel--marquee {
+  padding: 12px 0;
+}
+.live-carousel--marquee .live-carousel__ticker--single {
+  gap: 0;
+}
+
 /* Contain mode: show the whole image (no crop) by letting it size naturally. */
-.live-carousel--fit-contain .live-carousel__slide {
+.live-carousel--fit-contain .live-carousel__slide,
+.live-carousel--fit-contain.live-carousel--image .live-carousel__slide,
+.live-carousel--fit-contain.live-carousel--hero .live-carousel__slide {
   min-height: 0;
+}
+
+/* Contain: drop forced slide paint so short logos are not floating in a tall black card */
+.live-carousel.live-carousel--fit-contain.live-carousel--image .live-carousel__slide,
+.live-carousel.live-carousel--fit-contain.live-carousel--hero .live-carousel__slide {
+  background: transparent;
 }
 
 .live-carousel--fit-contain .live-carousel__img {
@@ -342,9 +569,10 @@
   width: 18px;
 }
 
-/* Card carousel variant */
+/* Card carousel variant — light surface, lifted cards (distinct from image/hero strips) */
 .live-carousel--card {
-  background: var(--color-surface, #ffffff);
+  background: var(--color-surface, #f8fafc);
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.08);
 }
 .live-carousel__card-slide {
   height: 100%;
@@ -378,6 +606,10 @@
   .live-carousel__card-slide:hover {
     transform: none;
   }
+  .live-carousel--ticker .live-carousel__ticker-track--ltr,
+  .live-carousel--ticker .live-carousel__ticker-track--rtl {
+    animation: none !important;
+  }
 }
 .live-carousel__card-img {
   width: 100%;
@@ -391,6 +623,20 @@
 }
 .live-carousel__card-inner {
   padding: 14px 16px 16px;
+}
+.live-carousel--card .live-carousel__card-inner .live-carousel__title {
+  font-size: clamp(15px, 1.9vw, 19px);
+  font-weight: 700;
+  color: var(--color-text, #0f172a);
+  letter-spacing: -0.02em;
+}
+.live-carousel--card .live-carousel__card-inner .live-carousel__body {
+  font-size: 13px;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--color-text, #0f172a) 78%, transparent);
+}
+.live-carousel--card .live-carousel__card-inner .live-carousel__cta {
+  margin-top: 4px;
 }
 
 /* Layout = inline from style_json (styleToCss + mergeDeviceStyleWithTypeDefaults). Classes = box/tokens only. */

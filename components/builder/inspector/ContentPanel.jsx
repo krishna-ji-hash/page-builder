@@ -83,6 +83,14 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
   const isForm = selectedNode.nodeType === 'form';
   const isRichText = selectedNode.nodeType === 'rich_text';
   const isCarousel = selectedNode.nodeType === 'carousel';
+  const carouselVariantKey =
+    isCarousel && ['image', 'hero', 'card', 'logo', 'ticker', 'marquee'].includes(form.carouselVariant)
+      ? form.carouselVariant
+      : 'image';
+  const isLogoSlider = isCarousel && form.carouselVariant === 'logo';
+  const isTickerSlider = isCarousel && form.carouselVariant === 'ticker';
+  const isMarqueeSlider = isCarousel && form.carouselVariant === 'marquee';
+  const isTickerOrMarquee = isCarousel && (isTickerSlider || isMarqueeSlider);
   const carouselSlides = isCarousel && Array.isArray(selectedNode.props?.slides) ? selectedNode.props.slides : [];
   const formFields = isForm && Array.isArray(selectedNode.props?.fields) ? selectedNode.props.fields : [];
   const formNotifications =
@@ -108,6 +116,25 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
           imageAlt: file.name.replace(/\.[^.]+$/, ''),
         },
       });
+      event.target.value = '';
+    };
+    reader.onerror = () => {
+      event.target.value = '';
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleCarouselQuickImageUpload = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type?.startsWith('image/')) {
+      event.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const src = typeof reader.result === 'string' ? reader.result : '';
+      onChange('carouselEnsureSlide0Image', src);
       event.target.value = '';
     };
     reader.onerror = () => {
@@ -420,127 +447,25 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
         <>
           <div className="bld-field">
             <label className="bld-label">Slider type</label>
-            <select className="bld-input" value={form.carouselVariant || 'hero'} onChange={(e) => onChange('carouselVariant', e.target.value)}>
+            <select
+              className="bld-input"
+              value={carouselVariantKey}
+              onChange={(e) => onChange('carouselVariant', e.target.value)}
+            >
               <option value="image">Image slider</option>
               <option value="hero">Hero slider</option>
               <option value="card">Card carousel</option>
+              <option value="logo">Logo strip</option>
+              <option value="ticker">Logo ticker (dual row)</option>
+              <option value="marquee">Smooth marquee (one row)</option>
             </select>
+            <p className="bld-field-note">Variants</p>
           </div>
 
           <div className="bld-field">
-            <label className="bld-label">Image fit</label>
-            <select className="bld-input" value={form.carouselImageFit || 'cover'} onChange={(e) => onChange('carouselImageFit', e.target.value)}>
-              <option value="cover">Cover (crop)</option>
-              <option value="contain">Contain (no crop)</option>
-            </select>
-            <p className="bld-field-note">Use Contain if your slide image is getting cut.</p>
-          </div>
-
-          <div className="bld-field bld-field--row">
-            <label className="bld-label" style={{ marginBottom: 0 }}>
-              Show overlay (text card)
-            </label>
-            <select
-              className="bld-input"
-              value={form.carouselShowOverlay ? 'yes' : 'no'}
-              onChange={(e) => onChange('carouselShowOverlay', e.target.value === 'yes')}
-            >
-              <option value="yes">Yes</option>
-              <option value="no">No</option>
-            </select>
-          </div>
-
-          <div className="bld-field-grid">
-            <div className="bld-field">
-              <label className="bld-label">Autoplay</label>
-              <select className="bld-input" value={form.carouselAutoplay ? 'yes' : 'no'} onChange={(e) => onChange('carouselAutoplay', e.target.value === 'yes')}>
-                <option value="no">Off</option>
-                <option value="yes">On</option>
-              </select>
-            </div>
-            <div className="bld-field">
-              <label className="bld-label">Loop</label>
-              <select className="bld-input" value={form.carouselLoop ? 'yes' : 'no'} onChange={(e) => onChange('carouselLoop', e.target.value === 'yes')}>
-                <option value="yes">On</option>
-                <option value="no">Off</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="bld-field">
-            <label className="bld-label">Pause on hover</label>
-            <select className="bld-input" value={form.carouselPauseOnHover ? 'yes' : 'no'} onChange={(e) => onChange('carouselPauseOnHover', e.target.value === 'yes')}>
-              <option value="yes">Yes</option>
-              <option value="no">No</option>
-            </select>
-            <p className="bld-field-note">If autoplay looks “not working” in builder, set this to No.</p>
-          </div>
-
-          <div className="bld-field-grid">
-            <div className="bld-field">
-              <label className="bld-label">Arrows</label>
-              <select className="bld-input" value={form.carouselArrows ? 'yes' : 'no'} onChange={(e) => onChange('carouselArrows', e.target.value === 'yes')}>
-                <option value="yes">On</option>
-                <option value="no">Off</option>
-              </select>
-            </div>
-            <div className="bld-field">
-              <label className="bld-label">Dots</label>
-              <select className="bld-input" value={form.carouselDots ? 'yes' : 'no'} onChange={(e) => onChange('carouselDots', e.target.value === 'yes')}>
-                <option value="yes">On</option>
-                <option value="no">Off</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="bld-field-grid">
-            <div className="bld-field">
-              <label className="bld-label">Speed (ms)</label>
-              <input
-                className="bld-input"
-                type="number"
-                min={0}
-                step={10}
-                value={form.carouselSpeedMs ?? ''}
-                onChange={(e) => onChange('carouselSpeedMs', e.target.value)}
-              />
-            </div>
-            <div className="bld-field">
-              <label className="bld-label">Interval (ms)</label>
-              <input
-                className="bld-input"
-                type="number"
-                min={0}
-                step={100}
-                value={form.carouselIntervalMs ?? ''}
-                onChange={(e) => onChange('carouselIntervalMs', e.target.value)}
-              />
-            </div>
-            <div className="bld-field">
-              <label className="bld-label">Gap (px)</label>
-              <input
-                className="bld-input"
-                type="number"
-                min={0}
-                step={1}
-                value={form.carouselGapPx ?? ''}
-                onChange={(e) => onChange('carouselGapPx', e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="bld-field">
-            <label className="bld-label">Slides per view (this breakpoint)</label>
-            <input
-              className="bld-input"
-              type="number"
-              min={1}
-              max={6}
-              step={1}
-              value={form.carouselPerView ?? ''}
-              onChange={(e) => onChange('carouselPerView', e.target.value)}
-            />
-            <p className="bld-field-note">Use the Desktop/Tablet/Mobile switcher above to set per device.</p>
+            <label className="bld-label">Image upload</label>
+            <input type="file" accept="image/*" className="bld-input" onChange={handleCarouselQuickImageUpload} />
+            <p className="bld-field-note">Primary</p>
           </div>
 
           <div className="bld-field">
@@ -550,6 +475,9 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
                 + Add slide
               </button>
             </div>
+            <p className="bld-field-note" style={{ marginBottom: 10 }}>
+              Spacing
+            </p>
             <div className="bld-carousel-slides">
               {(Array.isArray(selectedNode.props?.slides) ? selectedNode.props.slides : []).map((slide, idx) => (
                 <div
@@ -589,7 +517,7 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
           <div className="bld-field">
             <label className="bld-label">Slide editor</label>
             <p className="bld-field-note" style={{ marginTop: 0 }}>
-              Edit slides here (no JSON needed). Drag reorder list above.
+              Slides
             </p>
             <div className="bld-carousel-editor">
               {carouselSlides.map((slide, idx) => (
@@ -783,6 +711,220 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
             </div>
           </div>
 
+          <div className="bld-field">
+            <label className="bld-label">{isTickerOrMarquee ? 'Scroll duration (seconds)' : 'Image fit'}</label>
+            {isTickerOrMarquee ? (
+              <>
+                <input
+                  className="bld-input"
+                  type="number"
+                  min={8}
+                  max={120}
+                  step={1}
+                  value={form.carouselTickerDurationSec ?? ''}
+                  onChange={(e) => onChange('carouselTickerDurationSec', e.target.value)}
+                />
+                <p className="bld-field-note" style={{ marginTop: 8 }}>
+                  Duration
+                </p>
+              </>
+            ) : isLogoSlider ? (
+              <p className="bld-field-note" style={{ marginTop: 0 }}>
+                Contain
+              </p>
+            ) : (
+              <select className="bld-input" value={form.carouselImageFit || 'cover'} onChange={(e) => onChange('carouselImageFit', e.target.value)}>
+                <option value="cover">Cover</option>
+                <option value="contain">Contain</option>
+              </select>
+            )}
+            {!isTickerOrMarquee ? <p className="bld-field-note">Fill</p> : null}
+          </div>
+
+          <div className="bld-field">
+            <label className="bld-label">Scroll direction</label>
+            <select
+              className="bld-input"
+              value={form.carouselScrollDirection || (isTickerSlider ? 'opposite' : 'right')}
+              onChange={(e) => onChange('carouselScrollDirection', e.target.value)}
+            >
+              <option value="left">Left (←)</option>
+              <option value="right">Right (→)</option>
+              {isTickerSlider ? <option value="opposite">Opposite</option> : null}
+            </select>
+            <p className="bld-field-note">Flow</p>
+          </div>
+
+          {!isLogoSlider && !isTickerOrMarquee && form.carouselVariant !== 'card' && (form.carouselImageFit || 'cover') === 'cover' ? (
+            <div className="bld-field">
+              <label className="bld-label">Cover alignment</label>
+              <select
+                className="bld-input"
+                value={form.carouselImageObjectPosition || 'center'}
+                onChange={(e) => onChange('carouselImageObjectPosition', e.target.value)}
+              >
+                <option value="center">Center</option>
+                <option value="top">Top</option>
+                <option value="bottom">Bottom</option>
+                <option value="left">Left</option>
+                <option value="right">Right</option>
+              </select>
+              <p className="bld-field-note">Anchor</p>
+            </div>
+          ) : null}
+
+          {!isTickerOrMarquee ? (
+            <div className="bld-field bld-field--row">
+              <label className="bld-label" style={{ marginBottom: 0 }}>
+                Show overlay (text card)
+              </label>
+              <select
+                className="bld-input"
+                value={form.carouselShowOverlay ? 'yes' : 'no'}
+                onChange={(e) => onChange('carouselShowOverlay', e.target.value === 'yes')}
+              >
+                <option value="yes">Yes</option>
+                <option value="no">No</option>
+              </select>
+            </div>
+          ) : null}
+
+          {!isTickerOrMarquee ? (
+          <div className="bld-field-grid">
+            <div className="bld-field">
+              <label className="bld-label">Auto-advance</label>
+              <select className="bld-input" value={form.carouselAutoplay ? 'yes' : 'no'} onChange={(e) => onChange('carouselAutoplay', e.target.value === 'yes')}>
+                <option value="no">Manual</option>
+                <option value="yes">Auto</option>
+              </select>
+            </div>
+            <div className="bld-field">
+              <label className="bld-label">Loop</label>
+              <select className="bld-input" value={form.carouselLoop ? 'yes' : 'no'} onChange={(e) => onChange('carouselLoop', e.target.value === 'yes')}>
+                <option value="yes">On</option>
+                <option value="no">Off</option>
+              </select>
+            </div>
+          </div>
+          ) : null}
+
+          <div className="bld-field">
+            <label className="bld-label">Pause on hover</label>
+            <select className="bld-input" value={form.carouselPauseOnHover ? 'yes' : 'no'} onChange={(e) => onChange('carouselPauseOnHover', e.target.value === 'yes')}>
+              <option value="yes">Yes</option>
+              <option value="no">No</option>
+            </select>
+            <p className="bld-field-note">Hover</p>
+          </div>
+
+          {!isTickerOrMarquee ? (
+          <div className="bld-field-grid">
+            <div className="bld-field">
+              <label className="bld-label">Arrows</label>
+              <select className="bld-input" value={form.carouselArrows ? 'yes' : 'no'} onChange={(e) => onChange('carouselArrows', e.target.value === 'yes')}>
+                <option value="yes">On</option>
+                <option value="no">Off</option>
+              </select>
+            </div>
+            <div className="bld-field">
+              <label className="bld-label">Dots</label>
+              <select className="bld-input" value={form.carouselDots ? 'yes' : 'no'} onChange={(e) => onChange('carouselDots', e.target.value === 'yes')}>
+                <option value="yes">On</option>
+                <option value="no">Off</option>
+              </select>
+            </div>
+          </div>
+          ) : null}
+
+          {!isTickerOrMarquee ? (
+          <div className="bld-field-grid">
+            <div className="bld-field">
+              <label className="bld-label">Speed (ms)</label>
+              <input
+                className="bld-input"
+                type="number"
+                min={0}
+                step={10}
+                value={form.carouselSpeedMs ?? ''}
+                onChange={(e) => onChange('carouselSpeedMs', e.target.value)}
+              />
+            </div>
+            <div className="bld-field">
+              <label className="bld-label">Interval (ms)</label>
+              <input
+                className="bld-input"
+                type="number"
+                min={0}
+                step={100}
+                value={form.carouselIntervalMs ?? ''}
+                onChange={(e) => onChange('carouselIntervalMs', e.target.value)}
+              />
+            </div>
+            <div className="bld-field">
+              <label className="bld-label">Gap (px)</label>
+              <input
+                className="bld-input"
+                type="number"
+                min={0}
+                step={1}
+                value={form.carouselGapPx ?? ''}
+                onChange={(e) => onChange('carouselGapPx', e.target.value)}
+              />
+            </div>
+          </div>
+          ) : (
+            <div className="bld-field">
+              <label className="bld-label">Gap between cards (px)</label>
+              <input
+                className="bld-input"
+                type="number"
+                min={0}
+                step={1}
+                value={form.carouselGapPx ?? ''}
+                onChange={(e) => onChange('carouselGapPx', e.target.value)}
+              />
+            </div>
+          )}
+
+          {!isTickerOrMarquee ? (
+            <div className="bld-field">
+              <label className="bld-label">Transition</label>
+              <select
+                className="bld-input"
+                value={form.carouselTransitionEasing || 'ease'}
+                onChange={(e) => onChange('carouselTransitionEasing', e.target.value)}
+              >
+                <option value="ease">Ease</option>
+                <option value="linear">Linear</option>
+                <option value="ease-in-out">Smooth</option>
+                <option value="ease-out">Out</option>
+              </select>
+              <p className="bld-field-note">Easing</p>
+            </div>
+          ) : null}
+
+          {!isTickerOrMarquee ? (
+          <div className="bld-field">
+            <label className="bld-label">Slides per view (this breakpoint)</label>
+            <input
+              className="bld-input"
+              type="number"
+              min={1}
+              max={6}
+              step={1}
+              value={form.carouselPerView ?? ''}
+              onChange={(e) => onChange('carouselPerView', e.target.value)}
+            />
+            <p className="bld-field-note">Viewport</p>
+            {carouselSlides.length > 1 &&
+            Number(form.carouselPerView || 1) >= carouselSlides.length ? (
+              <p className="bld-field-note" style={{ color: '#b45309' }}>
+                Reduce
+              </p>
+            ) : null}
+          </div>
+          ) : null}
+
           <details className="bld-acc" style={{ marginTop: 10 }}>
             <summary>Advanced: Slides JSON</summary>
             <div className="bld-field" style={{ marginTop: 10 }}>
@@ -793,9 +935,7 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
                 onChange={(e) => onChange('carouselSlidesJson', e.target.value)}
               />
               {jsonErrors.carouselSlidesJson ? <p className="bld-field-error">{jsonErrors.carouselSlidesJson}</p> : null}
-              <p className="bld-field-note">
-                Supports: <code>title</code>, <code>body</code>, <code>imageSrc</code>, <code>card</code>, <code>cta</code>.
-              </p>
+              <p className="bld-field-note">Keys</p>
             </div>
           </details>
         </>

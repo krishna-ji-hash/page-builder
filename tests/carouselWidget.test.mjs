@@ -17,7 +17,8 @@ test('widget registry includes carousel with default props shape', () => {
   assert.ok('image' in s);
   assert.ok('buttonText' in s);
   assert.ok('buttonUrl' in s);
-  assert.equal(def.defaultProps.variant, 'hero');
+  assert.equal(def.defaultProps.variant, 'image');
+  assert.equal(def.defaultProps.showOverlay, false);
   assert.equal(typeof def.defaultProps.autoplay, 'boolean');
   assert.ok(def.defaultProps.slidesPerView && typeof def.defaultProps.slidesPerView === 'object');
 });

@@ -12,6 +12,14 @@ const nextConfig = {
     // Work around unstable dev segment explorer manifest errors in Next 15.x
     devtoolSegmentExplorer: false,
   },
+  webpack: (config, { dev }) => {
+    // Prevents stale chunk maps after HMR on Windows: "__webpack_modules__[moduleId] is not a function"
+    // and "Cannot find module './NNNN.js'" under .next/server (corrupt webpack filesystem cache).
+    if (dev) {
+      config.cache = false;
+    }
+    return config;
+  },
 };
 
 export default nextConfig;
