@@ -14,20 +14,23 @@ import {
 } from '@dnd-kit/core';
 import { isValidNodeHierarchy } from '@/lib/builderHierarchy';
 import { computeReorderFromDrop, findNodeInTree } from '@/lib/builderTree';
+import { isNodeEditsDisabledBySectionLock } from '@/lib/rowLayoutMeta';
 import { normalizeResponsiveStyle } from '@/lib/styleNormalizer';
 import { withResolvedLayoutGap } from '@/lib/layoutGapUtils';
 import { mergeDeviceStyleWithTypeDefaults, mergeMenuDeviceStyle } from '@/lib/nodeLayoutDefaults';
 import { SECTION_TEMPLATES } from '@/lib/sectionTemplates';
+import { imageFitMode, mergeImageFigureStyleForContain } from '@/lib/imageFigureStyle';
 
 const SECTION_TEMPLATE_IDS = new Set(Object.keys(SECTION_TEMPLATES));
 import { getRichTextAnimationStyle } from '@/lib/richTextAnimation';
 import { rootSemanticTag } from '@/lib/rootSemanticTag';
 import { getDeviceStyle, styleToCss } from '@/lib/styleToCss';
 import { useBuilderTheme } from '@/context/BuilderThemeContext';
-import { mergeNodeStyleWithSiteTheme } from '@/lib/siteDesignTheme';
+import { mergeNodeStyleWithSiteTheme, normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesignTheme';
 import Carousel from '@/components/runtime/Carousel';
 import Menu from '@/components/runtime/Menu';
 import { applyBindingsToString } from '@/lib/cms/cmsBindings';
+import { isProbablyInlineHtml, sanitizeInlineLeafHtml } from '@/lib/inlineTextHtml';
 import ResizeHandle from './canvas/ResizeHandle';
 import InlineEdit from './canvas/InlineEdit';
 import AddSectionModal from './canvas/AddSectionModal';
@@ -39,27 +42,149 @@ import SpacingGuidesOverlay from './canvas/SpacingGuidesOverlay';
 import GridOverlay from './canvas/GridOverlay';
 import RichTextEditor from './RichTextEditor';
 import { getGlobalLinkMeta } from '@/lib/globalComponentLinkMeta';
+import { normalizeHeadingLevel as normalizeHeadingTag, semanticHeadingTypography } from '@/lib/headingLevel';
+import { finalizeLeafDeviceStyle } from '@/lib/leafStylePipeline';
+
+/** WordPress-like inline formatting toolbar icons (24px viewBox). */
+function WpIconBold() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={20} height={20} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M15.6 10.79c.97-.67 1.65-1.77 1.65-2.79 0-2.26-1.75-4-4-4H7v14h7.04c2.09 0 3.71-1.7 3.71-3.79 0-1.52-.86-2.82-2.15-3.42zM10 6.5h3c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-3v-3zm3.5 9H10v-3h3.5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5z" />
+    </svg>
+  );
+}
+
+function WpIconLink() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={20}
+      height={20}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      aria-hidden
+    >
+      <path d="M10 13a5 5 0 0 1 0-7l1-1a5 5 0 0 1 7 7l-1 1m-4-2 1 1a5 5 0 0 1-7 7l-1-1a5 5 0 0 1 0-7" />
+    </svg>
+  );
+}
+
+function WpIconAlignLeft() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={20} height={20} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M3 5h18v2H3V5zm0 6h12v2H3v-2zm0 6h18v2H3v-2z" />
+    </svg>
+  );
+}
+
+function WpIconAlignCenter() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={20} height={20} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M3 5h18v2H3V5zm3 6h12v2H9v-2zm-3 6h18v2H3v-2z" />
+    </svg>
+  );
+}
+
+function WpIconAlignRight() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={20} height={20} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M3 5h18v2H3V5zm6 6h12v2H9v-2zm0 6h12v2H9v-2z" />
+    </svg>
+  );
+}
+
+/** Px presets for heading-only quick font size in the floating toolbar. */
+const HEADING_FONT_SIZE_PRESETS_PX = [14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 56, 64, 72];
+
+/**
+ * Floating toolbars use pointerdown preventDefault so the canvas does not treat the press as drag/pan.
+ * That same cancelation applies to the event's original target, which breaks native `<select>` and color inputs.
+ */
+function consumeFloatingToolbarPointerForCanvas(event) {
+  const t = event.target;
+  if (t && typeof t.closest === 'function') {
+    const inWpToolbar = t.closest('.bld-wp-toolbar');
+    if (inWpToolbar) {
+      const native = t.closest('select, option, textarea, input, label');
+      if (native && inWpToolbar.contains(native)) {
+        event.stopPropagation();
+        return;
+      }
+    }
+  }
+  event.preventDefault();
+}
+
+function getRichTextCommandRoot({ isInlineEditing, inlineEditWrapRef, nodeElementRef, nodeType }) {
+  if (isInlineEditing && inlineEditWrapRef?.current) {
+    const ed = inlineEditWrapRef.current.querySelector('[contenteditable="true"], [contenteditable=""]');
+    if (ed) return ed;
+  }
+  const shell = nodeElementRef?.current;
+  if (!shell) return null;
+  if (nodeType === 'heading') return shell.querySelector('.bld-demo-heading');
+  if (nodeType === 'text') return shell.querySelector('.bld-demo-text');
+  if (nodeType === 'button') return shell.querySelector('.bld-demo-button');
+  return null;
+}
+
+function selectionNonCollapsedInRoot(root) {
+  if (!root || typeof window === 'undefined') return false;
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return false;
+  const range = sel.getRangeAt(0);
+  if (range.collapsed) return false;
+  return root.contains(range.commonAncestorContainer);
+}
+
+function execRichCommandInRoot(root, command, value) {
+  if (!root || typeof document === 'undefined') return null;
+  const before = root.innerHTML;
+  const hadCe = root.getAttribute('contenteditable');
+  root.setAttribute('contenteditable', 'true');
+  root.focus();
+  try {
+    const useCss = command === 'foreColor' || command === 'hiliteColor' || command === 'backColor';
+    document.execCommand('styleWithCSS', false, useCss ? 'true' : 'false');
+  } catch (_) {
+    /* ignore */
+  }
+  try {
+    if (command === 'bold') {
+      document.execCommand('bold', false);
+    } else if (command === 'foreColor') {
+      document.execCommand('foreColor', false, String(value ?? ''));
+    } else if (command === 'createLink') {
+      document.execCommand('createLink', false, String(value ?? ''));
+    }
+  } catch (_) {
+    /* ignore */
+  }
+  const after = root.innerHTML;
+  if (hadCe === null) root.removeAttribute('contenteditable');
+  else root.setAttribute('contenteditable', hadCe);
+  return { before, after };
+}
 
 function applyDeviceStylePatch(existingStyle, device, patch, nodeType = null, siteTheme = null) {
   const normalizedCurrent = normalizeResponsiveStyle(existingStyle || {}, { nodeType, siteTheme });
   const desktopBase = normalizedCurrent.desktop || {};
   const currentDeviceStyle = getDeviceStyle(normalizedCurrent, device) || {};
 
+  const STYLE_GROUPS = ['layout', 'spacing', 'size', 'typography', 'colors', 'background', 'effects', 'border', 'menu'];
+
   const targetDeviceMerged = {
     ...currentDeviceStyle,
-    layout: {
-      ...(currentDeviceStyle.layout || {}),
-      ...(patch.layout || {}),
-    },
-    spacing: {
-      ...(currentDeviceStyle.spacing || {}),
-      ...(patch.spacing || {}),
-    },
-    size: {
-      ...(currentDeviceStyle.size || {}),
-      ...(patch.size || {}),
-    },
   };
+  for (const key of STYLE_GROUPS) {
+    const p = patch?.[key];
+    if (p == null || typeof p !== 'object' || Array.isArray(p)) continue;
+    const cur = currentDeviceStyle[key];
+    targetDeviceMerged[key] = { ...(cur && typeof cur === 'object' ? cur : {}), ...p };
+  }
 
   const buildOverride = (baseGroup = {}, mergedGroup = {}) => {
     const out = {};
@@ -77,11 +202,11 @@ function applyDeviceStylePatch(existingStyle, device, patch, nodeType = null, si
   if (device === 'desktop') {
     nextStyle.desktop = targetDeviceMerged;
   } else {
-    nextStyle[device] = {
-      layout: buildOverride(desktopBase.layout, targetDeviceMerged.layout),
-      spacing: buildOverride(desktopBase.spacing, targetDeviceMerged.spacing),
-      size: buildOverride(desktopBase.size, targetDeviceMerged.size),
-    };
+    nextStyle[device] = {};
+    for (const key of STYLE_GROUPS) {
+      const ov = buildOverride(desktopBase[key] || {}, targetDeviceMerged[key] || {});
+      if (ov) nextStyle[device][key] = ov;
+    }
     Object.keys(nextStyle[device]).forEach((key) => {
       if (!nextStyle[device][key]) delete nextStyle[device][key];
     });
@@ -174,6 +299,7 @@ function renderNodeContent(
     onInlineEditCommit,
     onInlineEditCancel,
     isSavingNode,
+    sectionEditLocked = false,
     isRichTextEditing,
     onRichTextEditStart,
     onRichTextCommit,
@@ -188,7 +314,10 @@ function renderNodeContent(
   const bind = (s) => (cmsBindingContext ? applyBindingsToString(String(s || ''), cmsBindingContext) : s);
   if (node.nodeType === 'heading') {
     const anim = getRichTextAnimationStyle(node.props?.animation || {});
-    const HeadingTag = String(node.props?.tag || 'h1').toLowerCase() === 'h2' ? 'h2' : 'h1';
+    const HeadingTag = normalizeHeadingTag(node.props?.tag);
+    const rawText = node.props?.text || '';
+    const headingHtmlMode =
+      isInlineEditing && (isProbablyInlineHtml(inlineDraftText) || isProbablyInlineHtml(rawText));
     if (isInlineEditing) {
       return (
         <InlineEdit
@@ -197,7 +326,20 @@ function renderNodeContent(
           onChange={onInlineDraftChange}
           onCommit={() => onInlineEditCommit(node)}
           onCancel={onInlineEditCancel}
-          disabled={isSavingNode}
+          disabled={isSavingNode || sectionEditLocked}
+          htmlMode={headingHtmlMode}
+        />
+      );
+    }
+    const defaultLabel = 'Heading';
+    if (!cmsBindingContext && isProbablyInlineHtml(rawText)) {
+      const safe = sanitizeInlineLeafHtml(rawText);
+      return (
+        <HeadingTag
+          className={`bld-demo-heading ${anim.className || ''}`.trim()}
+          style={{ ...(widgetCss || {}), ...(anim.style || {}) }}
+          onDoubleClick={(event) => onInlineEditStart(node, event)}
+          dangerouslySetInnerHTML={{ __html: safe || defaultLabel }}
         />
       );
     }
@@ -207,21 +349,38 @@ function renderNodeContent(
         style={{ ...(widgetCss || {}), ...(anim.style || {}) }}
         onDoubleClick={(event) => onInlineEditStart(node, event)}
       >
-        {cmsBindingContext ? bind(node.props?.text || 'Heading') : node.props?.text || 'Heading'}
+        {cmsBindingContext ? bind(rawText || defaultLabel) : rawText || defaultLabel}
       </HeadingTag>
     );
   }
   if (node.nodeType === 'text') {
     const anim = getRichTextAnimationStyle(node.props?.animation || {});
+    const rawText = node.props?.text || '';
+    const textHtmlMode =
+      isInlineEditing && (isProbablyInlineHtml(inlineDraftText) || isProbablyInlineHtml(rawText));
     if (isInlineEditing) {
       return (
         <InlineEdit
           className="bld-inline-text-editor bld-inline-text-editor--text"
+          multiline
           value={inlineDraftText}
           onChange={onInlineDraftChange}
           onCommit={() => onInlineEditCommit(node)}
           onCancel={onInlineEditCancel}
-          disabled={isSavingNode}
+          disabled={isSavingNode || sectionEditLocked}
+          htmlMode={textHtmlMode}
+        />
+      );
+    }
+    const defaultLabel = 'Text block content';
+    if (!cmsBindingContext && isProbablyInlineHtml(rawText)) {
+      const safe = sanitizeInlineLeafHtml(rawText);
+      return (
+        <p
+          className={`bld-demo-text ${anim.className || ''}`.trim()}
+          style={{ ...(widgetCss || {}), ...(anim.style || {}) }}
+          onDoubleClick={(event) => onInlineEditStart(node, event)}
+          dangerouslySetInnerHTML={{ __html: safe || defaultLabel }}
         />
       );
     }
@@ -231,7 +390,7 @@ function renderNodeContent(
         style={{ ...(widgetCss || {}), ...(anim.style || {}) }}
         onDoubleClick={(event) => onInlineEditStart(node, event)}
       >
-        {cmsBindingContext ? bind(node.props?.text || 'Text block content') : node.props?.text || 'Text block content'}
+        {cmsBindingContext ? bind(rawText || defaultLabel) : rawText || defaultLabel}
       </p>
     );
   }
@@ -245,7 +404,7 @@ function renderNodeContent(
           onChange={onInlineDraftChange}
           onCommit={() => onInlineEditCommit(node)}
           onCancel={onInlineEditCancel}
-          disabled={isSavingNode}
+          disabled={isSavingNode || sectionEditLocked}
         />
       );
     }
@@ -286,11 +445,15 @@ function renderNodeContent(
     };
     const src = cmsBindingContext ? bind(node.props?.src || '') : node.props?.src || '';
     const alt = cmsBindingContext ? bind(node.props?.alt || '') : node.props?.alt || '';
+    const figureStyle =
+      imageFitMode(node.props?.imageFit) === 'contain'
+        ? mergeImageFigureStyleForContain(widgetCss || {})
+        : widgetCss || undefined;
     return (
-      <figure className="bld-demo-image-wrap" style={widgetCss || undefined}>
+      <figure className="bld-demo-image-wrap" style={figureStyle}>
         <img
           src={src || node.props?.src || '/builder-placeholder.svg'}
-          alt={alt || node.props?.alt || node.displayName}
+          alt={alt || node.props?.alt || ''}
           className="bld-demo-image"
           style={imageStyle || undefined}
         />
@@ -444,7 +607,7 @@ function renderNodeContent(
         onStartEdit={onRichTextEditStart}
         onCommit={onRichTextCommit}
         onCancel={onRichTextCancel}
-        disabled={Boolean(isSavingNode)}
+        disabled={Boolean(isSavingNode || sectionEditLocked)}
         style={{ ...(widgetCss || {}), ...(mergedRt || {}) }}
         className={`bld-rich-text--canvas ${animRich.className || ''}`.trim()}
       />
@@ -536,6 +699,7 @@ function friendlyNeighborGapLine(gaps, spacing) {
 
 function CanvasFloatingToolbar({
   dragListeners,
+  dragDisabled = false,
   onDuplicate,
   onDelete,
   duplicateDisabled,
@@ -572,7 +736,8 @@ function CanvasFloatingToolbar({
           title="Drag to reorder layers · Turn on Free mode in the top bar to drag-position widgets · Hold Alt while dragging to duplicate"
           aria-label="Drag to reorder"
           aria-describedby={dragAltHintId}
-          {...dragListeners}
+          disabled={dragDisabled}
+          {...(dragDisabled ? {} : dragListeners)}
         >
           <span className="bld-row__grip" aria-hidden>
             ⋮⋮
@@ -688,6 +853,8 @@ function NodeRenderer({
   onDuplicateNode,
   onReorderNode,
   isReorderingNode,
+  /** Full page tree — used for section lock (read-only under locked sections). */
+  tree = null,
   rowSiblingsCount = null,
   isCreatingNode,
   isSavingNode,
@@ -772,10 +939,16 @@ function NodeRenderer({
           // item is injected by BuilderCanvas root after preview fetch; keep through.
         }
       : effectiveCmsContext;
-  const headingTag = String(node.props?.tag || 'h1').toLowerCase() === 'h2' ? 'h2' : 'h1';
+  const sectionEditLocked =
+    Array.isArray(tree) &&
+    tree.length > 0 &&
+    isNodeEditsDisabledBySectionLock(tree, node.id);
+  const headingTag = normalizeHeadingTag(node.props?.tag);
+  const wpToolbarHeadingId = useId();
+  const wpToolbarHeadingSizeId = useId();
   const [isInlineEditing, setIsInlineEditing] = useState(false);
   const [isRichTextEditing, setIsRichTextEditing] = useState(false);
-  const dragLocked = isInlineEditing || isRichTextEditing;
+  const dragLocked = isInlineEditing || isRichTextEditing || sectionEditLocked;
   const { attributes, listeners, setNodeRef: setDraggableRef, isDragging } = useDraggable({
     id: `node-${node.id}`,
     data: { nodeId: node.id, nodeType: node.nodeType },
@@ -809,6 +982,8 @@ function NodeRenderer({
     flashReorderNodeId === node.id ? 'bld-node--reorder-flash' : '',
     deletingNodeId === node.id ? 'bld-node--deleting' : '',
     isInlineEditing || isRichTextEditing ? 'bld-node--editing-focus' : '',
+    sectionEditLocked ? 'bld-node--section-locked' : '',
+    node.nodeType === 'image' ? 'bld-block--image' : '',
   ]
     .join(' ')
     .trim();
@@ -826,20 +1001,26 @@ function NodeRenderer({
   const nodeElementRef = useRef(null);
   const inlineEditWrapRef = useRef(null);
   const [floatingToolbarPos, setFloatingToolbarPos] = useState(null);
+  const [quickTextToolbarPos, setQuickTextToolbarPos] = useState(null);
   const { siteTheme } = useBuilderTheme();
   const rawDevice = getDeviceStyle(node.style_json, device);
   const themed = mergeNodeStyleWithSiteTheme(rawDevice, siteTheme, node.nodeType);
   const gapReady = withResolvedLayoutGap(themed, siteTheme);
-  const deviceStyle = mergeDeviceStyleWithTypeDefaults(
-    node.nodeType,
-    node.nodeType === 'menu'
-      ? mergeMenuDeviceStyle(
-          node.props?.orientation === 'column' ? 'column' : 'row',
-          gapReady,
-          { align: node.props?.align },
-          siteTheme
-        )
-      : gapReady
+  const deviceStyle = finalizeLeafDeviceStyle(
+    node,
+    device,
+    mergeDeviceStyleWithTypeDefaults(
+      node.nodeType,
+      node.nodeType === 'menu'
+        ? mergeMenuDeviceStyle(
+            node.props?.orientation === 'column' ? 'column' : 'row',
+            gapReady,
+            { align: node.props?.align },
+            siteTheme
+          )
+        : gapReady,
+      { treeNode: node }
+    )
   );
   const nodeCss = styleToCss(deviceStyle, siteTheme) || undefined;
   const externalPreview = previewCssByNodeId?.[node.id] || null;
@@ -854,6 +1035,7 @@ function NodeRenderer({
   const addGridToRow = async (event, columnCount) => {
     event.preventDefault();
     event.stopPropagation();
+    if (sectionEditLocked) return;
     if (node.nodeType !== 'row') return;
     onSelectNode(node.id);
     for (let i = 0; i < columnCount; i += 1) {
@@ -870,6 +1052,7 @@ function NodeRenderer({
   };
 
   const commitStylePatch = async (patch) => {
+    if (sectionEditLocked) return;
     if (!onUpdateNode || !patch) return;
     const next = applyDeviceStylePatch(
       node.style_json,
@@ -885,6 +1068,7 @@ function NodeRenderer({
   };
 
   const commitStylePatchAllDevices = async (patch) => {
+    if (sectionEditLocked) return;
     if (!onUpdateNode || !patch) return;
     const devices = ['desktop', 'tablet', 'mobile'];
     let nextStyleJson = node.style_json;
@@ -906,6 +1090,7 @@ function NodeRenderer({
 
   const startResizeWithMouse = (event) => {
     if (!isFreeMode) return;
+    if (sectionEditLocked) return;
     if (!supportsDirectManipulation || isSavingNode || isDragging || Boolean(draggingNodeType)) return;
     event.preventDefault();
     event.stopPropagation();
@@ -978,6 +1163,7 @@ function NodeRenderer({
   };
 
   const startMoveWithMouse = (event) => {
+    if (sectionEditLocked) return;
     if (!supportsDirectManipulation || isSavingNode || isDragging || Boolean(draggingNodeType)) return;
     event.preventDefault();
     event.stopPropagation();
@@ -1162,6 +1348,7 @@ function NodeRenderer({
 
   const maybeStartDirectMove = (event) => {
     if (!isFreeMode || !isSelected) return;
+    if (sectionEditLocked) return;
     if (event.button !== 0) return;
     const target = event.target;
     if (!(target instanceof Element)) return;
@@ -1181,11 +1368,13 @@ function NodeRenderer({
 
   const openAddForRow = (event) => {
     event.stopPropagation();
+    if (sectionEditLocked) return;
     onSelectNode(node.id);
     onOpenWidgetPicker?.(node.id);
   };
   const openAddSectionAfterRow = (event) => {
     event.stopPropagation();
+    if (sectionEditLocked) return;
     if (!Number.isInteger(rowIndex)) return;
     onSelectNode(node.id);
     onOpenSectionInsert?.(rowIndex + 1);
@@ -1193,27 +1382,32 @@ function NodeRenderer({
 
   const openAddForNode = (event) => {
     event.stopPropagation();
+    if (sectionEditLocked) return;
     onSelectNode(node.id);
     onOpenWidgetPicker?.(node.id);
   };
 
   const deleteThisNode = (event) => {
     event?.stopPropagation?.();
+    if (sectionEditLocked) return;
     onDeleteNode?.(Number(node.id));
   };
 
   const duplicateThisNode = (event) => {
     event?.stopPropagation?.();
+    if (sectionEditLocked) return;
     onDuplicateNode?.(Number(node.id));
   };
 
   const handleRichTextEditStart = () => {
+    if (sectionEditLocked) return;
     onSelectNode(node.id);
     setIsRichTextEditing(true);
   };
 
   const handleRichTextCommit = async (sanitizedHtml) => {
     setIsRichTextEditing(false);
+    if (sectionEditLocked) return;
     if (!onUpdateNode) return;
     const prev = String(node.props?.content || '');
     if (prev === sanitizedHtml) return;
@@ -1267,7 +1461,20 @@ function NodeRenderer({
         return;
       }
       const r = el.getBoundingClientRect();
-      setFloatingToolbarPos({ top: r.top - 10, left: r.left + r.width / 2 });
+      const margin = 10;
+      const estToolbarWidth = 320;
+      const vw = typeof window !== 'undefined' ? window.innerWidth : 1200;
+      const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
+      const centerY = r.top + r.height / 2;
+      let left = r.right + margin;
+      let transform = 'translateY(-50%)';
+      if (left + estToolbarWidth > vw - 8) {
+        left = r.left - margin;
+        transform = 'translate(-100%, -50%)';
+      }
+      left = Math.max(8, Math.min(left, vw - 8));
+      const top = Math.max(40, Math.min(centerY, vh - 40));
+      setFloatingToolbarPos({ top, left, transform });
     };
     update();
     window.addEventListener('resize', update);
@@ -1278,7 +1485,60 @@ function NodeRenderer({
     };
   }, [supportsInlineTextEdit, isInlineEditing, node.id, inlineDraftText]);
 
+  useLayoutEffect(() => {
+    const showQuick =
+      isNodeActive &&
+      !isInlineEditing &&
+      !sectionEditLocked &&
+      (node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'button');
+    if (!showQuick) {
+      setQuickTextToolbarPos(null);
+      return undefined;
+    }
+    const el = nodeElementRef.current;
+    const update = () => {
+      if (!el) {
+        setQuickTextToolbarPos(null);
+        return;
+      }
+      const r = el.getBoundingClientRect();
+      const margin = 10;
+      const estToolbarWidth = 340;
+      const vw = typeof window !== 'undefined' ? window.innerWidth : 1200;
+      const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
+      const centerY = r.top + r.height / 2;
+      let left = r.right + margin;
+      let transform = 'translateY(-50%)';
+      if (left + estToolbarWidth > vw - 8) {
+        left = r.left - margin;
+        transform = 'translate(-100%, -50%)';
+      }
+      left = Math.max(8, Math.min(left, vw - 8));
+      const top = Math.max(40, Math.min(centerY, vh - 40));
+      setQuickTextToolbarPos({ top, left, transform });
+    };
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [
+    isNodeActive,
+    isInlineEditing,
+    sectionEditLocked,
+    node.nodeType,
+    node.id,
+    device,
+    deviceStyle?.typography?.textAlign,
+    deviceStyle?.typography?.fontWeight,
+    node.props?.tag,
+    node.props?.text,
+  ]);
+
   const handleInlineEditStart = (targetNode, event) => {
+    if (sectionEditLocked) return;
     if (!supportsInlineTextEdit || targetNode.id !== node.id) return;
     event.preventDefault();
     event.stopPropagation();
@@ -1295,9 +1555,16 @@ function NodeRenderer({
 
   const handleInlineEditCommit = async (targetNode) => {
     if (isCommittingInlineEditRef.current) return;
+    if (sectionEditLocked) return;
     if (!supportsInlineTextEdit || targetNode.id !== node.id) return;
     isCommittingInlineEditRef.current = true;
-    const nextText = inlineDraftText;
+    let nextText = inlineDraftText;
+    if (
+      (targetNode.nodeType === 'heading' || targetNode.nodeType === 'text') &&
+      isProbablyInlineHtml(nextText)
+    ) {
+      nextText = sanitizeInlineLeafHtml(nextText);
+    }
     setIsInlineEditing(false);
     if (!onUpdateNode) {
       isCommittingInlineEditRef.current = false;
@@ -1325,6 +1592,7 @@ function NodeRenderer({
   const handleInlinePanelSave = async (event) => {
     event.preventDefault();
     event.stopPropagation();
+    if (sectionEditLocked) return;
     setInlinePanelError('');
     if (!onUpdateNode) return;
 
@@ -1358,6 +1626,7 @@ function NodeRenderer({
   };
 
   const handleInlineImagePick = (event) => {
+    if (sectionEditLocked) return;
     const file = event.target.files?.[0];
     if (!file || !file.type?.startsWith('image/')) {
       event.target.value = '';
@@ -1380,6 +1649,7 @@ function NodeRenderer({
   };
 
   const updateImageProps = async (patch) => {
+    if (sectionEditLocked) return;
     if (node.nodeType !== 'image' || !onUpdateNode) return;
     await onUpdateNode({
       nodeId: node.id,
@@ -1428,8 +1698,18 @@ function NodeRenderer({
     await commitStylePatch(patch);
   };
 
-  const quickSetHeadingTag = async (tag) => {
+  const quickSetHeadingTag = async (rawTag) => {
+    if (sectionEditLocked) return;
     if (node.nodeType !== 'heading' || !onUpdateNode) return;
+    const tag = normalizeHeadingTag(rawTag);
+    const typo = semanticHeadingTypography(tag);
+    const next = applyDeviceStylePatch(
+      node.style_json,
+      device,
+      withFlexWidthOverride(node.nodeType, { typography: typo }),
+      node.nodeType,
+      siteTheme
+    );
     await onUpdateNode({
       nodeId: node.id,
       payload: {
@@ -1437,19 +1717,81 @@ function NodeRenderer({
           ...(node.props || {}),
           tag,
         },
+        style_json: next.style_json,
       },
     });
   };
 
   const quickToggleBold = async () => {
-    const current = String(deviceStyle?.typography?.fontWeight || '400');
-    const next = current === '700' ? '400' : '700';
-    await commitStylePatch({
-      typography: { fontWeight: next },
+    if (sectionEditLocked) return;
+    if (node.nodeType === 'button') {
+      const current = String(deviceStyle?.typography?.fontWeight || '400');
+      const next = current === '700' ? '400' : '700';
+      await commitStylePatch({
+        typography: { fontWeight: next },
+      });
+      return;
+    }
+    if (node.nodeType !== 'heading' && node.nodeType !== 'text') return;
+    const root = getRichTextCommandRoot({
+      isInlineEditing,
+      inlineEditWrapRef,
+      nodeElementRef,
+      nodeType: node.nodeType,
+    });
+    if (!root || !selectionNonCollapsedInRoot(root)) return;
+    const result = execRichCommandInRoot(root, 'bold');
+    if (!result) return;
+    const { before, after } = result;
+    if (sanitizeInlineLeafHtml(before) === sanitizeInlineLeafHtml(after)) return;
+    const text = sanitizeInlineLeafHtml(after);
+    if (isInlineEditing) {
+      setInlineDraftText(text);
+      return;
+    }
+    if (!onUpdateNode) return;
+    if ((node.props?.text || '') === text) return;
+    await onUpdateNode({
+      nodeId: node.id,
+      payload: {
+        props: {
+          ...(node.props || {}),
+          text,
+        },
+      },
     });
   };
 
   const quickSetTextColor = async (color) => {
+    if (sectionEditLocked) return;
+    const root = getRichTextCommandRoot({
+      isInlineEditing,
+      inlineEditWrapRef,
+      nodeElementRef,
+      nodeType: node.nodeType,
+    });
+    if ((node.nodeType === 'heading' || node.nodeType === 'text') && root && selectionNonCollapsedInRoot(root)) {
+      const result = execRichCommandInRoot(root, 'foreColor', color);
+      if (result && sanitizeInlineLeafHtml(result.before) !== sanitizeInlineLeafHtml(result.after)) {
+        const text = sanitizeInlineLeafHtml(result.after);
+        if (isInlineEditing) {
+          setInlineDraftText(text);
+          return;
+        }
+        if (onUpdateNode) {
+          await onUpdateNode({
+            nodeId: node.id,
+            payload: {
+              props: {
+                ...(node.props || {}),
+                text,
+              },
+            },
+          });
+        }
+        return;
+      }
+    }
     await commitStylePatch({
       typography: { color },
       colors: { textColor: color },
@@ -1457,59 +1799,214 @@ function NodeRenderer({
   };
 
   const quickSetLink = async () => {
+    if (sectionEditLocked) return;
     if (!onUpdateNode) return;
-    const current = String(node.props?.href || '');
-    const next = typeof window !== 'undefined' ? window.prompt('Set link URL', current || '#') : current;
-    if (next == null) return;
+    if (node.nodeType === 'button') {
+      const current = String(node.props?.href || '');
+      const next = typeof window !== 'undefined' ? window.prompt('Set link URL', current || '#') : current;
+      if (next == null) return;
+      await onUpdateNode({
+        nodeId: node.id,
+        payload: {
+          props: {
+            ...(node.props || {}),
+            href: String(next || ''),
+          },
+        },
+      });
+      return;
+    }
+    if (node.nodeType !== 'heading' && node.nodeType !== 'text') return;
+    const root = getRichTextCommandRoot({
+      isInlineEditing,
+      inlineEditWrapRef,
+      nodeElementRef,
+      nodeType: node.nodeType,
+    });
+    if (!root || !selectionNonCollapsedInRoot(root)) return;
+    const next =
+      typeof window !== 'undefined' ? window.prompt('Set link URL', 'https://') : null;
+    if (next == null || String(next).trim() === '') return;
+    const result = execRichCommandInRoot(root, 'createLink', String(next).trim());
+    if (!result) return;
+    const { before, after } = result;
+    if (sanitizeInlineLeafHtml(before) === sanitizeInlineLeafHtml(after)) return;
+    const text = sanitizeInlineLeafHtml(after);
+    if (isInlineEditing) {
+      setInlineDraftText(text);
+      return;
+    }
+    if ((node.props?.text || '') === text) return;
     await onUpdateNode({
       nodeId: node.id,
       payload: {
         props: {
           ...(node.props || {}),
-          href: String(next || ''),
+          text,
         },
       },
     });
   };
 
-  const quickCycleAlign = async () => {
-    const order = ['left', 'center', 'right'];
-    const current = String(deviceStyle?.typography?.textAlign || 'left');
-    const index = order.indexOf(current);
-    const next = order[(index + 1 + order.length) % order.length];
+  const quickSetAlign = async (side) => {
+    const next = side === 'center' || side === 'right' || side === 'left' ? side : 'left';
     await commitStylePatch({
       typography: { textAlign: next },
     });
   };
 
+  const quickSetHeadingFontSize = async (value) => {
+    if (sectionEditLocked) return;
+    if (node.nodeType !== 'heading') return;
+    if (value === '__default__') {
+      const typo = semanticHeadingTypography(normalizeHeadingTag(node.props?.tag));
+      await commitStylePatch({
+        typography: { fontSize: typo.fontSize, lineHeight: typo.lineHeight },
+      });
+      return;
+    }
+    const v = String(value || '').trim();
+    if (!v) return;
+    await commitStylePatch({
+      typography: { fontSize: v },
+    });
+  };
+
+  const headingSemanticTypo = node.nodeType === 'heading' ? semanticHeadingTypography(headingTag) : null;
+  const headingFontSizeRaw = String(deviceStyle?.typography?.fontSize || '').trim();
+  const headingSemanticFs = headingSemanticTypo ? String(headingSemanticTypo.fontSize || '').trim() : '';
+  const headingSizeMatchesDefault =
+    node.nodeType === 'heading' &&
+    (!headingFontSizeRaw ||
+      headingFontSizeRaw === headingSemanticFs ||
+      (headingSemanticFs && headingFontSizeRaw.replace(/\s+/g, '') === headingSemanticFs.replace(/\s+/g, '')));
+  const headingSizeIsPreset =
+    node.nodeType === 'heading' && HEADING_FONT_SIZE_PRESETS_PX.some((n) => `${n}px` === headingFontSizeRaw);
+  const headingSizeSelectValue =
+    node.nodeType !== 'heading'
+      ? '__default__'
+      : headingSizeMatchesDefault
+        ? '__default__'
+        : headingSizeIsPreset
+          ? headingFontSizeRaw
+          : headingFontSizeRaw || '__default__';
+
   const inlineRichToolbarControls = supportsInlineTextEdit ? (
-    <>
+    <div className="bld-wp-toolbar" role="toolbar" aria-label="Text formatting">
       {node.nodeType === 'heading' ? (
-        <button
-          type="button"
-          className="bld-quick-text-toolbar__btn"
-          onClick={() => quickSetHeadingTag(headingTag === 'h1' ? 'h2' : 'h1')}
-        >
-          {headingTag === 'h1' ? 'H1' : 'H2'}
-        </button>
+        <>
+          <div className="bld-wp-toolbar__group bld-wp-toolbar__group--compact">
+            <label className="bld-sr-only" htmlFor={wpToolbarHeadingId}>
+              Heading level
+            </label>
+            <select
+              id={wpToolbarHeadingId}
+              className="bld-wp-toolbar__select bld-wp-toolbar__select--level"
+              value={headingTag}
+              onChange={(e) => quickSetHeadingTag(e.target.value)}
+              title="Heading level (H1–H6)"
+              aria-label="Heading level"
+            >
+              {['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].map((t) => (
+                <option key={t} value={t}>
+                  {t.toUpperCase()}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="bld-wp-toolbar__group bld-wp-toolbar__group--compact">
+            <label className="bld-sr-only" htmlFor={wpToolbarHeadingSizeId}>
+              Font size
+            </label>
+            <select
+              id={wpToolbarHeadingSizeId}
+              className="bld-wp-toolbar__select bld-wp-toolbar__select--heading-size"
+              value={headingSizeSelectValue}
+              onChange={(e) => quickSetHeadingFontSize(e.target.value)}
+              title="Font size"
+              aria-label="Font size"
+            >
+              <option value="__default__">Auto</option>
+              {node.nodeType === 'heading' &&
+              headingFontSizeRaw &&
+              !headingSizeMatchesDefault &&
+              !headingSizeIsPreset ? (
+                <option value={headingFontSizeRaw}>Custom</option>
+              ) : null}
+              {HEADING_FONT_SIZE_PRESETS_PX.map((n) => (
+                <option key={n} value={`${n}px`}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </div>
+          <span className="bld-wp-toolbar__sep" aria-hidden />
+        </>
       ) : null}
-      <button type="button" className="bld-quick-text-toolbar__btn" onClick={quickToggleBold}>
-        Bold
+      <button
+        type="button"
+        className={`bld-wp-toolbar__icon-btn ${String(deviceStyle?.typography?.fontWeight || '400') === '700' ? 'is-pressed' : ''}`}
+        title="Bold"
+        aria-pressed={String(deviceStyle?.typography?.fontWeight || '400') === '700'}
+        onMouseDown={(event) => {
+          if (node.nodeType === 'heading' || node.nodeType === 'text') event.preventDefault();
+        }}
+        onClick={quickToggleBold}
+      >
+        <WpIconBold />
       </button>
-      <label className="bld-quick-text-toolbar__color" title="Text color">
+      <label
+        className="bld-wp-toolbar__swatch"
+        title="Text color"
+        onMouseDown={(event) => {
+          if (node.nodeType === 'heading' || node.nodeType === 'text') event.preventDefault();
+        }}
+      >
+        <span
+          className="bld-wp-toolbar__swatch-dot"
+          style={{ backgroundColor: String(deviceStyle?.typography?.color || '#1e1e1e') }}
+        />
         <input
           type="color"
+          className="bld-wp-toolbar__color-input"
           value={String(deviceStyle?.typography?.color || '#0f172a')}
           onChange={(event) => quickSetTextColor(event.target.value)}
+          aria-label="Text color"
         />
       </label>
-      <button type="button" className="bld-quick-text-toolbar__btn" onClick={quickSetLink}>
-        Link
+      <button
+        type="button"
+        className="bld-wp-toolbar__icon-btn"
+        title="Insert / edit link"
+        onMouseDown={(event) => {
+          if (node.nodeType === 'heading' || node.nodeType === 'text') event.preventDefault();
+        }}
+        onClick={quickSetLink}
+      >
+        <WpIconLink />
       </button>
-      <button type="button" className="bld-quick-text-toolbar__btn" onClick={quickCycleAlign}>
-        Align
-      </button>
-    </>
+      <span className="bld-wp-toolbar__sep" aria-hidden />
+      <div className="bld-wp-toolbar__align-group" role="group" aria-label="Alignment">
+        {[
+          { side: 'left', Icon: WpIconAlignLeft, label: 'Align left' },
+          { side: 'center', Icon: WpIconAlignCenter, label: 'Align center' },
+          { side: 'right', Icon: WpIconAlignRight, label: 'Align right' },
+        ].map(({ side, Icon, label }) => (
+          <button
+            key={side}
+            type="button"
+            className={`bld-wp-toolbar__icon-btn ${
+              String(deviceStyle?.typography?.textAlign || 'left') === side ? 'is-pressed' : ''
+            }`}
+            title={label}
+            aria-pressed={String(deviceStyle?.typography?.textAlign || 'left') === side}
+            onClick={() => quickSetAlign(side)}
+          >
+            <Icon />
+          </button>
+        ))}
+      </div>
+    </div>
   ) : null;
 
   const cycleImageFit = async () => {
@@ -1646,7 +2143,7 @@ function NodeRenderer({
   };
 
   const quickLayoutControls =
-    isLayoutContainer && isSelected ? (
+    isLayoutContainer && isSelected && !sectionEditLocked ? (
       <div
         className="bld-quick-layout-controls"
         onPointerDown={(e) => e.stopPropagation()}
@@ -1690,9 +2187,9 @@ function NodeRenderer({
 
   const isRowContainer = node.nodeType === 'row';
   const canShowGapHandles =
-    isLayoutContainer && isSelected && !isFreeMode && (node.children?.length || 0) > 1;
+    isLayoutContainer && isSelected && !isFreeMode && !sectionEditLocked && (node.children?.length || 0) > 1;
   const canShowColumnResize =
-    isRowContainer && isSelected && !isFreeMode && (node.children?.filter((c) => c.nodeType === 'column')?.length || 0) > 1;
+    isRowContainer && isSelected && !isFreeMode && !sectionEditLocked && (node.children?.filter((c) => c.nodeType === 'column')?.length || 0) > 1;
 
   const spacingEditForThisNode = activeSpacingEdit && activeSpacingEdit.nodeId === node.id ? activeSpacingEdit : null;
 
@@ -1792,7 +2289,7 @@ function NodeRenderer({
           />
         ) : null}
         {inlinePanelError ? <p className="bld-inline-content-panel__error">{inlinePanelError}</p> : null}
-        <button type="submit" className="bld-inline-content-panel__save" disabled={isSavingNode || isReadingImage}>
+        <button type="submit" className="bld-inline-content-panel__save" disabled={isSavingNode || isReadingImage || sectionEditLocked}>
           {isSavingNode ? 'Saving...' : isReadingImage ? 'Reading image...' : 'Apply'}
         </button>
       </form>
@@ -1801,6 +2298,7 @@ function NodeRenderer({
   const showQuickTextToolbar =
     isNodeActive &&
     !isInlineEditing &&
+    !sectionEditLocked &&
     (node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'button');
 
   const showRowChrome = isNodeActive || isHoveredHere;
@@ -1818,91 +2316,93 @@ function NodeRenderer({
       : 'div';
 
   const rowMoreMenuItems = [];
-  if (!isRowEmpty) {
+  if (!sectionEditLocked) {
+    if (!isRowEmpty) {
+      rowMoreMenuItems.push({
+        key: 'pick',
+        label: 'Add element…',
+        onSelect: openAddForRow,
+        useMouseDown: false,
+        disabled: isCreatingNode || isLinkedGlobal,
+      });
+    }
     rowMoreMenuItems.push({
-      key: 'pick',
-      label: 'Add element…',
-      onSelect: openAddForRow,
+      key: 'section',
+      label: 'Add section after',
+      onSelect: openAddSectionAfterRow,
       useMouseDown: false,
-      disabled: isCreatingNode || isLinkedGlobal,
+      disabled: !Number.isInteger(rowIndex) || isCreatingNode,
     });
-  }
-  rowMoreMenuItems.push({
-    key: 'section',
-    label: 'Add section after',
-    onSelect: openAddSectionAfterRow,
-    useMouseDown: false,
-    disabled: !Number.isInteger(rowIndex) || isCreatingNode,
-  });
-  if (onReorderNode && parentNodeType === null && Number.isInteger(rowIndex)) {
-    rowMoreMenuItems.push({
-      key: 'move-up',
-      label: 'Move section up',
-      onSelect: () => onReorderNode({ nodeId: node.id, newParentId: null, newIndex: Math.max(0, rowIndex - 1) }),
-      useMouseDown: false,
-      disabled: isReorderingNode || rowIndex === 0,
-    });
-    rowMoreMenuItems.push({
-      key: 'move-down',
-      label: 'Move section down',
-      onSelect: () => onReorderNode({ nodeId: node.id, newParentId: null, newIndex: rowIndex + 1 }),
-      useMouseDown: false,
-      disabled:
-        isReorderingNode ||
-        (Number.isFinite(Number(rowSiblingsCount)) ? rowIndex >= Number(rowSiblingsCount) - 1 : false),
-    });
-  }
-  if (onSaveGlobalSection && parentNodeType === null) {
-    rowMoreMenuItems.push({
-      key: 'global-header',
-      label: 'Save as global header',
-      onSelect: () => onSaveGlobalSection({ rowId: node.id, role: 'header' }),
-      useMouseDown: false,
-      disabled: isSavingNode || isCreatingNode,
-    });
-    rowMoreMenuItems.push({
-      key: 'global-footer',
-      label: 'Save as global footer',
-      onSelect: () => onSaveGlobalSection({ rowId: node.id, role: 'footer' }),
-      useMouseDown: false,
-      disabled: isSavingNode || isCreatingNode,
-    });
-  }
-  if (isRow && parentNodeType === null && !isLinkedGlobal && onConvertToGlobalComponent) {
-    rowMoreMenuItems.push({
-      key: 'convert-global',
-      label: 'Convert to Global Component',
-      onSelect: () => onConvertToGlobalComponent?.(node.id),
-      useMouseDown: false,
-      disabled: isSavingNode || isCreatingNode,
-    });
-  }
-  if (isLinkedGlobal && onEditGlobalComponent) {
-    rowMoreMenuItems.push({
-      key: 'edit-global',
-      label: 'Edit Global Component',
-      onSelect: () => onEditGlobalComponent?.(linkedMeta.globalComponentId),
-      useMouseDown: false,
-      disabled: isSavingNode || isCreatingNode,
-    });
-  }
-  if (isLinkedGlobal && onDetachFromGlobalComponent) {
-    rowMoreMenuItems.push({
-      key: 'detach-global',
-      label: 'Detach from Global',
-      onSelect: () => onDetachFromGlobalComponent?.(node.id),
-      useMouseDown: false,
-      disabled: isSavingNode || isCreatingNode,
-    });
-  }
-  if (isFreeMode) {
-    rowMoreMenuItems.push({
-      key: 'free',
-      label: 'Free move',
-      onSelect: startMoveWithMouse,
-      useMouseDown: true,
-      disabled: isSavingNode || isDragging || Boolean(draggingNodeType),
-    });
+    if (onReorderNode && parentNodeType === null && Number.isInteger(rowIndex)) {
+      rowMoreMenuItems.push({
+        key: 'move-up',
+        label: 'Move section up',
+        onSelect: () => onReorderNode({ nodeId: node.id, newParentId: null, newIndex: Math.max(0, rowIndex - 1) }),
+        useMouseDown: false,
+        disabled: isReorderingNode || rowIndex === 0,
+      });
+      rowMoreMenuItems.push({
+        key: 'move-down',
+        label: 'Move section down',
+        onSelect: () => onReorderNode({ nodeId: node.id, newParentId: null, newIndex: rowIndex + 1 }),
+        useMouseDown: false,
+        disabled:
+          isReorderingNode ||
+          (Number.isFinite(Number(rowSiblingsCount)) ? rowIndex >= Number(rowSiblingsCount) - 1 : false),
+      });
+    }
+    if (onSaveGlobalSection && parentNodeType === null) {
+      rowMoreMenuItems.push({
+        key: 'global-header',
+        label: 'Save as global header',
+        onSelect: () => onSaveGlobalSection({ rowId: node.id, role: 'header' }),
+        useMouseDown: false,
+        disabled: isSavingNode || isCreatingNode,
+      });
+      rowMoreMenuItems.push({
+        key: 'global-footer',
+        label: 'Save as global footer',
+        onSelect: () => onSaveGlobalSection({ rowId: node.id, role: 'footer' }),
+        useMouseDown: false,
+        disabled: isSavingNode || isCreatingNode,
+      });
+    }
+    if (isRow && parentNodeType === null && !isLinkedGlobal && onConvertToGlobalComponent) {
+      rowMoreMenuItems.push({
+        key: 'convert-global',
+        label: 'Convert to Global Component',
+        onSelect: () => onConvertToGlobalComponent?.(node.id),
+        useMouseDown: false,
+        disabled: isSavingNode || isCreatingNode,
+      });
+    }
+    if (isLinkedGlobal && onEditGlobalComponent) {
+      rowMoreMenuItems.push({
+        key: 'edit-global',
+        label: 'Edit Global Component',
+        onSelect: () => onEditGlobalComponent?.(linkedMeta.globalComponentId),
+        useMouseDown: false,
+        disabled: isSavingNode || isCreatingNode,
+      });
+    }
+    if (isLinkedGlobal && onDetachFromGlobalComponent) {
+      rowMoreMenuItems.push({
+        key: 'detach-global',
+        label: 'Detach from Global',
+        onSelect: () => onDetachFromGlobalComponent?.(node.id),
+        useMouseDown: false,
+        disabled: isSavingNode || isCreatingNode,
+      });
+    }
+    if (isFreeMode) {
+      rowMoreMenuItems.push({
+        key: 'free',
+        label: 'Free move',
+        onSelect: startMoveWithMouse,
+        useMouseDown: true,
+        disabled: isSavingNode || isDragging || Boolean(draggingNodeType),
+      });
+    }
   }
   if (onCopyNodeId) {
     rowMoreMenuItems.push({
@@ -1914,23 +2414,25 @@ function NodeRenderer({
   }
 
   const shellMoreMenuItems = [];
-  if (isContainer) {
-    shellMoreMenuItems.push({
-      key: 'pick',
-      label: 'Add element…',
-      onSelect: openAddForNode,
-      useMouseDown: false,
-      disabled: isCreatingNode,
-    });
-  }
-  if (isFreeMode) {
-    shellMoreMenuItems.push({
-      key: 'free',
-      label: 'Free move',
-      onSelect: startMoveWithMouse,
-      useMouseDown: true,
-      disabled: isSavingNode || isDragging || Boolean(draggingNodeType),
-    });
+  if (!sectionEditLocked) {
+    if (isContainer) {
+      shellMoreMenuItems.push({
+        key: 'pick',
+        label: 'Add element…',
+        onSelect: openAddForNode,
+        useMouseDown: false,
+        disabled: isCreatingNode,
+      });
+    }
+    if (isFreeMode) {
+      shellMoreMenuItems.push({
+        key: 'free',
+        label: 'Free move',
+        onSelect: startMoveWithMouse,
+        useMouseDown: true,
+        disabled: isSavingNode || isDragging || Boolean(draggingNodeType),
+      });
+    }
   }
   if (onCopyNodeId) {
     shellMoreMenuItems.push({
@@ -2037,10 +2539,11 @@ function NodeRenderer({
                 </div>
                 <CanvasFloatingToolbar
                   dragListeners={listeners}
+                  dragDisabled={sectionEditLocked}
                   onDuplicate={duplicateThisNode}
                   onDelete={deleteThisNode}
-                  duplicateDisabled={isSavingNode}
-                  deleteDisabled={isDeletingNode}
+                  duplicateDisabled={isSavingNode || sectionEditLocked}
+                  deleteDisabled={isDeletingNode || sectionEditLocked}
                   menuItems={rowMoreMenuItems}
                 />
               </div>
@@ -2062,10 +2565,10 @@ function NodeRenderer({
                   <button
                     type="button"
                     className="bld-row-smart-suggestions__btn"
-                    disabled={isCreatingNode || isSavingNode}
+                    disabled={isCreatingNode || isSavingNode || sectionEditLocked}
                     onClick={async (e) => {
                       e.stopPropagation();
-                      if (isCreatingNode || isSavingNode) return;
+                      if (isCreatingNode || isSavingNode || sectionEditLocked) return;
                       onSelectNode(node.id);
                       await onInsertStarterTemplate?.({ targetRowId: node.id });
                     }}
@@ -2075,10 +2578,10 @@ function NodeRenderer({
                   <button
                     type="button"
                     className="bld-row-smart-suggestions__btn"
-                    disabled={isCreatingNode || isSavingNode}
+                    disabled={isCreatingNode || isSavingNode || sectionEditLocked}
                     onClick={async (e) => {
                       e.stopPropagation();
-                      if (isCreatingNode || isSavingNode) return;
+                      if (isCreatingNode || isSavingNode || sectionEditLocked) return;
                       onSelectNode(node.id);
                       if (onQuickAddNode) {
                         await onQuickAddNode({ targetNodeId: node.id, nodeType: 'column' });
@@ -2128,6 +2631,7 @@ function NodeRenderer({
                     parentNodeType={node.nodeType}
                     draggingNodeType={draggingNodeType}
                     device={device}
+                    tree={tree}
                     onDeleteNode={onDeleteNode}
                     onRequestNavigator={onRequestNavigator}
                     onInsertStarterTemplate={onInsertStarterTemplate}
@@ -2228,21 +2732,18 @@ function NodeRenderer({
                   {showFloatingToolbar ? (
                     <CanvasFloatingToolbar
                       dragListeners={listeners}
+                      dragDisabled={sectionEditLocked}
                       onDuplicate={duplicateThisNode}
                       onDelete={deleteThisNode}
-                      duplicateDisabled={isSavingNode}
-                      deleteDisabled={isDeletingNode}
+                      duplicateDisabled={isSavingNode || sectionEditLocked}
+                      deleteDisabled={isDeletingNode || sectionEditLocked}
                       menuItems={shellMoreMenuItems}
                     />
                   ) : null}
                 </div>
                 {quickLayoutControls ? <div className="bld-node__chrome-layout">{quickLayoutControls}</div> : null}
                 {showQuickTextToolbar ? (
-                  <div className="bld-node__chrome-text">
-                    <div className="bld-quick-text-toolbar" onPointerDown={stopDragBubble} onClick={(event) => event.stopPropagation()}>
-                      {inlineRichToolbarControls}
-                    </div>
-                  </div>
+                  <div className="bld-node__chrome-text bld-node__chrome-text--placeholder" aria-hidden />
                 ) : null}
               </div>
             ) : null}
@@ -2261,7 +2762,7 @@ function NodeRenderer({
                 containerNode={node}
                 containerElement={nodeElementRef.current}
                 deviceStyle={deviceStyle}
-                disabled={isSavingNode || isDragging || Boolean(draggingNodeType)}
+                disabled={isSavingNode || isDragging || Boolean(draggingNodeType) || sectionEditLocked}
                 onPreviewCss={setInteractionPreviewStyle}
                 onCommitPatch={commitStylePatch}
                 snapGapToScale={snapGapToScale}
@@ -2276,7 +2777,7 @@ function NodeRenderer({
                 rowNode={node}
                 rowElement={nodeElementRef.current}
                 deviceStyle={deviceStyle}
-                disabled={isSavingNode || isDragging || Boolean(draggingNodeType)}
+                disabled={isSavingNode || isDragging || Boolean(draggingNodeType) || sectionEditLocked}
                 onPreviewColumnCss={(colId, css) => onSetPreviewCssForNode?.(colId, css)}
                 onCommitColumnStyleJson={async (colId, styleJson) => {
                   await onUpdateNode?.({ nodeId: colId, payload: { style_json: styleJson } });
@@ -2308,6 +2809,7 @@ function NodeRenderer({
                   onInlineEditCommit: handleInlineEditCommit,
                   onInlineEditCancel: handleInlineEditCancel,
                   isSavingNode,
+                  sectionEditLocked,
                   isRichTextEditing,
                   onRichTextEditStart: handleRichTextEditStart,
                   onRichTextCommit: handleRichTextCommit,
@@ -2328,6 +2830,7 @@ function NodeRenderer({
                 onInlineEditCommit: handleInlineEditCommit,
                 onInlineEditCancel: handleInlineEditCancel,
                 isSavingNode,
+                sectionEditLocked,
                 isRichTextEditing,
                 onRichTextEditStart: handleRichTextEditStart,
                 onRichTextCommit: handleRichTextCommit,
@@ -2354,7 +2857,7 @@ function NodeRenderer({
                       title="Full width (all devices)"
                       aria-label="Full width (all devices)"
                       onClick={quickImageFullWidth}
-                      disabled={isSavingNode}
+                      disabled={isSavingNode || sectionEditLocked}
                     >
                       Full
                     </button>
@@ -2367,7 +2870,7 @@ function NodeRenderer({
                     onClick={() =>
                       node.nodeType === 'image' ? adjustImageBlockWidth(-30) : adjustNodeWidth(-30)
                     }
-                    disabled={isSavingNode}
+                    disabled={isSavingNode || sectionEditLocked}
                   >
                     W−
                   </button>
@@ -2379,7 +2882,7 @@ function NodeRenderer({
                     onClick={() =>
                       node.nodeType === 'image' ? adjustImageBlockWidth(30) : adjustNodeWidth(30)
                     }
-                    disabled={isSavingNode}
+                    disabled={isSavingNode || sectionEditLocked}
                   >
                     W+
                   </button>
@@ -2391,7 +2894,7 @@ function NodeRenderer({
                         title="Decrease crop height"
                         aria-label="Decrease crop height"
                         onClick={() => adjustImageCropHeight(-20)}
-                        disabled={isSavingNode}
+                        disabled={isSavingNode || sectionEditLocked}
                       >
                         −
                       </button>
@@ -2401,7 +2904,7 @@ function NodeRenderer({
                         title="Change image fit"
                         aria-label="Change image fit"
                         onClick={cycleImageFit}
-                        disabled={isSavingNode}
+                        disabled={isSavingNode || sectionEditLocked}
                       >
                         {String(node.props?.imageFit || 'cover') === 'contain'
                           ? 'Contain'
@@ -2415,7 +2918,7 @@ function NodeRenderer({
                         title="Increase crop height"
                         aria-label="Increase crop height"
                         onClick={() => adjustImageCropHeight(20)}
-                        disabled={isSavingNode}
+                        disabled={isSavingNode || sectionEditLocked}
                       >
                         +
                       </button>
@@ -2426,7 +2929,7 @@ function NodeRenderer({
                   <ResizeHandle
                     className="bld-transform-handle--inline-resize"
                     onMouseDown={startResizeWithMouse}
-                    disabled={isSavingNode || isDragging || Boolean(draggingNodeType)}
+                    disabled={isSavingNode || isDragging || Boolean(draggingNodeType) || sectionEditLocked}
                   />
                 ) : null}
               </div>
@@ -2457,7 +2960,7 @@ function NodeRenderer({
                     className="bld-node-empty__btn bld-node-empty__btn--primary"
                     onPointerDown={stopDragBubble}
                     onClick={openAddForNode}
-                    disabled={isCreatingNode}
+                    disabled={isCreatingNode || sectionEditLocked}
                   >
                     + Add element
                   </button>
@@ -2466,7 +2969,7 @@ function NodeRenderer({
                     className="bld-node-empty__pick-hint"
                     onPointerDown={stopDragBubble}
                     onClick={openAddForNode}
-                    disabled={isCreatingNode}
+                    disabled={isCreatingNode || sectionEditLocked}
                   >
                     Try: Section → Column → Stack → Elements
                   </button>
@@ -2485,6 +2988,7 @@ function NodeRenderer({
                     parentNodeType={node.nodeType}
                     draggingNodeType={draggingNodeType}
                     device={device}
+                    tree={tree}
                     previewCssByNodeId={previewCssByNodeId}
                     onSetPreviewCssForNode={onSetPreviewCssForNode}
                     onReportOverflow={onReportOverflow}
@@ -2533,7 +3037,7 @@ function NodeRenderer({
             !(node.nodeType === 'image' || node.nodeType === 'menu') ? (
               <ResizeHandle
                 onMouseDown={startResizeWithMouse}
-                disabled={isSavingNode || isDragging || Boolean(draggingNodeType)}
+                disabled={isSavingNode || isDragging || Boolean(draggingNodeType) || sectionEditLocked}
               />
             ) : null}
           </div>
@@ -2549,14 +3053,14 @@ function NodeRenderer({
                 position: 'fixed',
                 top: floatingToolbarPos.top,
                 left: floatingToolbarPos.left,
-                transform: 'translate(-50%, -100%)',
+                transform: floatingToolbarPos.transform || 'translate(-50%, -100%)',
                 zIndex: 13000,
               }}
               role="toolbar"
               aria-label="Text formatting"
-              onPointerDown={(event) => event.preventDefault()}
+              onPointerDown={consumeFloatingToolbarPointerForCanvas}
             >
-              <div className="bld-floating-inline-toolbar__inner">
+              <div className="bld-floating-inline-toolbar__inner bld-floating-inline-toolbar__inner--wp">
                 {inlineRichToolbarControls}
                 <button
                   type="button"
@@ -2566,6 +3070,27 @@ function NodeRenderer({
                   Done
                 </button>
               </div>
+            </div>,
+            document.body
+          )
+        : null}
+      {showQuickTextToolbar && quickTextToolbarPos && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className="bld-floating-quick-toolbar"
+              style={{
+                position: 'fixed',
+                top: quickTextToolbarPos.top,
+                left: quickTextToolbarPos.left,
+                transform: quickTextToolbarPos.transform,
+                zIndex: 12999,
+              }}
+              role="toolbar"
+              aria-label="Quick text formatting"
+              onPointerDown={consumeFloatingToolbarPointerForCanvas}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="bld-floating-inline-toolbar__inner bld-floating-inline-toolbar__inner--wp">{inlineRichToolbarControls}</div>
             </div>,
             document.body
           )
@@ -2676,6 +3201,14 @@ export default function BuilderCanvas({
   const sectionPadBottomPx =
     pageVars && Number.isFinite(Number(pageVars.sectionPadBottomPx)) ? Number(pageVars.sectionPadBottomPx) : null;
   const stickyHeader = Boolean(pageVars?.stickyHeader);
+  /** Same tokens + body font as `app/[projectSlug]/[pageSlug]/page.jsx` so canvas matches published/live preview. */
+  const liveMirrorRootStyle = useMemo(() => {
+    const normalized = normalizeSiteTheme(siteTheme);
+    return {
+      ...siteThemeToCssVariableStyle(normalized),
+      fontFamily: normalized.typography.fontFamily,
+    };
+  }, [siteTheme]);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const [draggingNodeType, setDraggingNodeType] = useState(null);
   const [isAddSectionOpen, setIsAddSectionOpen] = useState(false);
@@ -3371,6 +3904,7 @@ export default function BuilderCanvas({
                 className="live-site bld-canvas__live-mirror"
                 data-sticky-header={stickyHeader ? 'true' : 'false'}
                 style={{
+                  ...liveMirrorRootStyle,
                   ...(sectionGapPx != null ? { '--live-section-gap': `${sectionGapPx}px` } : {}),
                   ...(sectionPadBottomPx != null ? { '--live-section-pad-bottom': `${sectionPadBottomPx}px` } : {}),
                 }}
@@ -3395,6 +3929,7 @@ export default function BuilderCanvas({
                       parentNodeType={null}
                       draggingNodeType={draggingNodeType}
                       device={device}
+                      tree={tree}
                       previewCssByNodeId={effectivePreviewCssByNodeId}
                       onSetPreviewCssForNode={effectiveSetPreviewCssForNode}
                       activeSpacingEdit={activeSpacingEdit}

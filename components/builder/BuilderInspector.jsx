@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useBuilderTheme } from '@/context/BuilderThemeContext';
 import { dataSourceRegistry } from '@/lib/runtime/dataSourceRegistry';
 import { normalizeResponsiveStyle, stripDeviceLayoutKeysInStyleJson } from '@/lib/styleNormalizer';
@@ -8,6 +8,7 @@ import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
 import { normalizeMenuAlign, normalizeMenuVariant } from '@/lib/menuNav';
 import { normalizeMenuItems } from '@/lib/menuItems';
 import { mergeDeviceStyleWithTypeDefaults, mergeMenuDeviceStyle } from '@/lib/nodeLayoutDefaults';
+import { finalizeLeafDeviceStyle } from '@/lib/leafStylePipeline';
 import { mergeNodeStyleWithSiteTheme, themeSpacingPx } from '@/lib/siteDesignTheme';
 import { GAP_SCALE_IDS, inferGapScaleFromPx, withResolvedLayoutGap } from '@/lib/layoutGapUtils';
 import { buildFlexLayoutPresets } from '@/lib/flexLayoutPresets';
@@ -44,12 +45,21 @@ function getInspectorResolvedStyle(selectedNode, device, siteTheme) {
   const themed = withResolvedLayoutGap(mergeNodeStyleWithSiteTheme(raw, siteTheme, nt), siteTheme);
   if (nt === 'menu') {
     const orientation = selectedNode.props?.orientation === 'column' ? 'column' : 'row';
-    return mergeDeviceStyleWithTypeDefaults(
-      nt,
-      mergeMenuDeviceStyle(orientation, themed, { align: selectedNode.props?.align }, siteTheme)
+    return finalizeLeafDeviceStyle(
+      selectedNode,
+      device,
+      mergeDeviceStyleWithTypeDefaults(
+        nt,
+        mergeMenuDeviceStyle(orientation, themed, { align: selectedNode.props?.align }, siteTheme),
+        { treeNode: selectedNode }
+      )
     );
   }
-  return mergeDeviceStyleWithTypeDefaults(nt, themed);
+  return finalizeLeafDeviceStyle(
+    selectedNode,
+    device,
+    mergeDeviceStyleWithTypeDefaults(nt, themed, { treeNode: selectedNode })
+  );
 }
 
 function mergeStyleForDevice(selectedNode, device, patch, siteTheme, styleJsonOverride) {
@@ -62,7 +72,7 @@ function mergeStyleForDevice(selectedNode, device, patch, siteTheme, styleJsonOv
   const merged = {
     ...currentDevice,
     layout: { ...(currentDevice.layout || {}), ...(patch.layout || {}) },
-    spacing: { ...(currentDevice.spacing || {}), ...(patch.spacing || {}) },
+    spacing: mergeSpacingPatch(currentDevice.spacing || {}, patch.spacing || {}),
     size: { ...(currentDevice.size || {}), ...(patch.size || {}) },
     typography: { ...(currentDevice.typography || {}), ...(patch.typography || {}) },
     colors: { ...(currentDevice.colors || {}), ...(patch.colors || {}) },
@@ -71,6 +81,9 @@ function mergeStyleForDevice(selectedNode, device, patch, siteTheme, styleJsonOv
     border: { ...(currentDevice.border || {}), ...(patch.border || {}) },
     menu: { ...(currentDevice.menu || {}), ...(patch.menu || {}) },
   };
+  if (merged.spacing && typeof merged.spacing === 'object' && Object.keys(merged.spacing).length === 0) {
+    delete merged.spacing;
+  }
 
   const buildOverride = (baseGroup = {}, mergedGroup = {}) => {
     const out = {};
@@ -164,6 +177,46 @@ function parseBoxToObject(value) {
   };
 }
 
+/** Raw stored spacing for this breakpoint (no theme / type defaults). */
+function getStoredSpacingShorthands(styleJson, device) {
+  const s = styleJson && typeof styleJson === 'object' ? styleJson : {};
+  let layerSpacing;
+  if (device === 'desktop') {
+    const hasDesktop = s.desktop != null && typeof s.desktop === 'object';
+    const layer = hasDesktop ? s.desktop : s;
+    layerSpacing = layer?.spacing;
+  } else {
+    layerSpacing = s[device]?.spacing;
+  }
+  if (!layerSpacing || typeof layerSpacing !== 'object') {
+    return { margin: null, padding: null };
+  }
+  const m = layerSpacing.margin;
+  const p = layerSpacing.padding;
+  const margin =
+    m !== undefined && m !== null && String(m).trim() !== '' ? String(m).trim() : null;
+  const padding =
+    p !== undefined && p !== null && String(p).trim() !== '' ? String(p).trim() : null;
+  return { margin, padding };
+}
+
+function boxSidesFromShorthandOrUnset(shorthand) {
+  if (shorthand == null || String(shorthand).trim() === '') {
+    return { top: '', right: '', bottom: '', left: '' };
+  }
+  const o = parseBoxToObject(shorthand);
+  return { top: o.top, right: o.right, bottom: o.bottom, left: o.left };
+}
+
+function mergeSpacingPatch(baseSpacing = {}, patchSpacing = {}) {
+  const out = { ...(baseSpacing || {}) };
+  for (const [k, v] of Object.entries(patchSpacing || {})) {
+    if (v === null) delete out[k];
+    else if (v !== undefined) out[k] = v;
+  }
+  return out;
+}
+
 export default function BuilderInspector({
   device = 'desktop',
   onDeviceChange,
@@ -180,6 +233,8 @@ export default function BuilderInspector({
   overflowDiagnostics,
   onEditGlobalComponent,
   onDetachFromGlobalComponent,
+  /** When true, selection is inside a section with `props.meta.sectionLocked`. */
+  editingDisabledBySectionLock = false,
 }) {
   const [internalTab, setInternalTab] = useState('content');
   const activeTab = activeTabProp || internalTab;
@@ -213,8 +268,17 @@ export default function BuilderInspector({
     letterSpacingPx: 0,
     textTransform: 'none',
     textDecoration: 'none',
+    whiteSpace: 'normal',
     textColor: '#0f172a',
     bgColor: '#ffffff',
+    bgImageUrl: '',
+    bgImageAlt: '',
+    bgImageTitle: '',
+    bgSize: 'cover',
+    bgPosition: 'center center',
+    bgRepeat: 'no-repeat',
+    boxShadow: 'none',
+    opacity: '1',
     marginTop: 0,
     marginRight: 0,
     marginBottom: 0,
@@ -322,8 +386,9 @@ export default function BuilderInspector({
   useEffect(() => {
     if (!selectedNode) return;
     const style = getInspectorResolvedStyle(selectedNode, device, siteTheme);
-    const marginObj = parseBoxToObject(style?.spacing?.margin);
-    const paddingObj = parseBoxToObject(style?.spacing?.padding);
+    const storedSp = getStoredSpacingShorthands(selectedNode.style_json, device);
+    const marginSides = boxSidesFromShorthandOrUnset(storedSp.margin);
+    const paddingSides = boxSidesFromShorthandOrUnset(storedSp.padding);
     const maxWidthRaw = String(style?.layout?.maxWidth || '').trim();
     const hasAutoMargins = String(style?.spacing?.margin || '').includes('auto');
     const parsedMaxWidthPx = parsePxValue(maxWidthRaw, 1200);
@@ -372,25 +437,43 @@ export default function BuilderInspector({
       letterSpacingPx: parsePxValue(style?.typography?.letterSpacing, 0),
       textTransform: style?.typography?.textTransform || 'none',
       textDecoration: style?.typography?.textDecoration || 'none',
+      whiteSpace: (() => {
+        const w = String(style?.typography?.whiteSpace || '').trim();
+        if (w) return w;
+        return selectedNode?.nodeType === 'text' ? 'pre-wrap' : 'normal';
+      })(),
       textColor: style?.colors?.textColor || style?.typography?.color || '#0f172a',
-      bgColor: style?.colors?.backgroundColor || style?.background?.backgroundColor || '#ffffff',
-      bgImageUrl: style?.background?.backgroundImage || '',
-      bgImageAlt: style?.background?.meta?.altText || '',
-      bgImageTitle: style?.background?.meta?.title || '',
-      marginTop: marginObj.top,
-      marginRight: marginObj.right,
-      marginBottom: marginObj.bottom,
-      marginLeft: marginObj.left,
-      paddingTop: paddingObj.top,
-      paddingRight: paddingObj.right,
-      paddingBottom: paddingObj.bottom,
-      paddingLeft: paddingObj.left,
+    bgColor: style?.colors?.backgroundColor || style?.background?.backgroundColor || '#ffffff',
+    bgImageUrl: style?.background?.backgroundImage || '',
+    bgImageAlt: style?.background?.meta?.altText || '',
+    bgImageTitle: style?.background?.meta?.title || '',
+    bgSize: style?.background?.backgroundSize ? String(style.background.backgroundSize) : 'cover',
+    bgPosition: style?.background?.backgroundPosition ? String(style.background.backgroundPosition) : 'center center',
+    bgRepeat: style?.background?.backgroundRepeat ? String(style.background.backgroundRepeat) : 'no-repeat',
+    boxShadow: (() => {
+      const bs = style?.effects?.boxShadow;
+      if (bs == null || String(bs).trim() === '') return 'none';
+      return String(bs);
+    })(),
+    opacity: (() => {
+      const o = style?.effects?.opacity;
+      if (o == null || o === '') return '1';
+      return String(o);
+    })(),
+      marginTop: marginSides.top,
+      marginRight: marginSides.right,
+      marginBottom: marginSides.bottom,
+      marginLeft: marginSides.left,
+      paddingTop: paddingSides.top,
+      paddingRight: paddingSides.right,
+      paddingBottom: paddingSides.bottom,
+      paddingLeft: paddingSides.left,
       borderRadiusPx: parsePxValue(style?.border?.radius || style?.effects?.borderRadius, 0),
       borderWidthPx: parsePxValue(style?.border?.width, 0),
       borderColor: style?.border?.color || '#dddddd',
-      padding: style?.spacing?.padding || '0px',
-      margin: style?.spacing?.margin || '0px 0px 0px 0px',
-      paddingAdvanced: style?.spacing?.padding || '0px 0px 0px 0px',
+      padding: storedSp.padding ?? style?.spacing?.padding ?? '',
+      margin: storedSp.margin ?? style?.spacing?.margin ?? '',
+      paddingAdvanced: storedSp.padding ?? style?.spacing?.padding ?? '',
       position: style?.layout?.position || 'static',
       left: style?.layout?.left ?? '',
       top: style?.layout?.top ?? '',
@@ -407,8 +490,7 @@ export default function BuilderInspector({
       buttonIconSpacing: Number(selectedNode.props?.iconSpacing ?? 10),
       buttonId: selectedNode.props?.buttonId || '',
       layoutDirection:
-        style?.layout?.flexDirection ||
-        (selectedNode?.nodeType === 'stack' ? 'row' : 'column'),
+        style?.layout?.flexDirection || (selectedNode?.nodeType === 'row' ? 'row' : 'column'),
       layoutFlexWrap: String(style?.layout?.flexWrap || 'nowrap'),
       layoutGapScale: (() => {
         const gs = style?.layout?.gapScale;
@@ -561,11 +643,13 @@ export default function BuilderInspector({
   const updateNode = async (id, changes) => {
     if (!onUpdateNode) return;
     if (isLinkedGlobalPlaceholder(selectedNode)) return;
+    if (editingDisabledBySectionLock) return;
     await onUpdateNode({ nodeId: id, payload: changes });
   };
 
   const updateProps = async (changes) => {
     if (!selectedNode) return;
+    if (editingDisabledBySectionLock) return;
     await updateNode(selectedNode.id, {
       props: {
         ...(selectedNode.props || {}),
@@ -670,10 +754,23 @@ export default function BuilderInspector({
     });
   };
 
+  /** Local inspector form only (no node write). Spacing blur uses this so we do not fire 4× full style saves. */
+  const patchForm = useCallback((partial) => {
+    if (!partial || typeof partial !== 'object') return;
+    if (editingDisabledBySectionLock) return;
+    setForm((prev) => ({ ...prev, ...partial }));
+  }, [editingDisabledBySectionLock]);
+
   const normalizeCarouselSlide = (slide, index) => {
     const s = slide && typeof slide === 'object' ? slide : {};
     const card = s.card && typeof s.card === 'object' ? s.card : {};
     const cta = s.cta && typeof s.cta === 'object' ? s.cta : {};
+    const focal = String(s.imageObjectPosition || '').toLowerCase().trim();
+    const imageObjectPosition = ['center', 'top', 'bottom', 'left', 'right'].includes(focal) ? focal : '';
+    const br = Math.round(Number(s.imageBorderRadiusPx));
+    const iw = Math.round(Number(s.imageWidthPx));
+    const ih = Math.round(Number(s.imageHeightPx));
+    const clampN = (n, lo, hi) => (Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : 0);
     return {
       id: typeof s.id === 'string' && s.id.trim() ? s.id.trim() : undefined,
       title: String(s.title || `Slide ${index + 1}`),
@@ -695,6 +792,10 @@ export default function BuilderInspector({
       buttonText: typeof s.buttonText === 'string' ? s.buttonText : '',
       buttonUrl: typeof s.buttonUrl === 'string' ? s.buttonUrl : '',
       overlay: typeof s.overlay === 'string' ? s.overlay : 'card',
+      imageBorderRadiusPx: clampN(br, 0, 200),
+      imageWidthPx: clampN(iw, 0, 2400),
+      imageHeightPx: clampN(ih, 0, 2400),
+      imageObjectPosition,
       card: {
         title: typeof card.title === 'string' ? card.title : '',
         body: typeof card.body === 'string' ? card.body : '',
@@ -770,10 +871,66 @@ export default function BuilderInspector({
   };
 
   const handleContentChange = async (key, value) => {
+    if (!selectedNode) return;
+    if (editingDisabledBySectionLock) return;
+
+    /** One-click image layout: updates props + merged style (width / align-self) so live + canvas match. */
+    if (key === 'imageQuickPreset' && selectedNode.nodeType === 'image') {
+      const preset = String(value || '');
+      if (preset === 'naturalContain') {
+        await updateProps({ imageFit: 'contain', imageHeightPx: 0 });
+        await updateStyle({ size: { width: 'auto', height: 'auto' }, layout: { alignSelf: 'center' } });
+        setForm((prev) => ({
+          ...prev,
+          imageFit: 'contain',
+          imageHeightPx: 0,
+          widthMode: 'auto',
+          heightPx: 0,
+        }));
+        return;
+      }
+      if (preset === 'fullCover') {
+        await updateProps({ imageFit: 'cover', imageHeightPx: 400 });
+        await updateStyle({ size: { width: '100%', height: 'auto' }, layout: { alignSelf: 'stretch' } });
+        setForm((prev) => ({
+          ...prev,
+          imageFit: 'cover',
+          imageHeightPx: 400,
+          widthMode: 'full',
+          heightPx: 0,
+        }));
+        return;
+      }
+      if (preset === 'slimBanner') {
+        await updateProps({ imageFit: 'cover', imageHeightPx: 200 });
+        await updateStyle({ size: { width: '100%', height: 'auto' }, layout: { alignSelf: 'stretch' } });
+        setForm((prev) => ({
+          ...prev,
+          imageFit: 'cover',
+          imageHeightPx: 200,
+          widthMode: 'full',
+          heightPx: 0,
+        }));
+        return;
+      }
+      if (preset === 'logo') {
+        await updateProps({ imageFit: 'contain', imageHeightPx: 56 });
+        await updateStyle({ size: { width: 'auto', height: 'auto' }, layout: { alignSelf: 'center' } });
+        setForm((prev) => ({
+          ...prev,
+          imageFit: 'contain',
+          imageHeightPx: 56,
+          widthMode: 'auto',
+          heightPx: 0,
+        }));
+        return;
+      }
+      return;
+    }
+
     if (key !== 'carouselEnsureSlide0Image') {
       setForm((prev) => ({ ...prev, [key]: value }));
     }
-    if (!selectedNode) return;
     if (
       selectedNode.nodeType === 'carousel' &&
       typeof key === 'string' &&
@@ -1313,8 +1470,10 @@ export default function BuilderInspector({
 
   const handleStyleChange = async (key, value) => {
     if (isLayoutLockedRow(selectedNode) && LOCKED_LAYOUT_FORM_KEYS.has(key)) return;
+    if (editingDisabledBySectionLock) return;
 
-    let nextForm = { ...form, [key]: value };
+    const prevForm = form != null && typeof form === 'object' ? form : {};
+    let nextForm = { ...prevForm, [key]: value };
     if (key === 'layoutGapScale' && GAP_SCALE_IDS.includes(String(value))) {
       nextForm = { ...nextForm, layoutGapPx: themeSpacingPx(siteTheme, value) };
     }
@@ -1371,7 +1530,7 @@ export default function BuilderInspector({
     const flexLayoutCore = isFlexLayoutContainer
       ? {
           flexDirection:
-            nextForm.layoutDirection || (selectedNode?.nodeType === 'stack' ? 'row' : 'column'),
+            nextForm.layoutDirection || (selectedNode?.nodeType === 'row' ? 'row' : 'column'),
           flexWrap: flexWrapVal,
           alignItems: nextForm.layoutAlign || 'stretch',
           justifyContent: nextForm.layoutJustify || 'flex-start',
@@ -1383,6 +1542,31 @@ export default function BuilderInspector({
         }
       : {};
 
+    const sideUnset = (v) => v === '' || v == null;
+    const marginAllUnset =
+      !isRow &&
+      ['marginTop', 'marginRight', 'marginBottom', 'marginLeft'].every((k) => sideUnset(nextForm[k]));
+    const paddingAllUnset = ['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft'].every((k) =>
+      sideUnset(nextForm[k])
+    );
+    const nextPaddingStr = `${parsePxValue(nextForm.paddingTop)}px ${parsePxValue(nextForm.paddingRight)}px ${parsePxValue(nextForm.paddingBottom)}px ${parsePxValue(nextForm.paddingLeft)}px`;
+
+    const spacingPatch = {
+      ...(isFlexLayoutContainer ? {} : { gap: `${flexGapPx}px` }),
+    };
+    if (isRow) {
+      spacingPatch.margin = nextMargin;
+    } else if (!marginAllUnset) {
+      spacingPatch.margin = nextMargin;
+    } else {
+      spacingPatch.margin = null;
+    }
+    if (!paddingAllUnset) {
+      spacingPatch.padding = nextPaddingStr;
+    } else {
+      spacingPatch.padding = null;
+    }
+
     const stylePatch = {
       layout: flexLayoutCore,
       typography: {
@@ -1393,31 +1577,30 @@ export default function BuilderInspector({
         letterSpacing: `${parsePxValue(nextForm.letterSpacingPx, 0)}px`,
         textTransform: nextForm.textTransform,
         textDecoration: nextForm.textDecoration,
+        whiteSpace: nextForm.whiteSpace ?? (selectedNode?.nodeType === 'text' ? 'pre-wrap' : 'normal'),
         color: nextForm.textColor,
       },
       colors: {
         textColor: nextForm.textColor,
         backgroundColor: nextForm.bgColor,
       },
-      background: {
-        backgroundColor: nextForm.bgColor,
-        backgroundImage: nextForm.bgImageUrl ? String(nextForm.bgImageUrl) : undefined,
-        backgroundSize: nextForm.bgImageUrl ? 'cover' : undefined,
-        backgroundPosition: nextForm.bgImageUrl ? 'center' : undefined,
-        backgroundRepeat: nextForm.bgImageUrl ? 'no-repeat' : undefined,
-        meta:
-          nextForm.bgImageUrl
+      background: (() => {
+        const hasBg = Boolean(nextForm.bgImageUrl && String(nextForm.bgImageUrl).trim());
+        return {
+          backgroundColor: nextForm.bgColor,
+          backgroundImage: hasBg ? String(nextForm.bgImageUrl) : undefined,
+          backgroundSize: hasBg ? String(nextForm.bgSize || 'cover') : undefined,
+          backgroundPosition: hasBg ? String(nextForm.bgPosition || 'center center') : undefined,
+          backgroundRepeat: hasBg ? String(nextForm.bgRepeat || 'no-repeat') : undefined,
+          meta: hasBg
             ? {
                 altText: String(nextForm.bgImageAlt || ''),
                 title: String(nextForm.bgImageTitle || ''),
               }
             : undefined,
-      },
-      spacing: {
-        margin: nextMargin,
-        padding: `${parsePxValue(nextForm.paddingTop)}px ${parsePxValue(nextForm.paddingRight)}px ${parsePxValue(nextForm.paddingBottom)}px ${parsePxValue(nextForm.paddingLeft)}px`,
-        ...(isFlexLayoutContainer ? {} : { gap: `${flexGapPx}px` }),
-      },
+        };
+      })(),
+      spacing: spacingPatch,
       size: {
         width: isRow
           ? '100%'
@@ -1436,6 +1619,16 @@ export default function BuilderInspector({
       },
       effects: {
         borderRadius: `${parsePxValue(nextForm.borderRadiusPx)}px`,
+        boxShadow: (() => {
+          const raw = String(nextForm.boxShadow ?? '').trim();
+          if (!raw) return 'none';
+          return raw;
+        })(),
+        opacity: (() => {
+          const n = parseFloat(String(nextForm.opacity ?? '1'));
+          if (!Number.isFinite(n)) return '1';
+          return String(Math.max(0, Math.min(1, n)));
+        })(),
       },
       menu:
         selectedNode?.nodeType === 'menu'
@@ -1455,6 +1648,7 @@ export default function BuilderInspector({
   const handleApplyFlexPreset = async (layout) => {
     if (!selectedNode || !layout || typeof layout !== 'object') return;
     if (isLayoutLockedRow(selectedNode)) return;
+    if (editingDisabledBySectionLock) return;
     const isFlex =
       selectedNode.nodeType === 'row' ||
       selectedNode.nodeType === 'column' ||
@@ -1486,6 +1680,7 @@ export default function BuilderInspector({
   /** Sticky / static shortcuts for header sections (full control still in Advanced → Position). */
   const handleHeaderLayoutQuickAction = async (action) => {
     if (!selectedNode || selectedNode.nodeType !== 'row') return;
+    if (editingDisabledBySectionLock) return;
     const meta = selectedNode.props?.meta || {};
     if (!meta.isHeader && meta.role !== 'header') return;
     if (isLayoutLockedRow(selectedNode)) return;
@@ -1501,6 +1696,7 @@ export default function BuilderInspector({
   };
 
   const handleAdvancedChange = async (key, value) => {
+    if (editingDisabledBySectionLock) return;
     setForm((prev) => ({ ...prev, [key]: value }));
     if (key === 'margin') await updateStyle({ spacing: { margin: value } });
     if (key === 'paddingAdvanced') await updateStyle({ spacing: { padding: value } });
@@ -1522,30 +1718,39 @@ export default function BuilderInspector({
   const deviceLabel =
     device === 'tablet' ? 'Tablet' : device === 'mobile' ? 'Mobile' : 'Desktop';
 
-  const setPreviewCss = (css) => {
-    if (!selectedNode?.id) return;
-    onSetPreviewCssForNode?.(selectedNode.id, css);
-  };
-
-  const clearPreviewCss = () => {
+  const clearPreviewCss = useCallback(() => {
     if (!selectedNode?.id) return;
     onSetPreviewCssForNode?.(selectedNode.id, null);
-  };
+  }, [selectedNode?.id, onSetPreviewCssForNode]);
 
-  const previewStylePatch = (patch) => {
-    if (!selectedNode) return;
-    const nextStyleJson = mergeStyleForDevice(selectedNode, device, patch, siteTheme);
-    const tmpNode = { ...selectedNode, style_json: nextStyleJson };
-    const resolved = getInspectorResolvedStyle(tmpNode, device, siteTheme);
-    setPreviewCss(resolved ? styleToCss(resolved, siteTheme) : null);
-  };
+  const previewStylePatch = useCallback(
+    (patch) => {
+      if (editingDisabledBySectionLock) return;
+      if (!selectedNode?.id) return;
+      const nextStyleJson = mergeStyleForDevice(selectedNode, device, patch, siteTheme);
+      const tmpNode = { ...selectedNode, style_json: nextStyleJson };
+      const resolved = getInspectorResolvedStyle(tmpNode, device, siteTheme);
+      const css = resolved ? styleToCss(resolved, siteTheme) : null;
+      onSetPreviewCssForNode?.(selectedNode.id, css);
+    },
+    [selectedNode, device, siteTheme, onSetPreviewCssForNode, editingDisabledBySectionLock]
+  );
 
   const commitStylePatch = async (patch) => {
     if (!selectedNode) return;
-    await onUpdateNode?.(selectedNode.id, {
-      style_json: mergeStyleForDevice(selectedNode, device, patch, siteTheme),
+    if (editingDisabledBySectionLock) return;
+    await onUpdateNode?.({
+      nodeId: selectedNode.id,
+      payload: {
+        style_json: mergeStyleForDevice(selectedNode, device, patch, siteTheme),
+      },
     });
   };
+
+  const freezeInspectorPanels =
+    Boolean(selectedNode) &&
+    editingDisabledBySectionLock &&
+    !isLinkedGlobalPlaceholder(selectedNode);
 
   return (
     <div className={rootClass}>
@@ -1593,6 +1798,15 @@ export default function BuilderInspector({
                   </button>
                 </span>
               ) : null}
+              {!isLinkedGlobalPlaceholder(selectedNode) && editingDisabledBySectionLock ? (
+                <span
+                  className="bld-chip"
+                  style={{ marginLeft: 10, padding: '2px 8px', cursor: 'default' }}
+                  title="Unlock from the Sections list or Layers tab (lock button)"
+                >
+                  Locked
+                </span>
+              ) : null}
             </div>
           ) : (
             <div className="bld-inspector__chrome-placeholder">
@@ -1608,6 +1822,14 @@ export default function BuilderInspector({
             </div>
           </div>
         ) : null}
+        {!isLinkedGlobalPlaceholder(selectedNode) && editingDisabledBySectionLock ? (
+          <div className="bld-panel" style={{ paddingTop: 10, paddingBottom: 10 }}>
+            <div className="bld-field-note" style={{ margin: 0 }}>
+              This section is <strong>locked</strong>. Edits on the canvas and in the inspector are paused. Open the
+              left panel → <strong>Sections</strong> or <strong>Layers</strong> and click the lock icon to unlock.
+            </div>
+          </div>
+        ) : null}
         {showDeviceBar ? (
           <InspectorResponsiveBar
             device={device}
@@ -1618,11 +1840,19 @@ export default function BuilderInspector({
             onResetMobile={handleResetMobile}
             onCopyDesktopToTablet={() => handleCopyDesktopToDevice('tablet')}
             onCopyDesktopToMobile={() => handleCopyDesktopToDevice('mobile')}
-            disableResets={!selectedNode}
+            disableResets={!selectedNode || editingDisabledBySectionLock}
+            disabled={Boolean(selectedNode && editingDisabledBySectionLock)}
           />
         ) : null}
         <InspectorTabs activeTab={activeTab} onChange={setActiveTab} />
       </div>
+      <div
+        style={
+          freezeInspectorPanels
+            ? { opacity: 0.5, pointerEvents: 'none', userSelect: 'none' }
+            : undefined
+        }
+      >
       {activeTab === 'content' ? (
         <ContentPanel
           selectedNode={selectedNode}
@@ -1638,6 +1868,7 @@ export default function BuilderInspector({
           selectedNode={selectedNode}
           form={form}
           onChange={handleStyleChange}
+          onPatchForm={patchForm}
           projectId={projectId}
           onPreviewStylePatch={previewStylePatch}
           onCommitStylePatch={commitStylePatch}
@@ -1665,7 +1896,6 @@ export default function BuilderInspector({
           />
         </div>
       ) : null}
-      {activeTab === 'theme' ? <ThemePanel /> : null}
       {activeTab === 'advanced' ? (
         <AdvancedPanel
           selectedNode={selectedNode}
@@ -1675,6 +1905,8 @@ export default function BuilderInspector({
           jsonErrors={jsonErrors}
         />
       ) : null}
+      {activeTab === 'theme' ? <ThemePanel /> : null}
+      </div>
     </div>
   );
 }

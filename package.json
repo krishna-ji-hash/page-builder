@@ -13,7 +13,7 @@
     "db:migrate": "node --env-file=.env scripts/migrate.mjs",
     "db:seed": "node --env-file=.env scripts/seed.mjs",
     "battle-test:seed": "node --env-file=.env scripts/battle-test-seed.mjs",
-    "test": "node --test ./tests/builderHierarchy.test.mjs ./tests/builderTree.test.mjs ./tests/styleToCss.test.mjs ./tests/styleNormalizer.test.mjs ./tests/computeReorderFromDrop.test.mjs ./tests/publishedSnapshot.test.mjs ./tests/widgetRegistry.test.mjs ./tests/carouselWidget.test.mjs ./tests/actionExecutor.test.mjs ./tests/dataSourceRegistry.test.mjs ./tests/formValidation.test.mjs ./tests/runtimeConfigShape.test.mjs ./tests/projectPageRules.test.mjs ./tests/sanitizeRichHtml.test.mjs ./tests/projectPathPrefix.test.mjs"
+    "test": "node --test ./tests/builderHierarchy.test.mjs ./tests/builderTree.test.mjs ./tests/styleToCss.test.mjs ./tests/styleNormalizer.test.mjs ./tests/computeReorderFromDrop.test.mjs ./tests/publishedSnapshot.test.mjs ./tests/widgetRegistry.test.mjs ./tests/carouselWidget.test.mjs ./tests/actionExecutor.test.mjs ./tests/dataSourceRegistry.test.mjs ./tests/formValidation.test.mjs ./tests/runtimeConfigShape.test.mjs ./tests/projectPageRules.test.mjs ./tests/sanitizeRichHtml.test.mjs ./tests/projectPathPrefix.test.mjs ./tests/rowLayoutMeta.test.mjs ./tests/headingLevel.test.mjs ./tests/stackLayoutCoercion.test.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

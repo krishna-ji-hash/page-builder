@@ -1,16 +1,21 @@
 import { withResolvedLayoutGap } from '@/lib/layoutGapUtils';
+import { imageFitMode, mergeImageFigureStyleForContain } from '@/lib/imageFigureStyle';
+import { normalizeHeadingLevel } from '@/lib/headingLevel';
 import { mergeDeviceStyleWithTypeDefaults } from '@/lib/nodeLayoutDefaults';
+import { finalizeLeafDeviceStyle } from '@/lib/leafStylePipeline';
 import { getRichTextAnimationStyle } from '@/lib/richTextAnimation';
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
+import { isProbablyInlineHtml, sanitizeInlineLeafHtml } from '@/lib/inlineTextHtml';
 import { getDeviceStyle, styleToCss } from '@/lib/styleToCss';
-import { DEFAULT_SITE_THEME } from '@/lib/siteDesignTheme';
+import { DEFAULT_SITE_THEME, mergeNodeStyleWithSiteTheme } from '@/lib/siteDesignTheme';
 
-const HEADING_TAGS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']);
 const DEVICE = 'desktop';
 
-function pickHeadingTag(tag) {
-  const t = typeof tag === 'string' ? tag.toLowerCase() : 'h2';
-  return HEADING_TAGS.has(t) ? t : 'h2';
+function styleJsonToCss(node, deviceStyle) {
+  const themed = mergeNodeStyleWithSiteTheme(deviceStyle, DEFAULT_SITE_THEME, node.nodeType);
+  const gapReady = withResolvedLayoutGap(themed, DEFAULT_SITE_THEME);
+  const merged = mergeDeviceStyleWithTypeDefaults(node.nodeType, gapReady, { treeNode: node });
+  return styleToCss(finalizeLeafDeviceStyle(node, DEVICE, merged), DEFAULT_SITE_THEME);
 }
 
 function containerCss(node) {
@@ -21,13 +26,11 @@ function containerCss(node) {
       layout: { ...deviceStyle.layout, flexDirection: 'row' },
     };
   }
-  const resolved = withResolvedLayoutGap(deviceStyle, DEFAULT_SITE_THEME);
-  return styleToCss(mergeDeviceStyleWithTypeDefaults(node.nodeType, resolved), DEFAULT_SITE_THEME);
+  return styleJsonToCss(node, deviceStyle);
 }
 
 function leafCss(node) {
-  const resolved = withResolvedLayoutGap(getDeviceStyle(node.style_json, DEVICE), DEFAULT_SITE_THEME);
-  return styleToCss(mergeDeviceStyleWithTypeDefaults(node.nodeType, resolved), DEFAULT_SITE_THEME);
+  return styleJsonToCss(node, getDeviceStyle(node.style_json, DEVICE));
 }
 
 export default function LiveNode({ node }) {
@@ -47,17 +50,32 @@ export default function LiveNode({ node }) {
   }
 
   if (nodeType === 'heading') {
-    const Tag = pickHeadingTag(props.tag);
+    const Tag = normalizeHeadingLevel(props.tag, 'h2');
     const css = leafCss(node);
-    return <Tag style={css}>{props.text || ''}</Tag>;
+    const raw = props.text || '';
+    if (isProbablyInlineHtml(raw)) {
+      return (
+        <Tag
+          style={css}
+          dangerouslySetInnerHTML={{ __html: sanitizeInlineLeafHtml(raw) || '' }}
+        />
+      );
+    }
+    return <Tag style={css}>{raw}</Tag>;
   }
 
   if (nodeType === 'text') {
-    return (
-      <p style={leafCss(node)}>
-        {props.text || ''}
-      </p>
-    );
+    const css = leafCss(node);
+    const raw = props.text || '';
+    if (isProbablyInlineHtml(raw)) {
+      return (
+        <p
+          style={css}
+          dangerouslySetInnerHTML={{ __html: sanitizeInlineLeafHtml(raw) || '' }}
+        />
+      );
+    }
+    return <p style={css}>{raw}</p>;
   }
 
   if (nodeType === 'rich_text') {
@@ -93,7 +111,23 @@ export default function LiveNode({ node }) {
     const src = props.src || '';
     const alt = props.alt || '';
     if (!src) return null;
-    return <img src={src} alt={alt} style={leafCss(node)} loading="lazy" />;
+    const css = { ...(leafCss(node) || {}) };
+    if (imageFitMode(props.imageFit) === 'contain') {
+      Object.assign(css, mergeImageFigureStyleForContain(css));
+    }
+    const imageHeightPx = Number(props.imageHeightPx || 0);
+    return (
+      <img
+        src={src}
+        alt={alt}
+        style={{
+          ...css,
+          objectFit: props.imageFit || 'cover',
+          ...(imageHeightPx > 0 ? { height: `${imageHeightPx}px` } : {}),
+        }}
+        loading="lazy"
+      />
+    );
   }
 
   return null;

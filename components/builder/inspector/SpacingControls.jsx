@@ -5,37 +5,53 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 const SIDES = ['top', 'right', 'bottom', 'left'];
 
 function parseNum(v) {
+  if (v === '' || v == null) return NaN;
   const n = typeof v === 'number' ? v : Number.parseFloat(String(v ?? '').replace('px', '').trim());
-  return Number.isFinite(n) ? n : 0;
+  return Number.isFinite(n) ? n : NaN;
 }
 
-function boxToCssString(box) {
-  const t = Math.max(0, Math.round(parseNum(box.top)));
-  const r = Math.max(0, Math.round(parseNum(box.right)));
-  const b = Math.max(0, Math.round(parseNum(box.bottom)));
-  const l = Math.max(0, Math.round(parseNum(box.left)));
+function boxSidesAllEmpty(box) {
+  return SIDES.every((s) => {
+    const v = box[s];
+    return v === '' || v == null || (typeof v === 'string' && !String(v).trim());
+  });
+}
+
+function boxToCssString(box, clampFn) {
+  const q = (side) => {
+    const raw = box[side];
+    if (raw === '' || raw == null) return clampFn(0);
+    const n = parseNum(raw);
+    return clampFn(Number.isFinite(n) ? n : 0);
+  };
+  const t = q('top');
+  const r = q('right');
+  const b = q('bottom');
+  const l = q('left');
   return `${t}px ${r}px ${b}px ${l}px`;
 }
 
 function clampMargin(v) {
-  const n = Math.round(parseNum(v));
-  // Guardrail: avoid huge negative collapses; still allow modest negatives for advanced layouts.
+  const n = Math.round(typeof v === 'number' && Number.isFinite(v) ? v : parseNum(v));
+  if (!Number.isFinite(n)) return 0;
   return Math.max(-48, Math.min(240, n));
 }
 
 function clampPadding(v) {
-  const n = Math.round(parseNum(v));
+  const n = Math.round(typeof v === 'number' && Number.isFinite(v) ? v : parseNum(v));
+  if (!Number.isFinite(n)) return 0;
   return Math.max(0, Math.min(240, n));
 }
 
 function SideInput({ label, value, onChange, onFocus, onBlur, onHover, onLeave, onDragDelta, disabled }) {
   const startRef = useRef(null);
+  const display = value === '' || value == null ? '' : String(value);
   return (
     <div className="bld-boxmodel__cell">
       <label className="bld-boxmodel__side">{label}</label>
       <input
         className="bld-input bld-boxmodel__input"
-        value={value}
+        value={display}
         inputMode="numeric"
         onChange={(e) => onChange(e.target.value)}
         onFocus={onFocus}
@@ -84,21 +100,40 @@ function BoxModelVisual({
   disabled,
 }) {
   const [isEditing, setIsEditing] = useState(false);
+  const editSnapshotRef = useRef(null);
+  const onPreviewRef = useRef(onPreviewStylePatch);
+  onPreviewRef.current = onPreviewStylePatch;
 
   const patchForBox = useMemo(() => {
-    const value = boxToCssString(box);
-    return kind === 'padding'
-      ? { spacing: { padding: value } }
-      : { spacing: { margin: value } };
-  }, [box, kind]);
+    const key = kind === 'padding' ? 'padding' : 'margin';
+    if (boxSidesAllEmpty(box)) {
+      return { spacing: { [key]: null } };
+    }
+    const value = boxToCssString(box, clamp);
+    return { spacing: { [key]: value } };
+  }, [box, kind, clamp]);
 
   useEffect(() => {
     if (!isEditing) return;
-    onPreviewStylePatch?.(patchForBox);
-  }, [isEditing, patchForBox, onPreviewStylePatch]);
+    onPreviewRef.current?.(patchForBox);
+  }, [isEditing, patchForBox]);
 
   const setSide = (side, nextVal) => {
-    const v = clamp(nextVal);
+    if (nextVal === '' || (typeof nextVal === 'string' && !String(nextVal).trim())) {
+      setBox((prev) => {
+        const next = { ...(prev || {}) };
+        if (linked) {
+          for (const s of SIDES) next[s] = '';
+        } else {
+          next[side] = '';
+        }
+        return next;
+      });
+      return;
+    }
+    const n = parseNum(nextVal);
+    if (!Number.isFinite(n)) return;
+    const v = clamp(n);
     setBox((prev) => {
       const next = { ...(prev || {}) };
       if (linked) {
@@ -111,6 +146,7 @@ function BoxModelVisual({
   };
 
   const begin = (side) => {
+    editSnapshotRef.current = { ...box };
     setIsEditing(true);
     if (selectedNodeId) {
       onActiveSpacingEdit?.({ nodeId: selectedNodeId, kind, side });
@@ -118,10 +154,24 @@ function BoxModelVisual({
   };
 
   const end = async () => {
+    const snap = editSnapshotRef.current;
+    editSnapshotRef.current = null;
     setIsEditing(false);
     onActiveSpacingEdit?.(null);
     onClearPreviewStyle?.();
-    await onCommitStylePatch?.(patchForBox);
+
+    if (!snap) return;
+
+    const unchanged = SIDES.every((s) => {
+      const a = snap[s];
+      const b = box[s];
+      const as = a === '' || a == null ? '' : String(a);
+      const bs = b === '' || b == null ? '' : String(b);
+      return as === bs;
+    });
+    if (unchanged) return;
+
+    await onCommitStylePatch?.(patchForBox, box);
   };
 
   const hover = (side) => {
@@ -132,6 +182,12 @@ function BoxModelVisual({
   const leave = () => {
     if (isEditing) return;
     onActiveSpacingEdit?.(null);
+  };
+
+  const dragBase = (side) => {
+    const raw = box[side];
+    const n = parseNum(raw);
+    return Number.isFinite(n) ? n : 0;
   };
 
   return (
@@ -157,7 +213,7 @@ function BoxModelVisual({
           onBlur={end}
           onHover={() => hover('top')}
           onLeave={leave}
-          onDragDelta={(d) => setSide('top', parseNum(box.top) + d)}
+          onDragDelta={(d) => setSide('top', dragBase('top') + d)}
           disabled={disabled}
         />
         <SideInput
@@ -168,7 +224,7 @@ function BoxModelVisual({
           onBlur={end}
           onHover={() => hover('right')}
           onLeave={leave}
-          onDragDelta={(d) => setSide('right', parseNum(box.right) + d)}
+          onDragDelta={(d) => setSide('right', dragBase('right') + d)}
           disabled={disabled}
         />
         <SideInput
@@ -179,7 +235,7 @@ function BoxModelVisual({
           onBlur={end}
           onHover={() => hover('bottom')}
           onLeave={leave}
-          onDragDelta={(d) => setSide('bottom', parseNum(box.bottom) + d)}
+          onDragDelta={(d) => setSide('bottom', dragBase('bottom') + d)}
           disabled={disabled}
         />
         <SideInput
@@ -190,7 +246,7 @@ function BoxModelVisual({
           onBlur={end}
           onHover={() => hover('left')}
           onLeave={leave}
-          onDragDelta={(d) => setSide('left', parseNum(box.left) + d)}
+          onDragDelta={(d) => setSide('left', dragBase('left') + d)}
           disabled={disabled}
         />
       </div>
@@ -198,32 +254,40 @@ function BoxModelVisual({
   );
 }
 
+function formSide(form, prefix, side) {
+  const key = `${prefix}${side[0].toUpperCase()}${side.slice(1)}`;
+  const v = form[key];
+  if (v === '' || v == null) return '';
+  return prefix === 'padding' ? clampPadding(v) : clampMargin(v);
+}
+
 export default function SpacingControls({
   form,
   onUpdate,
+  onPatchForm,
   onPreviewStylePatch,
   onCommitStylePatch,
   onClearPreviewStyle,
   onActiveSpacingEdit,
   selectedNodeId,
 }) {
-  const [padBox, setPadBox] = useState({ top: 0, right: 0, bottom: 0, left: 0 });
-  const [marBox, setMarBox] = useState({ top: 0, right: 0, bottom: 0, left: 0 });
+  const [padBox, setPadBox] = useState({ top: '', right: '', bottom: '', left: '' });
+  const [marBox, setMarBox] = useState({ top: '', right: '', bottom: '', left: '' });
   const [padLinked, setPadLinked] = useState(true);
   const [marLinked, setMarLinked] = useState(true);
 
   useEffect(() => {
     setPadBox({
-      top: clampPadding(form.paddingTop),
-      right: clampPadding(form.paddingRight),
-      bottom: clampPadding(form.paddingBottom),
-      left: clampPadding(form.paddingLeft),
+      top: formSide(form, 'padding', 'top'),
+      right: formSide(form, 'padding', 'right'),
+      bottom: formSide(form, 'padding', 'bottom'),
+      left: formSide(form, 'padding', 'left'),
     });
     setMarBox({
-      top: clampMargin(form.marginTop),
-      right: clampMargin(form.marginRight),
-      bottom: clampMargin(form.marginBottom),
-      left: clampMargin(form.marginLeft),
+      top: formSide(form, 'margin', 'top'),
+      right: formSide(form, 'margin', 'right'),
+      bottom: formSide(form, 'margin', 'bottom'),
+      left: formSide(form, 'margin', 'left'),
     });
   }, [
     form.paddingTop,
@@ -236,8 +300,25 @@ export default function SpacingControls({
     form.marginLeft,
   ]);
 
-  // Keep the legacy numeric fields in sync when we commit (so existing UI stays consistent).
   const syncFormFromBox = (kind, box) => {
+    const patch =
+      kind === 'padding'
+        ? {
+            paddingTop: box.top,
+            paddingRight: box.right,
+            paddingBottom: box.bottom,
+            paddingLeft: box.left,
+          }
+        : {
+            marginTop: box.top,
+            marginRight: box.right,
+            marginBottom: box.bottom,
+            marginLeft: box.left,
+          };
+    if (typeof onPatchForm === 'function') {
+      onPatchForm(patch);
+      return;
+    }
     if (kind === 'padding') {
       onUpdate?.('paddingTop', box.top);
       onUpdate?.('paddingRight', box.right);
@@ -270,9 +351,9 @@ export default function SpacingControls({
         setLinked={setMarLinked}
         clamp={clampMargin}
         selectedNodeId={selectedNodeId}
-        onPreviewStylePatch={(p) => onPreviewStylePatch?.(p)}
-        onCommitStylePatch={async (p) => {
-          syncFormFromBox('margin', marBox);
+        onPreviewStylePatch={onPreviewStylePatch}
+        onCommitStylePatch={async (p, committedBox) => {
+          syncFormFromBox('margin', committedBox);
           await onCommitStylePatch?.(p);
         }}
         onClearPreviewStyle={onClearPreviewStyle}
@@ -293,9 +374,9 @@ export default function SpacingControls({
         setLinked={setPadLinked}
         clamp={clampPadding}
         selectedNodeId={selectedNodeId}
-        onPreviewStylePatch={(p) => onPreviewStylePatch?.(p)}
-        onCommitStylePatch={async (p) => {
-          syncFormFromBox('padding', padBox);
+        onPreviewStylePatch={onPreviewStylePatch}
+        onCommitStylePatch={async (p, committedBox) => {
+          syncFormFromBox('padding', committedBox);
           await onCommitStylePatch?.(p);
         }}
         onClearPreviewStyle={onClearPreviewStyle}

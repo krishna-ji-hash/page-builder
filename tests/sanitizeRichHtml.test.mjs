@@ -13,3 +13,9 @@ test('sanitizeRichHtml keeps headings and links', () => {
   assert.ok(out.includes('h2'));
   assert.ok(out.includes('example.com'));
 });
+
+test('sanitizeRichHtml emptyReturn option', () => {
+  assert.equal(sanitizeRichHtml('   ', { emptyReturn: '' }), '');
+  assert.equal(sanitizeRichHtml('', { emptyReturn: '' }), '');
+  assert.ok(sanitizeRichHtml('').includes('p'));
+});

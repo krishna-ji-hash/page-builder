@@ -945,6 +945,12 @@
   cursor: not-allowed;
 }
 
+.bld-layer-tree__action--lock.is-on {
+  border-color: color-mix(in srgb, var(--bld-primary) 45%, var(--bld-border));
+  background: color-mix(in srgb, var(--bld-primary) 12%, var(--bld-surface));
+  color: var(--bld-text);
+}
+
 .bld-layer-tree__twist {
   width: 18px;
   height: 18px;

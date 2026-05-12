@@ -4,30 +4,35 @@
  */
 
 .bld-builder-root .bld-canvas__live-mirror.live-site {
-  flex: 1 1 auto;
-  min-height: 0;
+  /* Grow with sections; do not shrink below content (min-height:0 caused clipped/tight artboard vs scroll parent). */
+  flex: 1 0 auto;
+  min-height: min-content;
   width: 100%;
   max-width: 100%;
   margin: 0;
-  overflow-x: hidden;
+  /* Must win over global `.live-site { overflow-x: hidden }` so builder never clips wide sections at 100% zoom. */
+  overflow-x: visible !important;
   box-sizing: border-box;
-  /* Match app/fonts/live baseline; inline node styles still win via style attribute */
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
-  line-height: 1.5;
-  color: #0f172a;
+  /* Match `styles/live/live-site.css` on `.live-site` — theme vars come from inline `siteThemeToCssVariableStyle` on the mirror. */
+  font-family: var(--font-family-body, system-ui, -apple-system, 'Segoe UI', sans-serif);
+  line-height: var(--line-height-base, 1.5);
+  color: var(--color-text, #0f172a);
   background: transparent;
 }
 
 .bld-builder-root .bld-canvas__live-mirror .live-doc {
-  /* Avoid double horizontal gutter with .bld-canvas__page padding */
-  padding-inline: 0;
+  /* Horizontal inset: room for section shadows + override global overflow-x without double gutter from page padding. */
+  padding-inline: clamp(8px, 1.5vw, 28px);
   padding-bottom: 0;
   /* Negative-offset section chrome (.bld-node__chrome--overlay top: -42px) lives here without clipping */
   padding-top: 46px;
   /* Same axis spacing as public live: gap (not margin) between root sections */
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
   gap: 24px;
+  /* Must win over global `.live-doc { overflow-x: hidden }`. Safe inset for section shadows in the artboard. */
+  overflow-x: visible !important;
 }
 
 /* Reset builder demo chrome inside live mirror (inline node styles still win). */

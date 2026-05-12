@@ -19,3 +19,27 @@ test('normalizeResponsiveStyle does not persist spacing.gap on desktop', () => {
   assert.equal(out.desktop.layout.gap, 12);
   assert.equal(out.desktop.spacing.gap, undefined);
 });
+
+test('normalizeResponsiveStyle defaults stack flexDirection to column when unset', () => {
+  const out = normalizeResponsiveStyle(
+    { desktop: { layout: { display: 'flex' } } },
+    { nodeType: 'stack' }
+  );
+  assert.equal(out.desktop.layout.flexDirection, 'column');
+});
+
+test('normalizeResponsiveStyle keeps explicit stack flexDirection row', () => {
+  const out = normalizeResponsiveStyle(
+    { desktop: { layout: { display: 'flex', flexDirection: 'row', gap: 8 } } },
+    { nodeType: 'stack' }
+  );
+  assert.equal(out.desktop.layout.flexDirection, 'row');
+});
+
+test('normalizeStyle preserves typography whiteSpace', () => {
+  const out = normalizeStyle({
+    layout: { display: 'block' },
+    typography: { fontSize: '16px', whiteSpace: 'pre-wrap' },
+  });
+  assert.equal(out.typography.whiteSpace, 'pre-wrap');
+});

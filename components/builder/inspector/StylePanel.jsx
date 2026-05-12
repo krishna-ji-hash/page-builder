@@ -10,6 +10,7 @@ import MenuControls from './MenuControls';
 import SizeControls from './SizeControls';
 import BackgroundControls from './BackgroundControls';
 import ResponsiveVisibilityControls from './ResponsiveVisibilityControls';
+import EffectsControls from './EffectsControls';
 import { isHeaderRowNode } from '@/lib/rowLayoutMeta';
 
 function Section({ title, defaultOpen = true, children }) {
@@ -29,6 +30,7 @@ export default function StylePanel({
   selectedNode,
   form,
   onChange,
+  onPatchForm,
   projectId,
   onPreviewStylePatch,
   onCommitStylePatch,
@@ -71,18 +73,24 @@ export default function StylePanel({
         />
       </Section>
       <Section title="Typography">
-        <TypographyControls form={form} onUpdate={onChange} />
+        <TypographyControls form={form} onUpdate={onChange} selectedNodeType={selectedNode?.nodeType || ''} />
       </Section>
       <Section title="Colors">
         <ColorControls form={form} onUpdate={onChange} showBackground={false} />
       </Section>
       <Section title="Background">
-        <BackgroundControls form={form} onUpdate={onChange} projectId={projectId} />
+        <BackgroundControls form={form} onUpdate={onChange} projectId={projectId} selectedNode={selectedNode} />
       </Section>
       <Section title="Spacing">
+        <p className="bld-field-note" style={{ marginTop: 0 }}>
+          Upar / neeche khali jagah: <strong>Padding</strong> (andar) ya <strong>Margin</strong> (bahar). Har side alag
+          value; blur par save. Plain text me nayi line: Style → Typography → pre-wrap, ya Content tab me multiline
+          text.
+        </p>
         <SpacingControls
           form={form}
           onUpdate={onChange}
+          onPatchForm={onPatchForm}
           onPreviewStylePatch={onPreviewStylePatch}
           onCommitStylePatch={onCommitStylePatch}
           onClearPreviewStyle={onClearPreviewStyle}
@@ -92,6 +100,9 @@ export default function StylePanel({
       </Section>
       <Section title="Border">
         <BorderControls form={form} onUpdate={onChange} />
+      </Section>
+      <Section title="Shadow & opacity">
+        <EffectsControls form={form} onUpdate={onChange} selectedNode={selectedNode} />
       </Section>
       <Section title="Layout (responsive)">
         <p className="bld-field-note" style={{ marginBottom: 10 }}>
@@ -118,7 +129,7 @@ export default function StylePanel({
           selectedNode={selectedNode}
           form={form}
           onUpdate={onChange}
-          hideSize={false}
+          hideSize
           breakpointLabel={deviceLabel}
           onApplyFlexPreset={onApplyFlexPreset}
           onResetLayoutKeys={onResetLayoutKeys}

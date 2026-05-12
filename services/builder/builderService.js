@@ -5,11 +5,13 @@ import {
   assertValidReorderParent,
   isContainerNodeType,
 } from '@/lib/builderHierarchy';
+import { mergeNodePropsJsonPatch } from '@/lib/builderTree';
 import { getWidgetDefinition, isWidgetAllowed } from '@/lib/builder/widgetRegistry';
 import { canDeleteProjectPage, normalizeBuilderSlug } from '@/lib/builder/projectPageRules';
 import { normalizeResponsiveStyle } from '@/lib/styleNormalizer';
 import { DEFAULT_SITE_THEME, themeSpacingPx } from '@/lib/siteDesignTheme';
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
+import { isSectionLockedFlagValue, metaRepresentsExplicitSectionUnlock } from '@/lib/rowLayoutMeta';
 
 function parseSnapshot(value) {
   if (!value) return null;
@@ -60,6 +62,7 @@ function enforceStructuralLayout(style = {}, nodeType) {
     }
     if (nodeType === 'stack') {
       layout.display = 'flex';
+      if (layout.flexDirection == null || layout.flexDirection === '') layout.flexDirection = 'column';
       if (layout.flexWrap == null || layout.flexWrap === '') layout.flexWrap = 'nowrap';
     }
     next[key] = {
@@ -68,6 +71,53 @@ function enforceStructuralLayout(style = {}, nodeType) {
     };
   }
   return next;
+}
+
+function isBuilderRowLockedFromPropsJson(propsJson, nodeType = 'row') {
+  const props = normalizeNodeProps(parseSnapshot(propsJson) || {}, nodeType);
+  return isSectionLockedFlagValue(props?.meta?.sectionLocked);
+}
+
+/** Walk DB parent chain; throw if any ancestor section row is locked. */
+async function assertDbNodeNotUnderLockedSectionRow(connection, dbRow) {
+  let walkParent = dbRow.parent_node_id;
+  for (let depth = 0; depth < 120 && walkParent; depth += 1) {
+    const anc = await getNodeById(walkParent, connection);
+    if (!anc) break;
+    if (anc.node_type === 'row' && isBuilderRowLockedFromPropsJson(anc.props_json, 'row')) {
+      throw new Error(
+        'This page section is locked. Unlock it from the Sections list or Layers panel (lock icon) before editing layers inside it.'
+      );
+    }
+    walkParent = anc.parent_node_id;
+  }
+}
+
+/** If this DB row is a locked section, only allow updates that set `meta.sectionLocked` to `false` (unlock). */
+async function assertLockedRowUpdateAllowsUnlockOnly(existingDbRow, mergedProps) {
+  if (existingDbRow.node_type !== 'row') return;
+  if (!isBuilderRowLockedFromPropsJson(existingDbRow.props_json, 'row')) return;
+  const nextMeta =
+    mergedProps && typeof mergedProps.meta === 'object' && mergedProps.meta != null ? mergedProps.meta : {};
+  if (!metaRepresentsExplicitSectionUnlock(nextMeta)) {
+    throw new Error(
+      'This section is locked. Unlock it from the Sections list or Layers panel (lock icon) before editing.'
+    );
+  }
+}
+
+/** For moves: destination parent must not sit under a locked section row. */
+async function assertDbParentChainNotUnderLockedSectionRow(connection, parentId) {
+  if (!parentId) return;
+  let cur = parentId;
+  for (let depth = 0; depth < 120 && cur; depth += 1) {
+    const n = await getNodeById(cur, connection);
+    if (!n) break;
+    if (n.node_type === 'row' && isBuilderRowLockedFromPropsJson(n.props_json, 'row')) {
+      throw new Error('Cannot move into a locked section. Unlock it first.');
+    }
+    cur = n.parent_node_id;
+  }
 }
 
 function normalizeNodeProps(props = {}, nodeType = null) {
@@ -518,6 +568,9 @@ async function createNodeTx(connection, pageId, draft, page, payload) {
     payload
   );
     assertValidNodeHierarchy(payload.nodeType, parentNode?.node_type || null);
+    if (resolvedParentId) {
+      await assertDbParentChainNotUnderLockedSectionRow(connection, resolvedParentId);
+    }
 
     const projectType = page.projectType || 'website';
     if (!isContainerNodeType(payload.nodeType)) {
@@ -705,15 +758,15 @@ export async function updateNode(nodeId, payload) {
     if (!existing) return null;
 
     const existingProps = normalizeNodeProps(parseSnapshot(existing.props_json) || {}, existing.node_type);
-    const mergedProps = payload.props
-      ? { ...existingProps, ...payload.props }
-      : existingProps;
+    const mergedProps = payload.props ? mergeNodePropsJsonPatch(existingProps, payload.props) : existingProps;
     if (payload.style_json !== undefined) {
       mergedProps.style_json = payload.style_json;
     }
     if (existing.node_type === 'rich_text' && mergedProps.content !== undefined) {
       mergedProps.content = sanitizeRichHtml(String(mergedProps.content));
     }
+    await assertDbNodeNotUnderLockedSectionRow(connection, existing);
+    await assertLockedRowUpdateAllowsUnlockOnly(existing, mergedProps);
     const nextProps = JSON.stringify(normalizeNodeProps(mergedProps, existing.node_type));
     const nextDisplayName = payload.displayName ?? existing.display_name;
     const nextPosition = payload.positionIndex ?? existing.position_index;
@@ -733,6 +786,7 @@ export async function updateNode(nodeId, payload) {
         }
       }
       assertValidNodeHierarchy(existing.node_type, parentNode?.node_type || null);
+      await assertDbParentChainNotUnderLockedSectionRow(connection, nextParent || null);
     }
 
     let nextDataJson = parseJsonColumn(existing.data_json);
@@ -783,6 +837,9 @@ export async function reorderNode({ nodeId, newParentId, newIndex }) {
 
     assertValidReorderParent(newParentId, newParent);
     assertValidNodeHierarchy(node.node_type, newParent?.node_type || null);
+
+    await assertDbNodeNotUnderLockedSectionRow(connection, node);
+    await assertDbParentChainNotUnderLockedSectionRow(connection, newParentId || null);
 
     const oldParentId = node.parent_node_id || null;
     const [oldSiblingsRows] = await connection.query(
@@ -846,6 +903,15 @@ export async function deleteNode(nodeId) {
     const existing = rows[0];
     if (!existing) return null;
 
+    const root = await getNodeById(nodeId, connection);
+    if (!root) return null;
+    await assertDbNodeNotUnderLockedSectionRow(connection, root);
+    if (root.node_type === 'row' && isBuilderRowLockedFromPropsJson(root.props_json, 'row')) {
+      throw new Error(
+        'This section is locked. Unlock it from the Sections list or Layers panel before deleting it.'
+      );
+    }
+
     const [allRows] = await connection.query(
       `SELECT id, parent_node_id
        FROM builder_nodes
@@ -880,6 +946,7 @@ export async function duplicateNode(nodeId) {
   return withTransaction(async (connection) => {
     const source = await getNodeById(nodeId, connection);
     if (!source) return null;
+    await assertDbNodeNotUnderLockedSectionRow(connection, source);
 
     const [allRows] = await connection.query(
       `SELECT id, parent_node_id, node_type, display_name, props_json, position_index, data_json, actions_json
@@ -1003,7 +1070,7 @@ async function persistClientTreeOntoDraft(connection, draftVersionId, clientRoot
     if (!existing || Number(existing.version_id) !== Number(draftVersionId)) continue;
 
     const existingProps = normalizeNodeProps(parseSnapshot(existing.props_json) || {}, existing.node_type);
-    const merged = { ...existingProps, ...(raw.props || {}) };
+    const merged = mergeNodePropsJsonPatch(existingProps, raw.props || {});
     if (raw.style_json !== undefined) merged.style_json = raw.style_json;
     if (raw.meta !== undefined && raw.meta && typeof raw.meta === 'object') {
       merged.meta = { ...(merged.meta || {}), ...raw.meta };

@@ -2,8 +2,15 @@
 
 const FONT_FAMILIES = ['Inter', 'Roboto', 'Poppins', 'Montserrat', 'Arial', 'Georgia'];
 const FONT_WEIGHTS = ['400', '500', '600', '700'];
+const WHITE_SPACE_OPTIONS = [
+  { value: 'pre-wrap', label: 'pre-wrap — line breaks (Enter / new lines)' },
+  { value: 'normal', label: 'normal — flowing paragraph' },
+  { value: 'nowrap', label: 'nowrap — no wrap' },
+];
 
-export default function TypographyControls({ form, onUpdate }) {
+export default function TypographyControls({ form, onUpdate, selectedNodeType = '' }) {
+  const showWhitespace = selectedNodeType === 'text' || selectedNodeType === 'heading' || selectedNodeType === 'rich_text';
+
   return (
     <div className="bld-control-stack">
       <div className="bld-field">
@@ -71,6 +78,26 @@ export default function TypographyControls({ form, onUpdate }) {
           </select>
         </div>
       </div>
+      {showWhitespace ? (
+        <div className="bld-field">
+          <label className="bld-label">White space / line breaks</label>
+          <select
+            className="bld-input"
+            value={form.whiteSpace || (selectedNodeType === 'text' ? 'pre-wrap' : 'normal')}
+            onChange={(e) => onUpdate('whiteSpace', e.target.value)}
+          >
+            {WHITE_SPACE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <p className="bld-field-note" style={{ marginTop: 6 }}>
+            Rich text: use <strong>Enter</strong> or toolbar <strong>¶</strong> for new paragraphs. Padding / margin:{' '}
+            <strong>Style → Spacing</strong> (values commit when the field blurs).
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }

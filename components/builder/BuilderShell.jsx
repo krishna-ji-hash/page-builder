@@ -3,9 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   autoFixTree,
+  canonicalNodeId,
   findNodeInTree,
   getSiblingContext,
+  mergeNodePropsJsonPatch,
   reconcileStructuralParents,
+  sameBuilderNodeId,
   validateTree,
 } from '@/lib/builderTree';
 import { isValidNodeHierarchy } from '@/lib/builderHierarchy';
@@ -21,6 +24,7 @@ import BuilderSidebar from './BuilderSidebar';
 import BuilderCanvas from './BuilderCanvas';
 import BuilderInspector from './BuilderInspector';
 import { getGlobalLinkMeta, isLinkedGlobalPlaceholder, treeContainsLinkedGlobals } from '@/lib/globalComponentLinkMeta';
+import { isNodeEditsDisabledBySectionLock, isSectionLockedRow, isStrictAncestorSectionLocked, metaRepresentsExplicitSectionUnlock } from '@/lib/rowLayoutMeta';
 import { loadAppsForProject } from '@/lib/registry/appLoader';
 import PageSeoModal from './seo/PageSeoModal';
 import AuditModal from './audits/AuditModal';
@@ -51,7 +55,7 @@ function countRootRows(nodes) {
 
 function updateNodeInTree(nodes, nodeId, updater) {
   return nodes.map((node) => {
-    if (node.id === nodeId) {
+    if (sameBuilderNodeId(node.id, nodeId)) {
       return updater(node);
     }
     if (!node.children?.length) return node;
@@ -65,7 +69,7 @@ function updateNodeInTree(nodes, nodeId, updater) {
 function addNodeToTree(nodes, parentId, newNode) {
   if (!parentId) return [...nodes, newNode];
   return nodes.map((node) => {
-    if (node.id === parentId) {
+    if (sameBuilderNodeId(node.id, parentId)) {
       return {
         ...node,
         children: [...(node.children || []), newNode].sort(
@@ -83,7 +87,7 @@ function addNodeToTree(nodes, parentId, newNode) {
 
 function removeNodeFromTree(nodes, nodeId) {
   return nodes
-    .filter((node) => node.id !== nodeId)
+    .filter((node) => !sameBuilderNodeId(node.id, nodeId))
     .map((node) => ({
       ...node,
       children: removeNodeFromTree(node.children || [], nodeId),
@@ -153,7 +157,7 @@ function treeNeedsStrictSanitize(nodes) {
 function buildParentMap(nodes, parentId = null, out = new Map()) {
   for (const node of nodes || []) {
     if (!node) continue;
-    out.set(node.id, parentId);
+    out.set(canonicalNodeId(node.id), parentId != null ? canonicalNodeId(parentId) : null);
     if (Array.isArray(node.children) && node.children.length) {
       buildParentMap(node.children, node.id, out);
     }
@@ -164,8 +168,8 @@ function buildParentMap(nodes, parentId = null, out = new Map()) {
 /** Nearest section row that contains this node (for quick actions when a stack/column is selected). */
 function findAncestorRowId(tree, startNodeId) {
   if (startNodeId == null) return null;
-  const sid = Number(startNodeId);
-  if (!Number.isFinite(sid)) return null;
+  const sid = canonicalNodeId(startNodeId);
+  if (sid == null) return null;
   const parents = buildParentMap(tree);
   let cur = sid;
   for (let i = 0; i < 80; i += 1) {
@@ -342,7 +346,7 @@ function detachNode(nodes, nodeId) {
   let removed = null;
   const next = nodes
     .filter((node) => {
-      if (node.id === nodeId) {
+      if (sameBuilderNodeId(node.id, nodeId)) {
         removed = node;
         return false;
       }
@@ -365,7 +369,7 @@ function insertNode(nodes, newParentId, newIndex, nodeToInsert) {
   }
 
   return nodes.map((node) => {
-    if (node.id === newParentId) {
+    if (sameBuilderNodeId(node.id, newParentId)) {
       const children = [...(node.children || [])];
       const index = Math.max(0, Math.min(newIndex, children.length));
       children.splice(index, 0, { ...nodeToInsert, parentNodeId: newParentId });
@@ -793,6 +797,13 @@ export default function BuilderShell({ pageId }) {
     return findNodeInTree(tree, selectedNodeId);
   }, [tree, selectedNodeId]);
 
+  const editingDisabledBySectionLock = useMemo(() => {
+    if (selectedNodeId == null || selectedNodeId === '') return false;
+    const nid = canonicalNodeId(selectedNodeId);
+    if (nid == null) return false;
+    return Boolean(isNodeEditsDisabledBySectionLock(tree, nid));
+  }, [tree, selectedNodeId]);
+
   const selectionBreadcrumb = useMemo(() => {
     if (!selectedNodeId) return null;
     const findPath = (nodes, targetId, path = []) => {
@@ -827,6 +838,11 @@ export default function BuilderShell({ pageId }) {
     if (activeSectionRowId == null) return null;
     return findNodeInTree(tree, activeSectionRowId);
   }, [tree, activeSectionRowId]);
+
+  const interiorSectionLocked = useMemo(
+    () => Boolean(interiorScopeRow && isSectionLockedRow(interiorScopeRow)),
+    [interiorScopeRow]
+  );
 
   const liveUrl =
     page?.projectSlug && page?.slug ? `/${page.projectSlug}/${page.slug}` : null;
@@ -876,7 +892,15 @@ export default function BuilderShell({ pageId }) {
     const node = findNodeInTree(tree, nodeId);
     if (!node) return;
     const isContainer = node.nodeType === 'row' || node.nodeType === 'column' || node.nodeType === 'stack';
-    setInspectorTab(isContainer ? 'style' : 'content');
+    const styleFirst =
+      isContainer ||
+      node.nodeType === 'image' ||
+      node.nodeType === 'carousel' ||
+      node.nodeType === 'heading' ||
+      node.nodeType === 'text' ||
+      node.nodeType === 'button' ||
+      node.nodeType === 'rich_text';
+    setInspectorTab(styleFirst ? 'style' : 'content');
   };
 
   const handleNodeUpdate = async ({ nodeId, payload }) => {
@@ -892,6 +916,18 @@ export default function BuilderShell({ pageId }) {
       setErrorMessage('Invalid node id');
       return;
     }
+    const targetNode = findNodeInTree(tree, normalizedNodeId);
+    if (isStrictAncestorSectionLocked(tree, normalizedNodeId)) {
+      setErrorMessage('This layer is inside a locked section. Unlock the section in the left panel to edit.');
+      return;
+    }
+    if (targetNode?.nodeType === 'row' && isSectionLockedRow(targetNode)) {
+      const mergedMeta = { ...(targetNode.props?.meta || {}), ...(payload.props?.meta || {}) };
+      if (!metaRepresentsExplicitSectionUnlock(mergedMeta)) {
+        setErrorMessage('This section is locked. Click the lock icon in Sections or Layers to unlock.');
+        return;
+      }
+    }
     const beforeTree = tree;
     pushHistorySnapshot(beforeTree);
     setIsSavingNode(true);
@@ -900,7 +936,7 @@ export default function BuilderShell({ pageId }) {
       updateNodeInTree(prev, normalizedNodeId, (node) => ({
         ...node,
         displayName: payload.displayName ?? node.displayName,
-        props: payload.props ? { ...node.props, ...payload.props } : node.props,
+        props: payload.props ? mergeNodePropsJsonPatch(node.props || {}, payload.props) : node.props,
         style_json: payload.style_json ?? node.style_json,
         dataJson: payload.dataJson !== undefined ? payload.dataJson : node.dataJson,
         actionsJson: payload.actionsJson !== undefined ? payload.actionsJson : node.actionsJson,
@@ -926,6 +962,19 @@ export default function BuilderShell({ pageId }) {
     } finally {
       setIsSavingNode(false);
     }
+  };
+
+  const handleToggleSectionLock = async (rowId) => {
+    const rid = Number(rowId);
+    if (!Number.isFinite(rid) || rid <= 0) return;
+    const n = findNodeInTree(tree, rid);
+    if (!n || n.nodeType !== 'row') return;
+    const nextLocked = !isSectionLockedRow(n);
+    const meta = { ...(n.props?.meta || {}), sectionLocked: nextLocked };
+    await handleNodeUpdate({
+      nodeId: rid,
+      payload: { props: { ...n.props, meta } },
+    });
   };
 
   const handleSetContainerDirection = async ({ nodeId, direction }) => {
@@ -1610,6 +1659,11 @@ export default function BuilderShell({ pageId }) {
         const resolved = await resolveQuickAddParentId({ targetNodeId: parentNodeId, nodeType });
         if (resolved != null) effectiveParentId = resolved;
       }
+      if (effectiveParentId && isNodeEditsDisabledBySectionLock(beforeTree, Number(effectiveParentId))) {
+        setErrorMessage('This section is locked. Unlock it in the left panel to add elements.');
+        setUndoStack((prev) => prev.slice(0, -1));
+        return;
+      }
       const node = await createNodeRequest({ nodeType, parentNodeId: effectiveParentId });
       if (node?.id) {
         // Auto-scaffold empty containers so the user always gets:
@@ -1659,6 +1713,11 @@ export default function BuilderShell({ pageId }) {
       const resolvedParentNodeId = await resolveQuickAddParentId({ targetNodeId, nodeType });
       if (resolvedParentNodeId == null && nodeType !== 'row') {
         throw new Error('Could not resolve quick-add target');
+      }
+      if (resolvedParentNodeId != null && isNodeEditsDisabledBySectionLock(beforeTree, Number(resolvedParentNodeId))) {
+        setErrorMessage('This section is locked. Unlock it to add elements.');
+        setUndoStack((prev) => prev.slice(0, -1));
+        return;
       }
       const node = await createNodeRequest({ nodeType, parentNodeId: resolvedParentNodeId });
       if (node?.id) setSelectedNodeId(node.id);
@@ -2281,6 +2340,10 @@ export default function BuilderShell({ pageId }) {
       setErrorMessage('Invalid node id for delete');
       return;
     }
+    if (isNodeEditsDisabledBySectionLock(tree, normalizedNodeId)) {
+      setErrorMessage('This layer is inside a locked section. Unlock the section to delete.');
+      return;
+    }
     if (deleteInFlightRef.current) return;
     deleteInFlightRef.current = true;
     const beforeTree = tree;
@@ -2319,6 +2382,11 @@ export default function BuilderShell({ pageId }) {
   const handleDuplicateNode = useCallback(
     async (nodeId) => {
       if (!nodeId) return null;
+      const nid = Number(nodeId);
+      if (isNodeEditsDisabledBySectionLock(tree, nid)) {
+        setErrorMessage('Cannot duplicate a layer inside a locked section.');
+        return null;
+      }
       const beforeTree = tree;
       pushHistorySnapshot(beforeTree);
       setIsSavingNode(true);
@@ -2354,6 +2422,14 @@ export default function BuilderShell({ pageId }) {
     if (!Number.isFinite(nid) || nid <= 0) return;
     if (!Number.isFinite(idx) || idx < 0) return;
     const beforeTree = baseTree ?? tree;
+    if (isNodeEditsDisabledBySectionLock(beforeTree, nid)) {
+      setErrorMessage('Cannot reorder: this layer is inside a locked section.');
+      return;
+    }
+    if (newParentId != null && isNodeEditsDisabledBySectionLock(beforeTree, Number(newParentId))) {
+      setErrorMessage('Cannot move into a locked section.');
+      return;
+    }
     pushHistorySnapshot(beforeTree);
     setIsReorderingNode(true);
     setErrorMessage('');
@@ -3820,27 +3896,49 @@ export default function BuilderShell({ pageId }) {
                     {pageSectionRows.map((row, idx) => {
                       const isActive =
                         activeSectionRowId != null && Number(activeSectionRowId) === Number(row.id);
+                      const rowNode = findNodeInTree(tree, row.id);
+                      const rowLocked = isSectionLockedRow(rowNode);
                       return (
                         <li key={row.id} className="bld-left__sections-list__item">
                           <div className="bld-left__section-row">
                             <button
                               type="button"
-                              className={`bld-left__section-chip${isActive ? ' is-active' : ''}`}
+                              className={`bld-left__section-chip${isActive ? ' is-active' : ''}${rowLocked ? ' is-locked' : ''}`}
                               onClick={() => handleNodeSelect(row.id)}
-                              title={`Select section: ${row.label}`}
+                              title={
+                                rowLocked
+                                  ? `Select section: ${row.label} (locked — use lock button to unlock)`
+                                  : `Select section: ${row.label}`
+                              }
                             >
                               <span className="bld-left__section-chip__idx" aria-hidden>
                                 {idx + 1}
                               </span>
                               <span className="bld-left__section-chip__label">{row.label}</span>
                             </button>
-                            <div className="bld-left__section-actions" aria-label="Reorder section">
+                            <div className="bld-left__section-actions" aria-label="Section actions">
+                              <button
+                                type="button"
+                                className={`bld-left__section-action bld-left__section-action--lock${rowLocked ? ' is-on' : ''}`}
+                                title={rowLocked ? 'Unlock section' : 'Lock section (read-only)'}
+                                aria-label={rowLocked ? 'Unlock section' : 'Lock section'}
+                                aria-pressed={rowLocked}
+                                disabled={isSavingNode}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  void handleToggleSectionLock(row.id);
+                                }}
+                              >
+                                {/* Icon = current state (not “next action”): closed = locked, open = unlocked */}
+                                {rowLocked ? '🔒' : '🔓'}
+                              </button>
                               <button
                                 type="button"
                                 className="bld-left__section-action"
                                 title="Move section up"
                                 aria-label="Move section up"
-                                disabled={idx === 0 || isReorderingNode}
+                                disabled={idx === 0 || isReorderingNode || rowLocked || isSavingNode}
                                 onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
@@ -3854,7 +3952,9 @@ export default function BuilderShell({ pageId }) {
                                 className="bld-left__section-action"
                                 title="Move section down"
                                 aria-label="Move section down"
-                                disabled={idx === pageSectionRows.length - 1 || isReorderingNode}
+                                disabled={
+                                  idx === pageSectionRows.length - 1 || isReorderingNode || rowLocked || isSavingNode
+                                }
                                 onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
@@ -3901,7 +4001,7 @@ export default function BuilderShell({ pageId }) {
                         id={`bld-header-layout-${interiorScopeRow.id}`}
                         className="bld-left__interior-select"
                         value={String(interiorScopeRow.props?.meta?.headerLayout || 'standard')}
-                        disabled={isSavingNode}
+                        disabled={isSavingNode || interiorSectionLocked}
                         onChange={async (e) => {
                           const rowId = interiorScopeRow.id;
                           const n = findNodeInTree(tree, rowId);
@@ -3935,7 +4035,7 @@ export default function BuilderShell({ pageId }) {
                         id={`bld-header-align-${interiorScopeRow.id}`}
                         className="bld-left__interior-select"
                         value={String(interiorScopeRow.props?.meta?.headerAlign || 'between')}
-                        disabled={isSavingNode}
+                        disabled={isSavingNode || interiorSectionLocked}
                         onChange={async (e) => {
                           const rowId = interiorScopeRow.id;
                           const n = findNodeInTree(tree, rowId);
@@ -3970,7 +4070,7 @@ export default function BuilderShell({ pageId }) {
                         id={`bld-footer-layout-${interiorScopeRow.id}`}
                         className="bld-left__interior-select"
                         value={String(interiorScopeRow.props?.meta?.footerLayout || 'standard')}
-                        disabled={isSavingNode}
+                        disabled={isSavingNode || interiorSectionLocked}
                         onChange={async (e) => {
                           const rowId = interiorScopeRow.id;
                           const n = findNodeInTree(tree, rowId);
@@ -4111,6 +4211,7 @@ export default function BuilderShell({ pageId }) {
                   onUpdateNode={handleNodeUpdate}
                   onDeleteNode={handleDeleteNode}
                   onReorderNode={handleReorderNode}
+                  onToggleSectionLock={handleToggleSectionLock}
                   device={device}
                   isCreatingNode={isCreatingNode}
                   projectType={page?.projectType || 'website'}
@@ -4256,6 +4357,7 @@ export default function BuilderShell({ pageId }) {
               overflowDiagnostics={overflowByNodeId?.[selectedNodeId] || null}
               onEditGlobalComponent={openGlobalComponentEditor}
               onDetachFromGlobalComponent={handleDetachFromGlobalComponent}
+              editingDisabledBySectionLock={editingDisabledBySectionLock}
             />
           </aside>
         </div>

@@ -67,37 +67,6 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
     reader.readAsDataURL(file);
   };
 
-  if (!selectedNode) {
-    return (
-      <div className="bld-panel">
-        <div className="bld-empty-state">Select a widget on canvas.</div>
-      </div>
-    );
-  }
-
-  const isButton = selectedNode.nodeType === 'button';
-  const isTextLike = selectedNode.nodeType === 'heading' || selectedNode.nodeType === 'text' || isButton;
-  const isImage = selectedNode.nodeType === 'image';
-  const isMenu = selectedNode.nodeType === 'menu';
-  const isTable = selectedNode.nodeType === 'table';
-  const isForm = selectedNode.nodeType === 'form';
-  const isRichText = selectedNode.nodeType === 'rich_text';
-  const isCarousel = selectedNode.nodeType === 'carousel';
-  const carouselVariantKey =
-    isCarousel && ['image', 'hero', 'card', 'logo', 'ticker', 'marquee'].includes(form.carouselVariant)
-      ? form.carouselVariant
-      : 'image';
-  const isLogoSlider = isCarousel && form.carouselVariant === 'logo';
-  const isTickerSlider = isCarousel && form.carouselVariant === 'ticker';
-  const isMarqueeSlider = isCarousel && form.carouselVariant === 'marquee';
-  const isTickerOrMarquee = isCarousel && (isTickerSlider || isMarqueeSlider);
-  const carouselSlides = isCarousel && Array.isArray(selectedNode.props?.slides) ? selectedNode.props.slides : [];
-  const formFields = isForm && Array.isArray(selectedNode.props?.fields) ? selectedNode.props.fields : [];
-  const formNotifications =
-    isForm && selectedNode.props?.notifications && typeof selectedNode.props.notifications === 'object'
-      ? selectedNode.props.notifications
-      : {};
-
   const handleCarouselSlideImageUpload = (slideIndex, event) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -143,14 +112,55 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
     reader.readAsDataURL(file);
   };
 
+  if (!selectedNode) {
+    return (
+      <div className="bld-panel">
+        <div className="bld-empty-state">Select a widget on canvas.</div>
+      </div>
+    );
+  }
+
+  const isButton = selectedNode.nodeType === 'button';
+  const isTextLike = selectedNode.nodeType === 'heading' || selectedNode.nodeType === 'text' || isButton;
+  const isImage = selectedNode.nodeType === 'image';
+  const isMenu = selectedNode.nodeType === 'menu';
+  const isTable = selectedNode.nodeType === 'table';
+  const isForm = selectedNode.nodeType === 'form';
+  const isRichText = selectedNode.nodeType === 'rich_text';
+  const isCarousel = selectedNode.nodeType === 'carousel';
+  const carouselVariantKey =
+    isCarousel && ['image', 'hero', 'card', 'logo', 'ticker', 'marquee'].includes(form.carouselVariant)
+      ? form.carouselVariant
+      : 'image';
+  const isLogoSlider = isCarousel && form.carouselVariant === 'logo';
+  const isTickerSlider = isCarousel && form.carouselVariant === 'ticker';
+  const isMarqueeSlider = isCarousel && form.carouselVariant === 'marquee';
+  const isTickerOrMarquee = isCarousel && (isTickerSlider || isMarqueeSlider);
+  const carouselSlides = isCarousel && Array.isArray(selectedNode.props?.slides) ? selectedNode.props.slides : [];
+  const formFields = isForm && Array.isArray(selectedNode.props?.fields) ? selectedNode.props.fields : [];
+  const formNotifications =
+    isForm && selectedNode.props?.notifications && typeof selectedNode.props.notifications === 'object'
+      ? selectedNode.props.notifications
+      : {};
+
   return (
     <div className="bld-panel">
       <div className="bld-panel__head">Content</div>
       <CmsBindingsPanel selectedNode={selectedNode} projectId={projectId} onChange={onChange} />
       {isTextLike ? (
         <div className="bld-field">
-          <label className="bld-label">{isButton ? 'Label' : 'Text'}</label>
-          <input className="bld-input" value={form.text || ''} onChange={(e) => onChange('text', e.target.value)} />
+          <label className="bld-label">{isButton ? 'Label' : selectedNode.nodeType === 'heading' ? 'Heading' : 'Text'}</label>
+          {selectedNode.nodeType === 'text' ? (
+            <textarea
+              className="bld-input bld-textarea"
+              rows={10}
+              value={form.text || ''}
+              onChange={(e) => onChange('text', e.target.value)}
+              placeholder="Nayi line ke liye Enter. Spacing: Style → Spacing → Padding."
+            />
+          ) : (
+            <input className="bld-input" value={form.text || ''} onChange={(e) => onChange('text', e.target.value)} />
+          )}
         </div>
       ) : null}
       {isRichText ? (
@@ -164,7 +174,11 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
               onChange={(e) => onChange('richTextHtml', e.target.value)}
             />
           </div>
-          <p className="bld-panel__hint">Double‑click the block on canvas for WYSIWYG + toolbar.</p>
+          <p className="bld-panel__hint">
+            Double‑click the block on canvas for WYSIWYG + toolbar. Nayi paragraph: <strong>Enter</strong> ya toolbar{' '}
+            <strong>¶</strong>. Alag paragraphs ke beech space: HTML me multiple <code>&lt;p&gt;</code> blocks. Box ke
+            andar/bahar padding: <strong>Style → Spacing</strong>.
+          </p>
         </>
       ) : null}
       {isButton ? (
@@ -259,6 +273,30 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
       {isImage ? (
         <>
           <div className="bld-field">
+            <label className="bld-label">Image quick tools</label>
+            <p className="bld-field-note" style={{ marginTop: 0 }}>
+              Ek click se fit, width aur height set ho jate hain (live + canvas). Neeche se manually bhi change kar
+              sakte ho; exact width ke liye <strong>Style</strong> tab → Size.
+            </p>
+            <div
+              className="bld-field-grid"
+              style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, marginTop: 8 }}
+            >
+              <button type="button" className="bld-chip" onClick={() => onChange('imageQuickPreset', 'naturalContain')}>
+                Poori photo, side white hatao (contain)
+              </button>
+              <button type="button" className="bld-chip" onClick={() => onChange('imageQuickPreset', 'fullCover')}>
+                Full width hero (cover, ~400px height)
+              </button>
+              <button type="button" className="bld-chip" onClick={() => onChange('imageQuickPreset', 'slimBanner')}>
+                Patla banner strip (cover, 200px)
+              </button>
+              <button type="button" className="bld-chip" onClick={() => onChange('imageQuickPreset', 'logo')}>
+                Logo / icon (contain, 56px)
+              </button>
+            </div>
+          </div>
+          <div className="bld-field">
             <label className="bld-label">Upload</label>
             <input type="file" accept="image/*" className="bld-input" onChange={handleImageUpload} />
           </div>
@@ -296,23 +334,24 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
             <input className="bld-input" value={form.alt || ''} onChange={(e) => onChange('alt', e.target.value)} />
           </div>
           <div className="bld-field">
-            <label className="bld-label">Image Fit</label>
+            <label className="bld-label">Image fit (object-fit)</label>
             <select className="bld-input" value={form.imageFit || 'cover'} onChange={(e) => onChange('imageFit', e.target.value)}>
-              <option value="cover">cover (crop)</option>
-              <option value="contain">contain (full image)</option>
-              <option value="fill">fill</option>
+              <option value="cover">Cover — poora box bharta hai, thoda crop ho sakta hai</option>
+              <option value="contain">Contain — poori tasveer; side par khali jagah Style/width se control</option>
+              <option value="fill">Fill — stretch (aspect ratio bigad sakta hai)</option>
             </select>
           </div>
           <div className="bld-field">
-            <label className="bld-label">Crop Height (px)</label>
+            <label className="bld-label">Image height (px)</label>
             <input
               type="number"
               min="0"
               className="bld-input"
               value={Number(form.imageHeightPx || 0)}
               onChange={(e) => onChange('imageHeightPx', e.target.value)}
-              placeholder="0 = auto height"
+              placeholder="0 = natural height"
             />
+            <p className="bld-field-note">0 = image apni height le; fixed box ke liye yahan px set karo.</p>
           </div>
         </>
       ) : null}
@@ -609,6 +648,82 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
                       >
                         Choose from Media Library
                       </button>
+                    </div>
+
+                    <div className="bld-field">
+                      <label className="bld-label">Image border radius (px)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={200}
+                        className="bld-input"
+                        value={Number(slide?.imageBorderRadiusPx ?? 0) || 0}
+                        onChange={(e) =>
+                          onChange('carouselSlidePatch', {
+                            index: idx,
+                            patch: {
+                              imageBorderRadiusPx: Math.max(0, Math.min(200, Math.round(Number(e.target.value) || 0))),
+                            },
+                          })
+                        }
+                      />
+                      <p className="bld-field-note">Rounded corners on this slide&apos;s image</p>
+                    </div>
+
+                    <div className="bld-field-grid">
+                      <div className="bld-field">
+                        <label className="bld-label">Image width (px)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={2400}
+                          className="bld-input"
+                          value={Number(slide?.imageWidthPx) > 0 ? Number(slide.imageWidthPx) : ''}
+                          placeholder="0 = full width"
+                          onChange={(e) => {
+                            const raw = e.target.value.trim();
+                            const n = raw === '' ? 0 : Math.max(0, Math.min(2400, Math.round(Number(raw) || 0)));
+                            onChange('carouselSlidePatch', { index: idx, patch: { imageWidthPx: n } });
+                          }}
+                        />
+                      </div>
+                      <div className="bld-field">
+                        <label className="bld-label">Image height (px)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={2400}
+                          className="bld-input"
+                          value={Number(slide?.imageHeightPx) > 0 ? Number(slide.imageHeightPx) : ''}
+                          placeholder="0 = full height"
+                          onChange={(e) => {
+                            const raw = e.target.value.trim();
+                            const n = raw === '' ? 0 : Math.max(0, Math.min(2400, Math.round(Number(raw) || 0)));
+                            onChange('carouselSlidePatch', { index: idx, patch: { imageHeightPx: n } });
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div className="bld-field">
+                      <label className="bld-label">Focal point (crop with Cover)</label>
+                      <select
+                        className="bld-input"
+                        value={String(slide?.imageObjectPosition || '')}
+                        onChange={(e) =>
+                          onChange('carouselSlidePatch', {
+                            index: idx,
+                            patch: { imageObjectPosition: e.target.value || '' },
+                          })
+                        }
+                      >
+                        <option value="">Use carousel default</option>
+                        <option value="center">Center</option>
+                        <option value="top">Top</option>
+                        <option value="bottom">Bottom</option>
+                        <option value="left">Left</option>
+                        <option value="right">Right</option>
+                      </select>
+                      <p className="bld-field-note">When Image fit is Cover, shifts which part of the photo stays visible (simple crop).</p>
                     </div>
 
                     <div className="bld-field-grid">

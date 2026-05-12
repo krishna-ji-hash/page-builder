@@ -130,6 +130,8 @@ export default function LayoutControls({
 
   const layoutLocked = isLayoutLockedRow(selectedNode);
   const flexDisabled = layoutLocked;
+  const effectiveLayoutDirection =
+    (form.layoutDirection && String(form.layoutDirection).trim()) || (isRow ? 'row' : 'column');
 
   return (
     <div className="bld-control-stack">
@@ -216,7 +218,7 @@ export default function LayoutControls({
               ) : null}
             </div>
             <FlexLayoutPreview
-              flexDirection={form.layoutDirection || 'column'}
+              flexDirection={effectiveLayoutDirection}
               justifyContent={form.layoutJustify || 'flex-start'}
               alignItems={form.layoutAlign || 'stretch'}
             />
@@ -230,7 +232,7 @@ export default function LayoutControls({
               </span>
             </div>
             <FlexLayoutControlsPanel
-              flexDirection={form.layoutDirection || 'row'}
+              flexDirection={effectiveLayoutDirection}
               flexWrap={form.layoutFlexWrap || 'nowrap'}
               justifyContent={form.layoutJustify || 'flex-start'}
               alignItems={form.layoutAlign || 'stretch'}
@@ -298,7 +300,7 @@ export default function LayoutControls({
               <select
                 className="bld-input"
                 disabled={flexDisabled}
-                value={form.layoutDirection || 'column'}
+                value={effectiveLayoutDirection}
                 onChange={(e) => onUpdate('layoutDirection', e.target.value)}
               >
                 {DIRECTION_OPTIONS.map((item) => (

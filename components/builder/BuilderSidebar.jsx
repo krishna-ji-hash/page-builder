@@ -6,6 +6,7 @@ import { getWidgetsForProjectType } from '@/lib/builder/widgetRegistry';
 import { useBuilderTheme } from '@/context/BuilderThemeContext';
 import { FULL_PAGE_TEMPLATES } from '@/lib/fullPageTemplates';
 import { getGlobalLinkMeta, isLinkedGlobalPlaceholder } from '@/lib/globalComponentLinkMeta';
+import { isSectionLockedRow, isStrictAncestorSectionLocked } from '@/lib/rowLayoutMeta';
 
 const ELEMENT_CARDS = [
   { id: 'heading', label: 'Heading', icon: 'H', supported: true },
@@ -43,6 +44,7 @@ function resolveParentNodeIdForCreate(nodeType, selectedNode) {
 
 function LayerTree({
   nodes,
+  tree,
   depth = 0,
   selectedNodeId,
   onSelectNode,
@@ -51,11 +53,17 @@ function LayerTree({
   onDeleteNode,
   onMoveNode,
   onMoveIntoSelected,
+  onToggleSectionLock,
 }) {
   const depthClass = `bld-layer-tree__item--depth-${Math.min(depth, 6)}`;
   return (
     <div className="bld-layer-tree">
-      {nodes.map((node, index) => (
+      {nodes.map((node, index) => {
+        const structureActionsDisabled =
+          Boolean(tree?.length) &&
+          (isStrictAncestorSectionLocked(tree, node.id) ||
+            (node.nodeType === 'row' && isSectionLockedRow(node)));
+        return (
         <div key={node.id} className={`bld-layer-tree__branch ${depthClass}`}>
           <div className={`bld-layer-tree__item ${node.id === selectedNodeId ? 'is-selected' : ''}`}>
             {node.children?.length ? (
@@ -94,13 +102,28 @@ function LayerTree({
               ) : null}
             </button>
             <div className="bld-layer-tree__actions">
+              {node.nodeType === 'row' && typeof onToggleSectionLock === 'function' ? (
+                <button
+                  type="button"
+                  className={`bld-layer-tree__action bld-layer-tree__action--lock${isSectionLockedRow(node) ? ' is-on' : ''}`}
+                  title={isSectionLockedRow(node) ? 'Unlock section' : 'Lock section (read-only)'}
+                  aria-label={isSectionLockedRow(node) ? 'Unlock section' : 'Lock section'}
+                  aria-pressed={isSectionLockedRow(node)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleSectionLock(node.id);
+                  }}
+                >
+                  {isSectionLockedRow(node) ? '🔒' : '🔓'}
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="bld-layer-tree__action"
                 title="Move up"
                 aria-label="Move up"
                 onClick={() => onMoveNode?.(node.id, -1)}
-                disabled={index === 0}
+                disabled={index === 0 || structureActionsDisabled}
               >
                 ↑
               </button>
@@ -110,7 +133,7 @@ function LayerTree({
                 title="Move down"
                 aria-label="Move down"
                 onClick={() => onMoveNode?.(node.id, 1)}
-                disabled={index === nodes.length - 1}
+                disabled={index === nodes.length - 1 || structureActionsDisabled}
               >
                 ↓
               </button>
@@ -120,6 +143,7 @@ function LayerTree({
                 title="Delete node"
                 aria-label="Delete node"
                 onClick={() => onDeleteNode?.(node.id)}
+                disabled={structureActionsDisabled}
               >
                 ×
               </button>
@@ -129,6 +153,7 @@ function LayerTree({
                 title="Move into selected container"
                 aria-label="Move into selected container"
                 onClick={() => onMoveIntoSelected?.(node.id)}
+                disabled={structureActionsDisabled}
               >
                 ↳
               </button>
@@ -137,6 +162,7 @@ function LayerTree({
           {node.children?.length && !collapsedMap?.[node.id] ? (
             <LayerTree
               nodes={node.children}
+              tree={tree}
               depth={depth + 1}
               selectedNodeId={selectedNodeId}
               onSelectNode={onSelectNode}
@@ -145,10 +171,12 @@ function LayerTree({
               onDeleteNode={onDeleteNode}
               onMoveNode={onMoveNode}
               onMoveIntoSelected={onMoveIntoSelected}
+              onToggleSectionLock={onToggleSectionLock}
             />
           ) : null}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -206,6 +234,7 @@ export default function BuilderSidebar({
   onUpdateNode,
   onDeleteNode,
   onReorderNode,
+  onToggleSectionLock,
   device = 'desktop',
   isCreatingNode,
   projectType = 'website',
@@ -348,6 +377,7 @@ export default function BuilderSidebar({
           <div className="bld-sidebar__hint">Layers: {totalLayerCount}</div>
           <LayerTree
             nodes={tree || []}
+            tree={tree || []}
             selectedNodeId={selectedNodeId}
             onSelectNode={onSelectNode}
             collapsedMap={collapsedLayerMap}
@@ -355,6 +385,7 @@ export default function BuilderSidebar({
             onDeleteNode={onDeleteNode}
             onMoveNode={handleMoveLayer}
             onMoveIntoSelected={handleMoveLayerIntoSelected}
+            onToggleSectionLock={onToggleSectionLock}
           />
         </div>
       </div>

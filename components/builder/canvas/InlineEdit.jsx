@@ -9,37 +9,46 @@ export default function InlineEdit({
   onCancel,
   disabled = false,
   className = '',
+  multiline = false,
+  htmlMode = false,
 }) {
   const ref = useRef(null);
 
   useEffect(() => {
     if (!ref.current) return;
-    // Initialize editor text once when edit mode opens.
-    ref.current.innerText = value || '';
-    ref.current.focus();
+    const el = ref.current;
+    if (htmlMode) {
+      el.innerHTML = value || '';
+    } else {
+      el.innerText = value || '';
+    }
+    el.focus();
     const range = document.createRange();
-    range.selectNodeContents(ref.current);
+    range.selectNodeContents(el);
     range.collapse(false);
     const selection = window.getSelection();
     selection?.removeAllRanges();
     selection?.addRange(range);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- init once when inline editor mounts
   }, []);
 
   return (
     <div
       ref={ref}
       className={className}
+      style={multiline || htmlMode ? { whiteSpace: 'pre-wrap', minHeight: '4em' } : undefined}
       contentEditable={!disabled}
       suppressContentEditableWarning
       onClick={(event) => event.stopPropagation()}
       onInput={(event) => {
         event.stopPropagation();
-        onChange(event.currentTarget.innerText);
+        const el = event.currentTarget;
+        onChange(htmlMode ? el.innerHTML : el.innerText);
       }}
       onBlur={onCommit}
       onKeyDown={(event) => {
         event.stopPropagation();
-        if (event.key === 'Enter' && !event.shiftKey) {
+        if (event.key === 'Enter' && !event.shiftKey && !multiline && !htmlMode) {
           event.preventDefault();
           onCommit();
         } else if (event.key === 'Escape') {

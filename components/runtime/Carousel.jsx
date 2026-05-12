@@ -68,6 +68,11 @@ function normalizeSlide(slide, index) {
   const s = slide && typeof slide === 'object' ? slide : {};
   const card = s.card && typeof s.card === 'object' ? s.card : {};
   const cta = s.cta && typeof s.cta === 'object' ? s.cta : {};
+  const focal = String(s.imageObjectPosition || '').toLowerCase().trim();
+  const imageObjectPosition = ['center', 'top', 'bottom', 'left', 'right'].includes(focal) ? focal : '';
+  const br = Math.round(Number(s.imageBorderRadiusPx));
+  const iw = Math.round(Number(s.imageWidthPx));
+  const ih = Math.round(Number(s.imageHeightPx));
   return {
     id: typeof s.id === 'string' && s.id ? s.id : `slide-${index}`,
     title: typeof s.title === 'string' ? s.title : `Slide ${index + 1}`,
@@ -85,6 +90,10 @@ function normalizeSlide(slide, index) {
     buttonText: typeof s.buttonText === 'string' ? s.buttonText : '',
     buttonUrl: typeof s.buttonUrl === 'string' ? s.buttonUrl : '',
     overlay: typeof s.overlay === 'string' ? s.overlay : 'card',
+    imageBorderRadiusPx: Number.isFinite(br) ? clamp(br, 0, 200) : 0,
+    imageWidthPx: Number.isFinite(iw) ? clamp(iw, 0, 2400) : 0,
+    imageHeightPx: Number.isFinite(ih) ? clamp(ih, 0, 2400) : 0,
+    imageObjectPosition,
     card: {
       title: typeof card.title === 'string' ? card.title : '',
       body: typeof card.body === 'string' ? card.body : '',
@@ -96,6 +105,125 @@ function normalizeSlide(slide, index) {
       href: typeof cta.href === 'string' ? cta.href : '',
     },
   };
+}
+
+function mapObjectPositionCss(raw) {
+  const imagePosRaw = String(raw ?? 'center').toLowerCase().trim();
+  const objectPositionMap = {
+    center: 'center',
+    top: 'center top',
+    bottom: 'center bottom',
+    left: 'left center',
+    right: 'right center',
+  };
+  return objectPositionMap[imagePosRaw] || 'center';
+}
+
+/** Hero / image / card slide: radius, optional box size, focal point (with cover). */
+function slideImageStyle(slide, imageFit, globalObjectPositionCss) {
+  const fit = String(imageFit || 'cover').toLowerCase() === 'contain' ? 'contain' : 'cover';
+  const objectPosition = slide?.imageObjectPosition
+    ? mapObjectPositionCss(slide.imageObjectPosition)
+    : globalObjectPositionCss;
+
+  const radius = Math.max(0, Math.min(200, Math.round(Number(slide?.imageBorderRadiusPx) || 0)));
+  const w = Math.max(0, Math.min(2400, Math.round(Number(slide?.imageWidthPx) || 0)));
+  const h = Math.max(0, Math.min(2400, Math.round(Number(slide?.imageHeightPx) || 0)));
+
+  const base = {
+    objectFit: fit,
+    objectPosition,
+  };
+  if (radius) base.borderRadius = `${radius}px`;
+
+  if (w > 0 || h > 0) {
+    return {
+      ...base,
+      position: 'absolute',
+      left: '50%',
+      top: '50%',
+      right: 'auto',
+      bottom: 'auto',
+      inset: 'unset',
+      transform: 'translate(-50%, -50%)',
+      width: w > 0 ? `${w}px` : 'auto',
+      height: h > 0 ? `${h}px` : 'auto',
+      maxWidth: '100%',
+      maxHeight: '100%',
+    };
+  }
+
+  return base;
+}
+
+function normOverlayKey(s) {
+  return String(s || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
+/** Starter / demo copy — do not paint on the image. */
+function isPlaceholderOverlayTitle(raw) {
+  const t = normOverlayKey(raw);
+  if (!t) return true;
+  if (t === 'slide title' || t === 'card title' || t === 'second card') return true;
+  if (/^slide \d+$/.test(t)) return true;
+  return false;
+}
+
+function isPlaceholderOverlayBody(raw) {
+  const t = normOverlayKey(raw);
+  if (!t) return true;
+  if (t === 'slide subtitle') return true;
+  if (t === 'overlay card copy' || t === 'more details') return true;
+  if (/^carousel content block \d+$/.test(t)) return true;
+  return false;
+}
+
+/** On-image headline: `card.title` only, excluding template defaults. */
+function overlayCardHeadline(slide) {
+  const raw = String(slide?.card?.title || '').trim();
+  if (isPlaceholderOverlayTitle(raw)) return '';
+  return raw;
+}
+
+function overlayCardBody(slide) {
+  const raw = String(slide?.card?.body || slide?.body || '').trim();
+  if (isPlaceholderOverlayBody(raw)) return '';
+  return raw;
+}
+
+function overlayCtaVisible(slide) {
+  const label = String(slide?.cta?.label || '').trim();
+  const href = String(slide?.cta?.href || '').trim();
+  if (!label || !href) return false;
+  if (href === '#' && /^learn more\.?$/.test(normOverlayKey(label))) return false;
+  return true;
+}
+
+function slideOverlayVisible(slide) {
+  return Boolean(overlayCardHeadline(slide) || overlayCardBody(slide) || overlayCtaVisible(slide));
+}
+
+/** Ticker text when there is no image: real card title, else non-placeholder slide title. */
+function tickerFallbackLabel(slide) {
+  const h = overlayCardHeadline(slide);
+  if (h) return h;
+  const t = String(slide?.title || '').trim();
+  if (isPlaceholderOverlayTitle(t)) return '';
+  return t;
+}
+
+function tickerSlideImgStyle(slide) {
+  const radius = Math.max(0, Math.min(48, Math.round(Number(slide?.imageBorderRadiusPx) || 0)));
+  const w = Math.max(0, Math.min(400, Math.round(Number(slide?.imageWidthPx) || 0)));
+  const h = Math.max(0, Math.min(200, Math.round(Number(slide?.imageHeightPx) || 0)));
+  const sty = {};
+  if (radius) sty.borderRadius = `${radius}px`;
+  if (w) sty.maxWidth = `${Math.min(w, 152)}px`;
+  if (h) sty.maxHeight = `${Math.min(h, 72)}px`;
+  return sty;
 }
 
 export default function Carousel({ slides = [], style, settings, device = 'desktop', ...restProps }) {
@@ -119,14 +247,7 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
   const imagePosRaw = String(restProps?.imageObjectPosition ?? settings?.imageObjectPosition ?? 'center')
     .toLowerCase()
     .trim();
-  const objectPositionMap = {
-    center: 'center',
-    top: 'center top',
-    bottom: 'center bottom',
-    left: 'left center',
-    right: 'right center',
-  };
-  const imageObjectPosition = objectPositionMap[imagePosRaw] || 'center';
+  const imageObjectPosition = mapObjectPositionCss(imagePosRaw);
   const transitionEasingRaw = String(restProps?.transitionEasing ?? settings?.transitionEasing ?? 'ease')
     .toLowerCase()
     .trim();
@@ -280,9 +401,14 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
               {tickerDupSlides.map(({ slide, key }) => (
                 <div key={key} className="live-carousel__ticker-card">
                   {slide.imageSrc ? (
-                    <img className="live-carousel__ticker-img" src={slide.imageSrc} alt={slide.imageAlt || slide.title || ''} />
+                    <img
+                      className="live-carousel__ticker-img"
+                      src={slide.imageSrc}
+                      alt={slide.imageAlt || ''}
+                      style={tickerSlideImgStyle(slide)}
+                    />
                   ) : (
-                    <span className="live-carousel__ticker-fallback">{slide.title}</span>
+                    <span className="live-carousel__ticker-fallback">{tickerFallbackLabel(slide) || '\u00a0'}</span>
                   )}
                 </div>
               ))}
@@ -294,9 +420,14 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
                 {tickerDupSlides.map(({ slide, key }) => (
                   <div key={`${key}-b`} className="live-carousel__ticker-card">
                     {slide.imageSrc ? (
-                      <img className="live-carousel__ticker-img" src={slide.imageSrc} alt={slide.imageAlt || slide.title || ''} />
+                      <img
+                        className="live-carousel__ticker-img"
+                        src={slide.imageSrc}
+                        alt={slide.imageAlt || ''}
+                        style={tickerSlideImgStyle(slide)}
+                      />
                     ) : (
-                      <span className="live-carousel__ticker-fallback">{slide.title}</span>
+                      <span className="live-carousel__ticker-fallback">{tickerFallbackLabel(slide) || '\u00a0'}</span>
                     )}
                   </div>
                 ))}
@@ -409,22 +540,23 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
                     <img
                       className="live-carousel__card-img"
                       src={slide.imageSrc}
-                      alt={slide.imageAlt || slide.title}
-                      style={{
-                        objectFit: imageFit,
-                        ...(imageFit === 'cover' ? { objectPosition: imageObjectPosition } : {}),
-                      }}
+                      alt={slide.imageAlt || ''}
+                      style={slideImageStyle(slide, imageFit, imageObjectPosition)}
                     />
                   ) : null}
-                  <div className="live-carousel__card-inner">
-                    <h3 className="live-carousel__title">{slide.card.title || slide.title}</h3>
-                    {slide.card.body || slide.body ? <p className="live-carousel__body">{slide.card.body || slide.body}</p> : null}
-                    {slide.cta?.label && slide.cta?.href ? (
-                      <a className="live-carousel__cta" href={slide.cta.href}>
-                        {slide.cta.label}
-                      </a>
-                    ) : null}
-                  </div>
+                  {slideOverlayVisible(slide) ? (
+                    <div className="live-carousel__card-inner">
+                      {overlayCardHeadline(slide) ? (
+                        <h3 className="live-carousel__title">{overlayCardHeadline(slide)}</h3>
+                      ) : null}
+                      {overlayCardBody(slide) ? <p className="live-carousel__body">{overlayCardBody(slide)}</p> : null}
+                      {overlayCtaVisible(slide) ? (
+                        <a className="live-carousel__cta" href={slide.cta.href}>
+                          {slide.cta.label}
+                        </a>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </article>
               ) : (
                 <article className={`live-carousel__slide ${slideModeClass}`.trim()}>
@@ -432,21 +564,20 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
                     <img
                       className="live-carousel__img"
                       src={slide.imageSrc}
-                      alt={slide.imageAlt || slide.title}
-                      style={{
-                        objectFit: imageFit,
-                        ...(imageFit === 'cover' ? { objectPosition: imageObjectPosition } : {}),
-                      }}
+                      alt={slide.imageAlt || ''}
+                      style={slideImageStyle(slide, imageFit, imageObjectPosition)}
                     />
                   ) : null}
-                  {!showOverlay ? null : (
+                  {!showOverlay || !slideOverlayVisible(slide) ? null : (
                     <div className="live-carousel__overlay">
                       <div
                         className={`live-carousel__card live-carousel__card--${slide.card.theme} live-carousel__card--${slide.card.align}`.trim()}
                       >
-                        <h3 className="live-carousel__title">{slide.card.title || slide.title}</h3>
-                        {slide.card.body || slide.body ? <p className="live-carousel__body">{slide.card.body || slide.body}</p> : null}
-                        {slide.cta?.label && slide.cta?.href ? (
+                        {overlayCardHeadline(slide) ? (
+                          <h3 className="live-carousel__title">{overlayCardHeadline(slide)}</h3>
+                        ) : null}
+                        {overlayCardBody(slide) ? <p className="live-carousel__body">{overlayCardBody(slide)}</p> : null}
+                        {overlayCtaVisible(slide) ? (
                           <a className="live-carousel__cta" href={slide.cta.href}>
                             {slide.cta.label}
                           </a>

@@ -1,27 +1,68 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import MediaLibraryModal from '@/components/builder/media/MediaLibraryModal';
 
-function previewStyle(url) {
-  if (!url) return {};
-  return {
-    backgroundImage: `url("${url}")`,
-    backgroundSize: 'cover',
-    backgroundPosition: 'center',
-  };
+function bgImageCssUrl(url) {
+  if (!url) return undefined;
+  const safe = String(url).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return `url("${safe}")`;
 }
 
-export default function BackgroundControls({ form, onUpdate, projectId }) {
+export default function BackgroundControls({ form, onUpdate, projectId, selectedNode = null }) {
   const [open, setOpen] = useState(false);
+  const [showUrlAdvanced, setShowUrlAdvanced] = useState(false);
+  const [isReadingFile, setIsReadingFile] = useState(false);
+  const fileInputRef = useRef(null);
   const canUseMedia = useMemo(() => Number.isInteger(Number(projectId)) && Number(projectId) > 0, [projectId]);
 
   const bgImageUrl = String(form.bgImageUrl || '');
   const bgImageAlt = String(form.bgImageAlt || '');
   const bgImageTitle = String(form.bgImageTitle || '');
+  const bgSize = String(form.bgSize || 'cover');
+  const bgPosition = String(form.bgPosition || 'center center');
+  const bgRepeat = String(form.bgRepeat || 'no-repeat');
+
+  const handleFilePick = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type?.startsWith('image/')) {
+      event.target.value = '';
+      return;
+    }
+    setIsReadingFile(true);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const src = typeof reader.result === 'string' ? reader.result : '';
+      if (src) {
+        onUpdate('bgImageUrl', src);
+        if (!String(form.bgImageAlt || '').trim()) {
+          onUpdate('bgImageAlt', file.name.replace(/\.[^.]+$/, ''));
+        }
+      }
+      setIsReadingFile(false);
+      event.target.value = '';
+    };
+    reader.onerror = () => {
+      setIsReadingFile(false);
+      event.target.value = '';
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const clearImage = () => {
+    onUpdate('bgImageUrl', '');
+    onUpdate('bgImageAlt', '');
+    onUpdate('bgImageTitle', '');
+  };
 
   return (
     <div className="bld-control-stack">
+      {selectedNode?.nodeType === 'row' ? (
+        <p className="bld-field-note" style={{ marginTop: 0 }}>
+          <strong>Section background</strong> — poora row is color / image se paint hota hai (builder + live dono).
+        </p>
+      ) : null}
       <div className="bld-field">
         <label className="bld-label">Background Color</label>
         <input
@@ -33,46 +74,108 @@ export default function BackgroundControls({ form, onUpdate, projectId }) {
       </div>
 
       <div className="bld-field">
-        <label className="bld-label">Background Image</label>
-        <div className="bld-field-grid" style={{ gridTemplateColumns: '1fr auto auto', alignItems: 'center' }}>
-          <input
-            className="bld-input"
-            value={bgImageUrl}
-            onChange={(e) => onUpdate('bgImageUrl', e.target.value)}
-            placeholder="https://…"
-          />
-          <button type="button" className="bld-chip" disabled={!canUseMedia} onClick={() => setOpen(true)}>
-            Choose
+        <label className="bld-label">Background image</label>
+        <p className="bld-field-note" style={{ marginTop: 0 }}>
+          Device se image upload karein ya Media Library se chunein — URL type karne ki zaroorat nahi.
+        </p>
+        <div className="bld-field-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+          <button
+            type="button"
+            className="bld-chip"
+            disabled={isReadingFile}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {isReadingFile ? 'Reading…' : 'Upload image'}
           </button>
+          <button type="button" className="bld-chip" disabled={!canUseMedia || isReadingFile} onClick={() => setOpen(true)}>
+            Media Library
+          </button>
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          aria-hidden
+          onChange={handleFilePick}
+        />
+        <div style={{ marginTop: 8 }}>
           <button
             type="button"
             className="bld-chip bld-chip--danger"
             disabled={!bgImageUrl}
-            onClick={() => {
-              onUpdate('bgImageUrl', '');
-              onUpdate('bgImageAlt', '');
-              onUpdate('bgImageTitle', '');
-            }}
+            onClick={clearImage}
           >
-            Clear
+            Remove background image
           </button>
         </div>
-        <p className="bld-field-note">Manual URL stays supported. Media Library enforces image-only for backgrounds.</p>
+      </div>
+
+      <div className="bld-field">
+        <button type="button" className="bld-chip" onClick={() => setShowUrlAdvanced((v) => !v)}>
+          {showUrlAdvanced ? '▾ Hide' : '▸'} Paste image URL (advanced)
+        </button>
+        {showUrlAdvanced ? (
+          <div style={{ marginTop: 8 }}>
+            <input
+              className="bld-input"
+              value={bgImageUrl}
+              onChange={(e) => onUpdate('bgImageUrl', e.target.value)}
+              placeholder="https://… or data URL"
+            />
+            <p className="bld-field-note">Sirf zarurat ho tab — warna upload / Media Library use karein.</p>
+          </div>
+        ) : null}
       </div>
 
       {bgImageUrl ? (
-        <div className="bld-field">
-          <label className="bld-label">Preview</label>
-          <div
-            className="bld-media-inlinePreview"
-            style={previewStyle(bgImageUrl)}
-            aria-label="Background image preview"
-          />
-        </div>
-      ) : null}
-
-      {bgImageUrl ? (
         <>
+          <div className="bld-field">
+            <label className="bld-label">Background size</label>
+            <select className="bld-input" value={bgSize} onChange={(e) => onUpdate('bgSize', e.target.value)}>
+              <option value="cover">cover</option>
+              <option value="contain">contain</option>
+              <option value="auto">auto</option>
+              <option value="100% 100%">100% 100% (stretch)</option>
+            </select>
+          </div>
+          <div className="bld-field">
+            <label className="bld-label">Background position</label>
+            <select className="bld-input" value={bgPosition} onChange={(e) => onUpdate('bgPosition', e.target.value)}>
+              <option value="center center">center</option>
+              <option value="top center">top</option>
+              <option value="bottom center">bottom</option>
+              <option value="center left">left</option>
+              <option value="center right">right</option>
+              <option value="top left">top left</option>
+              <option value="top right">top right</option>
+              <option value="bottom left">bottom left</option>
+              <option value="bottom right">bottom right</option>
+            </select>
+          </div>
+          <div className="bld-field">
+            <label className="bld-label">Background repeat</label>
+            <select className="bld-input" value={bgRepeat} onChange={(e) => onUpdate('bgRepeat', e.target.value)}>
+              <option value="no-repeat">no-repeat</option>
+              <option value="repeat">repeat</option>
+              <option value="repeat-x">repeat-x</option>
+              <option value="repeat-y">repeat-y</option>
+            </select>
+          </div>
+          <div className="bld-field">
+            <label className="bld-label">Preview</label>
+            <div
+              className="bld-media-inlinePreview"
+              style={{
+                backgroundColor: form.bgColor || '#f1f5f9',
+                backgroundImage: bgImageCssUrl(bgImageUrl),
+                backgroundSize: bgSize,
+                backgroundPosition: bgPosition,
+                backgroundRepeat: bgRepeat,
+              }}
+              aria-label="Background image preview"
+            />
+          </div>
           <div className="bld-field">
             <label className="bld-label">Image Title (optional)</label>
             <input className="bld-input" value={bgImageTitle} onChange={(e) => onUpdate('bgImageTitle', e.target.value)} />
@@ -90,7 +193,6 @@ export default function BackgroundControls({ form, onUpdate, projectId }) {
         allowedKinds={['image', 'svg']}
         onClose={() => setOpen(false)}
         onPick={(item) => {
-          // Safety: only allow images/SVG for backgrounds.
           const kind = String(item?.kind || '');
           if (kind !== 'image' && kind !== 'svg') return;
           if (!item?.publicUrl) return;
@@ -103,4 +205,3 @@ export default function BackgroundControls({ form, onUpdate, projectId }) {
     </div>
   );
 }
-

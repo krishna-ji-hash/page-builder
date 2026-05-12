@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { coerceCssGap, getDeviceStyle, styleToCss } from '../lib/styleToCss.js';
+import { coerceCssGap, getDeviceStyle, layoutFlexShorthandToParts, styleToCss } from '../lib/styleToCss.js';
 
 test('coerceCssGap handles numbers and strings', () => {
   assert.equal(coerceCssGap(24), '24px');
@@ -42,4 +42,20 @@ test('styleToCss exposes --node-* vars and flex gap from layout.gap', () => {
   assert.equal(css['--node-text'], '#222');
   assert.equal(css['--node-bg'], '#eee');
   assert.ok(css['--node-pad']);
+});
+
+test('layoutFlexShorthandToParts maps flex grow/shrink/basis', () => {
+  assert.deepEqual(layoutFlexShorthandToParts({ flex: '0 0 auto' }), { flexGrow: '0', flexShrink: '0', flexBasis: 'auto' });
+  assert.deepEqual(layoutFlexShorthandToParts({ flex: '1' }), { flexGrow: '1' });
+});
+
+test('styleToCss applies layout.flex shorthand and whiteSpace', () => {
+  const css = styleToCss({
+    layout: { display: 'flex', flexDirection: 'row', flex: '0 0 auto' },
+    typography: { whiteSpace: 'nowrap' },
+  });
+  assert.equal(css.flexGrow, '0');
+  assert.equal(css.flexShrink, '0');
+  assert.equal(css.flexBasis, 'auto');
+  assert.equal(css.whiteSpace, 'nowrap');
 });

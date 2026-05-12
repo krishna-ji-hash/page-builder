@@ -10,7 +10,8 @@
   justify-content: flex-start;
   background: var(--bld-canvas-chrome);
   padding: 12px 14px 22px;
-  overflow-x: hidden;
+  /* Was hidden: clipped hero preview / shadows at 100% browser zoom; auto shows a thin bar only when needed. */
+  overflow-x: auto;
   overflow-y: auto;
 }
 
@@ -82,8 +83,8 @@
 
 .bld-canvas__page {
   position: relative;
-  flex: 1 1 0;
-  min-height: 0;
+  /* Fill the canvas when content is short; flex-shrink 0 + default min-height lets the artboard grow with stacked sections. */
+  flex: 1 0 auto;
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -99,13 +100,13 @@
   border-radius: 0;
   border-top: 1px solid color-mix(in srgb, var(--bld-border) 70%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--bld-border) 70%, transparent);
-  padding: 10px 14px 14px;
+  /* Extra inline gutter: large section shadows + subpixel flex rounding no longer clip at 100% zoom. */
+  padding: 10px 24px 16px;
   box-shadow: none;
   box-sizing: border-box;
-  overflow-x: hidden;
+  overflow-x: auto;
   overflow-y: visible;
   min-width: 0;
-  flex: 1;
 }
 
 .bld-canvas__page:has(.live-site[data-sticky-header='true']) {
@@ -157,7 +158,8 @@
   > .live-node.bld-column {
   width: 100% !important;
   max-width: 100% !important;
-  flex: 1 1 auto !important;
+  /* No !important: let style_json flex win so section templates keep intended column flex. */
+  flex: 1 1 auto;
 }
 
 .bld-canvas--tablet .bld-canvas__page .live-node.bld-row:not([data-site-header='true']):not([data-site-footer='true']) {
@@ -167,7 +169,8 @@
 
 .bld-canvas--tablet .bld-canvas__page .live-node.bld-row:not([data-site-header='true']):not([data-site-footer='true'])
   > .live-node.bld-column {
-  flex: 1 1 320px !important;
+  /* No !important: inline flex from nodes beats this fallback when templates set flexBasis. */
+  flex: 1 1 320px;
   min-width: 0;
 }
 
@@ -870,6 +873,23 @@
   box-shadow: 0 4px 14px color-mix(in srgb, #000 18%, transparent);
 }
 
+/* Narrow column/stack: keep label + toolbar on screen (was clipped by canvas overflow-x). */
+.bld-node__chrome--overlay.bld-node__chrome--nest .bld-node__chrome-top {
+  flex-wrap: wrap;
+  align-items: flex-start;
+  row-gap: 6px;
+}
+
+.bld-node__chrome--overlay.bld-node__chrome--nest .bld-node__chrome-top .bld-node__label {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.bld-node__chrome--overlay.bld-node__chrome--nest .bld-node__chrome-top .bld-canvas-toolbar {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
 /* When chrome is mounted, reserve space so logos/text/buttons stay below the strip (hover + selected). */
 .bld-canvas__page .live-node.bld-column:has(> .bld-node__chrome--overlay),
 .bld-canvas__page .live-node.bld-stack:has(> .bld-node__chrome--overlay),
@@ -882,6 +902,18 @@
 .bld-canvas__page .live-node.bld-stack:has(> .bld-node__chrome--overlay .bld-node__chrome-text),
 .bld-canvas__page .bld-node__shell:has(> .bld-node__chrome--overlay .bld-node__chrome-text) {
   padding-top: 104px;
+}
+
+/* Nest strip can wrap to two rows — reserve a bit more than single-line chrome. */
+.bld-canvas__page .live-node.bld-column:has(> .bld-node__chrome--overlay.bld-node__chrome--nest),
+.bld-canvas__page .live-node.bld-stack:has(> .bld-node__chrome--overlay.bld-node__chrome--nest) {
+  padding-top: 96px;
+}
+
+.bld-canvas__page .live-node.bld-column:has(> .bld-node__chrome--overlay.bld-node__chrome--nest .bld-node__chrome-text),
+.bld-canvas__page .live-node.bld-stack:has(> .bld-node__chrome--overlay.bld-node__chrome--nest .bld-node__chrome-text),
+.bld-canvas__page .bld-node__shell:has(> .bld-node__chrome--overlay.bld-node__chrome--nest .bld-node__chrome-text) {
+  padding-top: 120px;
 }
 
 /* Section rows nested under columns/stacks (not a direct .live-doc child): chrome stays in-row; pad so content clears. */
@@ -916,6 +948,7 @@
 .bld-node__chrome--overlay .bld-canvas-toolbar__menu-item,
 .bld-node__chrome--overlay .bld-quick-layout-controls,
 .bld-node__chrome--overlay .bld-quick-text-toolbar,
+.bld-node__chrome--overlay .bld-wp-toolbar,
 .bld-node__chrome--overlay .bld-drag-handle-wrap,
 .bld-node__chrome--overlay input,
 .bld-node__chrome--overlay textarea,
@@ -965,7 +998,8 @@
   min-width: 0;
 }
 
-.bld-node__chrome .bld-quick-text-toolbar {
+.bld-node__chrome .bld-quick-text-toolbar,
+.bld-node__chrome .bld-wp-toolbar {
   position: static;
   left: auto;
   top: auto;
@@ -2169,32 +2203,210 @@
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
 }
 
-.bld-quick-text-toolbar__btn {
-  border: 1px solid var(--bld-border);
-  background: var(--bld-surface-2);
-  color: var(--bld-text);
-  border-radius: 999px;
-  padding: 4px 9px;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.bld-quick-text-toolbar__color {
-  width: 24px;
-  height: 24px;
-  border-radius: 999px;
-  overflow: hidden;
-  border: 1px solid var(--bld-border);
-  display: inline-flex;
-}
-
-.bld-quick-text-toolbar__color input {
+.bld-node__chrome-text--placeholder {
   width: 100%;
-  height: 100%;
+  min-height: 1px;
+  pointer-events: none;
+}
+
+.bld-floating-quick-toolbar {
+  z-index: var(--bld-z-canvas-floating, 50);
+}
+
+.bld-floating-quick-toolbar .bld-floating-inline-toolbar__inner--wp {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12), 0 8px 24px rgba(15, 23, 42, 0.1);
+}
+
+.bld-wp-toolbar {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
+}
+
+.bld-wp-toolbar::-webkit-scrollbar {
+  display: none;
+}
+
+.bld-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.bld-wp-toolbar__group {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.bld-wp-toolbar__group--compact {
+  gap: 2px;
+}
+
+.bld-wp-toolbar__field-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #50575e;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+.bld-wp-toolbar__select {
+  height: 28px;
+  min-width: 3.25rem;
+  padding: 0 22px 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #1e1e1e;
+  background: #fff;
+  border: 1px solid #c3c4c7;
+  border-radius: 3px;
+  cursor: pointer;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.bld-wp-toolbar__select--level {
+  min-width: 2.85rem;
+  text-align: center;
+  padding-left: 4px;
+  padding-right: 20px;
+}
+
+.bld-wp-toolbar__select--heading-size {
+  min-width: 2.75rem;
+  max-width: 3.5rem;
+  font-weight: 600;
+  padding-right: 18px;
+}
+
+.bld-wp-toolbar__select:hover {
+  border-color: #787c82;
+}
+
+.bld-wp-toolbar__select:focus {
+  border-color: #2271b1;
+  box-shadow: 0 0 0 1px #2271b1;
+  outline: none;
+}
+
+.bld-wp-toolbar__sep {
+  display: inline-block;
+  width: 1px;
+  height: 18px;
+  margin: 0 2px;
+  background: #dcdcde;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.bld-wp-toolbar__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: none;
+  border-radius: 2px;
   background: transparent;
+  color: #1e1e1e;
   cursor: pointer;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.bld-wp-toolbar__icon-btn svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.bld-wp-toolbar__icon-btn:hover {
+  background: #e8e8e8;
+  color: #000;
+}
+
+.bld-wp-toolbar__icon-btn.is-pressed {
+  background: #dcdcde;
+  color: #2271b1;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+.bld-wp-toolbar__align-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  border-radius: 2px;
+  overflow: hidden;
+  border: 1px solid #c3c4c7;
+  background: #fff;
+}
+
+.bld-wp-toolbar__align-group .bld-wp-toolbar__icon-btn {
+  border-radius: 0;
+  width: 28px;
+  height: 28px;
+}
+
+.bld-wp-toolbar__align-group .bld-wp-toolbar__icon-btn + .bld-wp-toolbar__icon-btn {
+  border-left: 1px solid #dcdcde;
+}
+
+.bld-wp-toolbar__swatch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 3px;
+  cursor: pointer;
+  border: 1px solid #c3c4c7;
+  background: #fff;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.bld-wp-toolbar__swatch:hover {
+  box-shadow: inset 0 0 0 1px #949494;
+}
+
+.bld-wp-toolbar__swatch-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  pointer-events: none;
+}
+
+.bld-wp-toolbar__color-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
 }
 
 .bld-inline-edit-anchor {
@@ -2212,7 +2424,34 @@
   border-radius: 12px;
   padding: 6px 10px;
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.22);
-  max-width: min(96vw, 520px);
+  max-width: min(96vw, 680px);
+}
+
+.bld-floating-inline-toolbar__inner.bld-floating-inline-toolbar__inner--wp {
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 3px 6px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  border: 1px solid #c3c4c7;
+  background: #f6f7f7;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.06), 0 2px 6px rgba(0, 0, 0, 0.08);
+  max-width: min(98vw, 520px);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.bld-floating-inline-toolbar__inner--wp::-webkit-scrollbar {
+  display: none;
+}
+
+.bld-floating-inline-toolbar__inner--wp .bld-floating-inline-toolbar__done {
+  margin-left: 4px;
+  flex-shrink: 0;
+  border-radius: 3px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .bld-floating-inline-toolbar__done {
@@ -2684,6 +2923,81 @@
   font-size: 12px;
   color: var(--color-muted, var(--bld-text-soft));
   line-height: 1.5;
+}
+
+/* Image widget: no tall “empty card” above the graphic; selection hugs the bitmap, not a full-width shell. */
+.bld-canvas__page .bld-node__shell.bld-block--image {
+  width: fit-content;
+  max-width: 100%;
+  align-self: flex-start;
+}
+
+.bld-canvas__page .bld-node__shell.bld-block--image:has(> .bld-node__chrome--overlay) {
+  padding-top: 0;
+}
+
+.bld-canvas__page .bld-node__shell.bld-block--image:has(> .bld-node__chrome--overlay .bld-node__chrome-text) {
+  padding-top: 0;
+}
+
+.bld-canvas__page .bld-node__shell.bld-block--image:has(> .bld-node__chrome--overlay.bld-node__chrome--nest .bld-node__chrome-text) {
+  padding-top: 0;
+}
+
+.bld-canvas__page .bld-block--image:hover {
+  outline: none;
+  outline-offset: 0;
+}
+
+.bld-canvas__page .bld-block--image:not(.bld-selected):hover .bld-demo-image {
+  outline: 1px dashed color-mix(in srgb, #fb7185 45%, var(--bld-border));
+  outline-offset: 2px;
+}
+
+.bld-canvas__page .bld-block--image.bld-selected {
+  outline: none;
+  box-shadow: none;
+}
+
+.bld-canvas__page .bld-block--image.bld-selected .bld-demo-image {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
+.bld-canvas__page .bld-block--image .bld-demo-image-wrap {
+  width: fit-content;
+  max-width: 100%;
+}
+
+.bld-canvas__page .bld-block--image .bld-demo-image {
+  width: auto;
+  max-width: 100%;
+  outline: none;
+}
+
+.bld-canvas__page .bld-node.bld-node__shell.bld-block--image:not(.bld-selected):hover {
+  transform: none;
+}
+
+.bld-canvas__page .bld-node__shell.bld-block--image > .bld-node__chrome--overlay {
+  max-width: min(100%, 320px);
+  margin-left: auto;
+  margin-right: 0;
+  left: auto;
+  right: 0;
+  border-radius: 8px;
+  box-shadow: 0 4px 14px color-mix(in srgb, #000 14%, transparent);
+}
+
+.bld-canvas__page .bld-node__shell.bld-block--image .bld-node__media-toolbar {
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-top: none;
+  background: transparent;
+  border-radius: 8px;
+  box-shadow: none;
 }
 
 /* Image / menu width & crop controls: in-flow under the asset (not over the graphic). */
@@ -3220,6 +3534,16 @@
   max-width: 100%;
   overflow-wrap: anywhere;
   line-height: 1.55;
+}
+
+.bld-rich-text p,
+.bld-rich-text--canvas p {
+  margin: 0 0 0.85em;
+}
+
+.bld-rich-text p:last-child,
+.bld-rich-text--canvas p:last-child {
+  margin-bottom: 0;
 }
 
 .bld-rich-text--editing {
@@ -3871,4 +4195,10 @@
 .bld-row-smart-suggestions__btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Section lock: nodes under a locked section row are read-only in the canvas. */
+.bld-canvas__page .live-node.bld-node--section-locked.bld-selected {
+  outline: 1px dashed color-mix(in srgb, var(--bld-text-soft) 55%, transparent);
+  outline-offset: 2px;
 }

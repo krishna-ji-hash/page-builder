@@ -17,6 +17,8 @@ export default function InspectorResponsiveBar({
   onCopyDesktopToMobile,
   /** When true, reset buttons are disabled (e.g. nothing selected). */
   disableResets = false,
+  /** When true, breakpoint pills and copy/reset actions are disabled (e.g. section lock). */
+  disabled = false,
 }) {
   const editingLabel = DEVICES.find((d) => d.id === device)?.label || 'Desktop';
 
@@ -31,7 +33,7 @@ export default function InspectorResponsiveBar({
               role="tab"
               aria-selected={device === d.id}
               className={`bld-inspector-device__pill ${device === d.id ? 'is-active' : ''}`}
-              disabled={typeof onDeviceChange !== 'function'}
+              disabled={disabled || typeof onDeviceChange !== 'function'}
               onClick={() => onDeviceChange?.(d.id)}
             >
               {d.label}
@@ -48,7 +50,7 @@ export default function InspectorResponsiveBar({
         <button
           type="button"
           className="bld-inspector-device__reset"
-          disabled={disableResets || typeof onCopyDesktopToTablet !== 'function'}
+          disabled={disableResets || disabled || typeof onCopyDesktopToTablet !== 'function'}
           onClick={onCopyDesktopToTablet}
           title="Copy desktop styles into tablet override layer (one-time)."
         >
@@ -57,7 +59,7 @@ export default function InspectorResponsiveBar({
         <button
           type="button"
           className="bld-inspector-device__reset"
-          disabled={disableResets || typeof onCopyDesktopToMobile !== 'function'}
+          disabled={disableResets || disabled || typeof onCopyDesktopToMobile !== 'function'}
           onClick={onCopyDesktopToMobile}
           title="Copy desktop styles into mobile override layer (one-time)."
         >
@@ -66,7 +68,7 @@ export default function InspectorResponsiveBar({
         <button
           type="button"
           className="bld-inspector-device__reset"
-          disabled={disableResets || !hasTabletOverrides}
+          disabled={disableResets || disabled || !hasTabletOverrides}
           onClick={onResetTablet}
           title="Remove all tablet-only overrides for this node"
         >
@@ -75,7 +77,7 @@ export default function InspectorResponsiveBar({
         <button
           type="button"
           className="bld-inspector-device__reset"
-          disabled={disableResets || !hasMobileOverrides}
+          disabled={disableResets || disabled || !hasMobileOverrides}
           onClick={onResetMobile}
           title="Remove all mobile-only overrides for this node"
         >
