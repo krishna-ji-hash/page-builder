@@ -60,7 +60,7 @@ export default function BackgroundControls({ form, onUpdate, projectId, selected
     <div className="bld-control-stack">
       {selectedNode?.nodeType === 'row' ? (
         <p className="bld-field-note" style={{ marginTop: 0 }}>
-          <strong>Section background</strong> — poora row is color / image se paint hota hai (builder + live dono).
+          <strong>Section background</strong> — full row uses this color or image (builder and live).
         </p>
       ) : null}
       <div className="bld-field">
@@ -76,7 +76,7 @@ export default function BackgroundControls({ form, onUpdate, projectId, selected
       <div className="bld-field">
         <label className="bld-label">Background image</label>
         <p className="bld-field-note" style={{ marginTop: 0 }}>
-          Device se image upload karein ya Media Library se chunein — URL type karne ki zaroorat nahi.
+          Upload from device or pick Media Library — no URL required.
         </p>
         <div className="bld-field-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
           <button
@@ -123,7 +123,7 @@ export default function BackgroundControls({ form, onUpdate, projectId, selected
               onChange={(e) => onUpdate('bgImageUrl', e.target.value)}
               placeholder="https://… or data URL"
             />
-            <p className="bld-field-note">Sirf zarurat ho tab — warna upload / Media Library use karein.</p>
+            <p className="bld-field-note">Advanced only — prefer upload or Media Library.</p>
           </div>
         ) : null}
       </div>

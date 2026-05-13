@@ -1,6 +1,7 @@
 import { RuntimeProvider } from '@/components/runtime/RuntimeProvider';
 import { getPublishedPage } from '@/services/site/publishedPageService';
 import { renderTree } from '@/lib/liveRenderer';
+import { getPageVarsBucket, livePageCssVarOverrides, resolveBodyLayout, resolveContentMaxWidthPx } from '@/lib/livePageCssVars';
 import { normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesignTheme';
 import { buildRenderNodesWithGlobals } from '@/lib/globalSectionMerge';
 import { isPublicSlug, resolveMaybeAsyncParams } from '@/lib/routeParams';
@@ -84,14 +85,13 @@ export default async function PublicSitePage({ params, searchParams }) {
   const currentPath = `/${projectSlug}/${pageSlug}`;
   const siteTheme = normalizeSiteTheme(page.projectConfig?.siteTheme);
   const siteCssVars = siteThemeToCssVariableStyle(siteTheme);
-  const pageVars =
-    siteTheme?.pageVars && typeof siteTheme.pageVars === 'object' && !Array.isArray(siteTheme.pageVars)
-      ? siteTheme.pageVars?.[pageSlug] || null
-      : null;
+  const pageVars = getPageVarsBucket(siteTheme, pageSlug);
   const sectionGapPx = pageVars && Number.isFinite(Number(pageVars.sectionGapPx)) ? Number(pageVars.sectionGapPx) : null;
   const sectionPadBottomPx =
     pageVars && Number.isFinite(Number(pageVars.sectionPadBottomPx)) ? Number(pageVars.sectionPadBottomPx) : null;
+  const contentMaxWidthPx = resolveContentMaxWidthPx(pageVars);
   const stickyHeader = Boolean(pageVars?.stickyHeader);
+  const bodyLayout = resolveBodyLayout(siteTheme, pageSlug);
   const { schemaJsonLd } = resolveSeoMetadata({
     projectConfig: page.projectConfig,
     pageName: page.name,
@@ -106,10 +106,10 @@ export default async function PublicSitePage({ params, searchParams }) {
       data-page-slug={pageSlug}
       data-route-kind="published"
       data-sticky-header={stickyHeader ? 'true' : 'false'}
+      data-live-body-layout={bodyLayout}
       style={{
         ...siteCssVars,
-        ...(sectionGapPx != null ? { '--live-section-gap': `${sectionGapPx}px` } : {}),
-        ...(sectionPadBottomPx != null ? { '--live-section-pad-bottom': `${sectionPadBottomPx}px` } : {}),
+        ...livePageCssVarOverrides({ sectionGapPx, sectionPadBottomPx, contentMaxWidthPx }),
         fontFamily: siteTheme.typography.fontFamily,
       }}
     >
@@ -120,6 +120,7 @@ export default async function PublicSitePage({ params, searchParams }) {
             currentPath,
             projectPages: page.projectPages || [],
             siteTheme,
+            pageSlug,
             pageId: page.id,
             projectId: page.projectId,
             projectSlug,

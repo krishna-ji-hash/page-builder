@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import InspectorTipChips from '@/components/builder/inspector/InspectorTipChips';
 
 const SHADOW_PRESETS = [
   { id: 'none', label: 'None', value: 'none' },
@@ -43,10 +44,10 @@ export default function EffectsControls({ form, onUpdate, selectedNode = null })
   return (
     <div className="bld-control-stack">
       {isSection ? (
-        <p className="bld-field-note" style={{ marginTop: 0 }}>
-          Section (row) par yahan <strong>box shadow</strong> aur neeche <strong>Background</strong> se poora section
-          paint ho sakta hai — live preview ke saath save hota hai.
-        </p>
+        <InspectorTipChips
+          style={{ marginTop: 0, marginBottom: 8 }}
+          chips={['Shadow on row', 'Plus Background', 'Full section paint', 'Live preview save']}
+        />
       ) : null}
       <div className="bld-field">
         <label className="bld-label">Box shadow presets</label>
@@ -67,7 +68,7 @@ export default function EffectsControls({ form, onUpdate, selectedNode = null })
           onChange={(e) => onUpdate('boxShadow', e.target.value)}
           placeholder="e.g. 0 8px 24px rgba(0,0,0,0.15)"
         />
-        <p className="bld-field-note">Poora CSS value; &quot;none&quot; se hata do.</p>
+        <p className="bld-field-note">Full CSS value; use <code>none</code> to clear.</p>
       </div>
       <div className="bld-field">
         <label className="bld-label">Shadow builder</label>

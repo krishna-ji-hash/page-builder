@@ -22,6 +22,8 @@ import AdvancedPanel from './inspector/AdvancedPanel';
 import ThemePanel from './inspector/ThemePanel';
 import OverflowSuggestions from './inspector/OverflowSuggestions';
 import { getGlobalLinkMeta, isLinkedGlobalPlaceholder } from '@/lib/globalComponentLinkMeta';
+import { isRootPageRow } from '@/lib/liveDocSectionSpacing';
+import { findAncestorRowNode, findNodeInTree } from '@/lib/builderTree';
 
 function inspectorRoleLabel(node) {
   if (!node?.nodeType) return '';
@@ -235,11 +237,55 @@ export default function BuilderInspector({
   onDetachFromGlobalComponent,
   /** When true, selection is inside a section with `props.meta.sectionLocked`. */
   editingDisabledBySectionLock = false,
+  /** Top-level page rows (same array the canvas passes as `tree`). Used for per-section page spacing overrides. */
+  pageTree = [],
 }) {
   const [internalTab, setInternalTab] = useState('content');
   const activeTab = activeTabProp || internalTab;
   const setActiveTab = onActiveTabChange || setInternalTab;
   const { siteTheme } = useBuilderTheme();
+
+  /** Row that owns strip width for the current selection (selected row, or nearest ancestor row). */
+  const sectionStripLayoutRow = useMemo(() => {
+    if (!selectedNode || !Array.isArray(pageTree) || pageTree.length === 0) return null;
+    if (selectedNode.nodeType === 'row') return selectedNode;
+    if (selectedNode.id == null) return null;
+    return findAncestorRowNode(pageTree, selectedNode.id);
+  }, [selectedNode, pageTree]);
+
+  const patchRootStripLayout = useCallback(
+    async (strip) => {
+      if (!sectionStripLayoutRow || sectionStripLayoutRow.nodeType !== 'row') return;
+      if (isLinkedGlobalPlaceholder(sectionStripLayoutRow)) return;
+      if (editingDisabledBySectionLock) return;
+      if (!onUpdateNode) return;
+      const prevMeta =
+        sectionStripLayoutRow.props?.meta &&
+        typeof sectionStripLayoutRow.props.meta === 'object' &&
+        !Array.isArray(sectionStripLayoutRow.props.meta)
+          ? sectionStripLayoutRow.props.meta
+          : {};
+      const nextMeta = { ...prevMeta };
+      if (strip === 'full') {
+        nextMeta.rootStripLayout = 'full';
+      } else {
+        // Must set explicitly: `mergeNodePropsJsonPatch` deep-merges meta with `{ ...prev, ...patch }`, so omitting
+        // this key would keep a previous `'full'` value and the dropdown would snap back.
+        nextMeta.rootStripLayout = 'boxed';
+      }
+      await onUpdateNode({
+        nodeId: sectionStripLayoutRow.id,
+        payload: {
+          props: {
+            ...sectionStripLayoutRow.props,
+            meta: nextMeta,
+          },
+        },
+      });
+    },
+    [sectionStripLayoutRow, editingDisabledBySectionLock, onUpdateNode],
+  );
+
   // Prevent "snap back" in selects when parent re-renders selectedNode before async save completes.
   const pendingCarouselVariantRef = useRef(null);
   // Same issue for other carousel fields (number inputs + other selects/toggles).
@@ -657,6 +703,46 @@ export default function BuilderInspector({
       },
     });
   };
+
+  const patchRootSectionPageSpacingById = useCallback(
+    async (nodeId, patch) => {
+      if (!onUpdateNode) return;
+      if (editingDisabledBySectionLock) return;
+      const node = findNodeInTree(pageTree, nodeId);
+      if (!node || node.nodeType !== 'row' || !isRootPageRow(pageTree, node)) return;
+      if (isLinkedGlobalPlaceholder(node)) return;
+      const prevMeta =
+        node.props?.meta && typeof node.props.meta === 'object' && !Array.isArray(node.props.meta)
+          ? node.props.meta
+          : {};
+      const nextMeta = { ...prevMeta };
+      if ('sectionGapBeforePx' in patch) {
+        const v = patch.sectionGapBeforePx;
+        if (v == null || v === '') delete nextMeta.sectionGapBeforePx;
+        else nextMeta.sectionGapBeforePx = Math.max(0, Number(v) || 0);
+      }
+      if ('sectionGapAfterPx' in patch) {
+        const v = patch.sectionGapAfterPx;
+        if (v == null || v === '') delete nextMeta.sectionGapAfterPx;
+        else nextMeta.sectionGapAfterPx = Math.max(0, Number(v) || 0);
+      }
+      if ('sectionPadBottomPx' in patch) {
+        const v = patch.sectionPadBottomPx;
+        if (v == null || v === '') delete nextMeta.sectionPadBottomPx;
+        else nextMeta.sectionPadBottomPx = Math.max(0, Number(v) || 0);
+      }
+      await onUpdateNode({
+        nodeId,
+        payload: {
+          props: {
+            ...(node.props || {}),
+            meta: nextMeta,
+          },
+        },
+      });
+    },
+    [onUpdateNode, pageTree, editingDisabledBySectionLock]
+  );
 
   const updateCmsMeta = async (patch) => {
     if (!selectedNode) return;
@@ -1881,6 +1967,9 @@ export default function BuilderInspector({
           onResetLayoutKeys={handleResetLayoutKeys}
           onRowLayoutLockedChange={handleRowLayoutLockedChange}
           onHeaderLayoutQuickAction={handleHeaderLayoutQuickAction}
+          pageTree={pageTree}
+          stripLayoutTargetRow={sectionStripLayoutRow}
+          onPatchRootStripLayout={patchRootStripLayout}
         />
       ) : null}
       {activeTab === 'style' ? (
@@ -1905,7 +1994,9 @@ export default function BuilderInspector({
           jsonErrors={jsonErrors}
         />
       ) : null}
-      {activeTab === 'theme' ? <ThemePanel /> : null}
+      {activeTab === 'theme' ? (
+        <ThemePanel pageTree={pageTree} onPatchRootSectionPageSpacing={patchRootSectionPageSpacingById} />
+      ) : null}
       </div>
     </div>
   );

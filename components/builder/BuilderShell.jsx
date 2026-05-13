@@ -4358,6 +4358,7 @@ export default function BuilderShell({ pageId }) {
               onEditGlobalComponent={openGlobalComponentEditor}
               onDetachFromGlobalComponent={handleDetachFromGlobalComponent}
               editingDisabledBySectionLock={editingDisabledBySectionLock}
+              pageTree={tree}
             />
           </aside>
         </div>

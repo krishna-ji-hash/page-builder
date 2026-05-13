@@ -26,13 +26,28 @@
   padding-bottom: 0;
   /* Negative-offset section chrome (.bld-node__chrome--overlay top: -42px) lives here without clipping */
   padding-top: 46px;
-  /* Same axis spacing as public live: gap (not margin) between root sections */
+  /* Match live-site.css: theme gap + optional per-row delta; do not hard-code (was 24px and ignored Theme). */
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  gap: 24px;
+  gap: var(--live-section-gap, 12px);
   /* Must win over global `.live-doc { overflow-x: hidden }`. Safe inset for section shadows in the artboard. */
   overflow-x: visible !important;
+}
+
+/*
+ * Live site full-bleed uses `100vw` + negative margins (viewport-relative). The builder artboard is a
+ * narrow column in the app — that math shifts the header row sideways so logo / CTA columns sit off-screen.
+ * In the mirror only, keep full strips artboard-wide so the header grid matches what you see on publish.
+ */
+.bld-builder-root .bld-canvas__live-mirror .live-doc > [data-live-root-strip='full'] {
+  width: 100% !important;
+  max-width: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  position: relative !important;
+  left: auto !important;
+  right: auto !important;
 }
 
 /* Reset builder demo chrome inside live mirror (inline node styles still win). */

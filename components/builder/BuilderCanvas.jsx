@@ -24,6 +24,8 @@ import { imageFitMode, mergeImageFigureStyleForContain } from '@/lib/imageFigure
 const SECTION_TEMPLATE_IDS = new Set(Object.keys(SECTION_TEMPLATES));
 import { getRichTextAnimationStyle } from '@/lib/richTextAnimation';
 import { rootSemanticTag } from '@/lib/rootSemanticTag';
+import { isRootPageRow, liveDocRootRowSpacingVars } from '@/lib/liveDocSectionSpacing';
+import { livePageCssVarOverrides, resolveBodyLayout, resolveContentMaxWidthPx, rowSectionStripDataAttrs } from '@/lib/livePageCssVars';
 import { getDeviceStyle, styleToCss } from '@/lib/styleToCss';
 import { useBuilderTheme } from '@/context/BuilderThemeContext';
 import { mergeNodeStyleWithSiteTheme, normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesignTheme';
@@ -1023,8 +1025,33 @@ function NodeRenderer({
     )
   );
   const nodeCss = styleToCss(deviceStyle, siteTheme) || undefined;
+  /** Match liveRenderer: any direct `.live-doc` child row gets spacing vars (not only when semantic tag resolves). */
+  const isRootLiveDocRow = node.nodeType === 'row' && Array.isArray(tree) && isRootPageRow(tree, node);
+  const rootRowSpacingVars =
+    isRootLiveDocRow && node?.props?.meta ? liveDocRootRowSpacingVars(node.props.meta) : null;
+  const nodeCssWithRootSpacing =
+    rootRowSpacingVars && Object.keys(rootRowSpacingVars).length ? { ...(nodeCss || {}), ...rootRowSpacingVars } : nodeCss;
+  const liveRootGapAfterAttrs =
+    isRootLiveDocRow &&
+    rootRowSpacingVars &&
+    Object.prototype.hasOwnProperty.call(rootRowSpacingVars, '--live-row-gap-after')
+      ? { 'data-live-root-gap-after': 'true' }
+      : {};
+  const liveRootGapBeforeAttrs =
+    isRootLiveDocRow &&
+    rootRowSpacingVars &&
+    Object.prototype.hasOwnProperty.call(rootRowSpacingVars, '--live-row-gap-before')
+      ? { 'data-live-root-gap-before': 'true' }
+      : {};
+  const stripAttrs =
+    node.nodeType === 'row'
+      ? rowSectionStripDataAttrs(
+          isRootLiveDocRow,
+          node.props?.meta && typeof node.props.meta === 'object' && !Array.isArray(node.props.meta) ? node.props.meta : {},
+        )
+      : {};
   const externalPreview = previewCssByNodeId?.[node.id] || null;
-  const inlineStyle = interactionPreviewStyle || externalPreview || nodeCss || undefined;
+  const inlineStyle = interactionPreviewStyle || externalPreview || nodeCssWithRootSpacing || undefined;
   const isRow = node.nodeType === 'row';
   const linkedMeta = isRow ? getGlobalLinkMeta(node) : null;
   const isLinkedGlobal = Boolean(linkedMeta);
@@ -1607,7 +1634,7 @@ function NodeRenderer({
       try {
         parsedItems = JSON.parse(inlinePanelMenuItems || '[]');
       } catch {
-        setInlinePanelError('Menu JSON invalid hai.');
+        setInlinePanelError('Menu JSON is invalid.');
         return;
       }
       if (!Array.isArray(parsedItems)) {
@@ -2259,7 +2286,7 @@ function NodeRenderer({
             rows={2}
             value={inlinePanelText}
             onChange={(event) => setInlinePanelText(event.target.value)}
-            placeholder="Text yahi edit karein"
+            placeholder="Edit text here"
           />
         ) : null}
         {node.nodeType === 'image' ? (
@@ -2481,6 +2508,9 @@ function NodeRenderer({
           }}
           {...attributes}
           data-bld-node={node.id}
+          {...liveRootGapAfterAttrs}
+          {...liveRootGapBeforeAttrs}
+          {...stripAttrs}
           {...(node.props?.meta?.isHeader || node.props?.meta?.role === 'header'
             ? {
                 'data-site-header': 'true',
@@ -3200,7 +3230,9 @@ export default function BuilderCanvas({
   const sectionGapPx = pageVars && Number.isFinite(Number(pageVars.sectionGapPx)) ? Number(pageVars.sectionGapPx) : null;
   const sectionPadBottomPx =
     pageVars && Number.isFinite(Number(pageVars.sectionPadBottomPx)) ? Number(pageVars.sectionPadBottomPx) : null;
+  const contentMaxWidthPx = resolveContentMaxWidthPx(pageVars);
   const stickyHeader = Boolean(pageVars?.stickyHeader);
+  const bodyLayout = resolveBodyLayout(siteTheme, currentPageSlug);
   /** Same tokens + body font as `app/[projectSlug]/[pageSlug]/page.jsx` so canvas matches published/live preview. */
   const liveMirrorRootStyle = useMemo(() => {
     const normalized = normalizeSiteTheme(siteTheme);
@@ -3903,10 +3935,10 @@ export default function BuilderCanvas({
               <div
                 className="live-site bld-canvas__live-mirror"
                 data-sticky-header={stickyHeader ? 'true' : 'false'}
+                data-live-body-layout={bodyLayout}
                 style={{
                   ...liveMirrorRootStyle,
-                  ...(sectionGapPx != null ? { '--live-section-gap': `${sectionGapPx}px` } : {}),
-                  ...(sectionPadBottomPx != null ? { '--live-section-pad-bottom': `${sectionPadBottomPx}px` } : {}),
+                  ...livePageCssVarOverrides({ sectionGapPx, sectionPadBottomPx, contentMaxWidthPx }),
                 }}
               >
                 {showGrid ? <GridOverlay containerSelector=".bld-canvas__live-mirror .live-doc" /> : null}

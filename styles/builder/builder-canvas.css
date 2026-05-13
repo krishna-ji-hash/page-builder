@@ -20,6 +20,11 @@
   overflow-x: clip;
 }
 
+/* Same as .bld-canvas__page: full-bleed strips need visible overflow on the scroll parent. */
+.bld-canvas-wrap:has(.live-doc > [data-live-root-strip='full']) {
+  overflow-x: visible;
+}
+
 @supports not (overflow: clip) {
   .bld-canvas-wrap:has(.live-site[data-sticky-header='true']) {
     overflow-x: visible;
@@ -113,6 +118,11 @@
   overflow-x: clip;
 }
 
+/* Full-bleed root strips extend past .live-doc; canvas page overflow clips logo/start — match live-site. */
+.bld-canvas__page:has(.live-doc > [data-live-root-strip='full']) {
+  overflow-x: visible;
+}
+
 @supports not (overflow: clip) {
   .bld-canvas__page:has(.live-site[data-sticky-header='true']) {
     overflow-x: visible;
@@ -193,7 +203,7 @@
   min-width: 0;
 }
 
-/* Row: layout from inline style_json (mergeDeviceStyleWithTypeDefaults); spacing via .live-doc gap */
+/* Row: layout from inline style_json (mergeDeviceStyleWithTypeDefaults); root vertical rhythm via .live-doc margins */
 .bld-canvas__page .live-node.bld-row {
   flex: 0 0 auto;
   width: 100%;
@@ -202,6 +212,18 @@
   box-sizing: border-box;
   overflow-x: auto;
   border-radius: 8px;
+}
+
+/* Root full-bleed strips: live-site uses 100vw + negative margin; builder row defaults must not cap or clip. */
+.bld-canvas__page .live-doc > [data-live-root-strip='full'] {
+  max-width: none !important;
+  overflow-x: visible !important;
+}
+
+/* Nested full-width rows: match live (no vw); still lift max-width cap inside tight columns. */
+.bld-canvas__page .live-doc .live-node.bld-row[data-live-nested-strip='full'] {
+  max-width: none !important;
+  overflow-x: visible !important;
 }
 
 .bld-canvas__page .live-doc .live-node.bld-row:not(:where(.live-doc > .live-node.bld-row)) {

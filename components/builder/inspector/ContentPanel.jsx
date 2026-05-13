@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import MediaLibraryModal from '@/components/builder/media/MediaLibraryModal';
 import MenuTreeEditor from '@/components/builder/inspector/MenuTreeEditor';
 import CmsBindingsPanel from '@/components/builder/inspector/CmsBindingsPanel';
+import InspectorTipChips from '@/components/builder/inspector/InspectorTipChips';
 
 export default function ContentPanel({ selectedNode, form, onChange, jsonErrors = {}, projectPages = [], projectId }) {
   const [mediaOpen, setMediaOpen] = useState(false);
@@ -156,7 +157,7 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
               rows={10}
               value={form.text || ''}
               onChange={(e) => onChange('text', e.target.value)}
-              placeholder="Nayi line ke liye Enter. Spacing: Style → Spacing → Padding."
+              placeholder="Enter for new line. Style → Spacing → Padding."
             />
           ) : (
             <input className="bld-input" value={form.text || ''} onChange={(e) => onChange('text', e.target.value)} />
@@ -174,11 +175,10 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
               onChange={(e) => onChange('richTextHtml', e.target.value)}
             />
           </div>
-          <p className="bld-panel__hint">
-            Double‑click the block on canvas for WYSIWYG + toolbar. Nayi paragraph: <strong>Enter</strong> ya toolbar{' '}
-            <strong>¶</strong>. Alag paragraphs ke beech space: HTML me multiple <code>&lt;p&gt;</code> blocks. Box ke
-            andar/bahar padding: <strong>Style → Spacing</strong>.
-          </p>
+          <InspectorTipChips
+            style={{ marginBottom: 12 }}
+            chips={['Double-click canvas', 'Enter new paragraph', 'Multiple <p> tags', 'Padding: Style Spacing']}
+          />
         </>
       ) : null}
       {isButton ? (
@@ -274,22 +274,22 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
         <>
           <div className="bld-field">
             <label className="bld-label">Image quick tools</label>
-            <p className="bld-field-note" style={{ marginTop: 0 }}>
-              Ek click se fit, width aur height set ho jate hain (live + canvas). Neeche se manually bhi change kar
-              sakte ho; exact width ke liye <strong>Style</strong> tab → Size.
-            </p>
+            <InspectorTipChips
+              style={{ marginTop: 0, marginBottom: 8 }}
+              chips={['One-click presets', 'Live + canvas', 'Tweak fields below', 'Exact width: Style Size']}
+            />
             <div
               className="bld-field-grid"
               style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, marginTop: 8 }}
             >
               <button type="button" className="bld-chip" onClick={() => onChange('imageQuickPreset', 'naturalContain')}>
-                Poori photo, side white hatao (contain)
+                Contain — full photo
               </button>
               <button type="button" className="bld-chip" onClick={() => onChange('imageQuickPreset', 'fullCover')}>
                 Full width hero (cover, ~400px height)
               </button>
               <button type="button" className="bld-chip" onClick={() => onChange('imageQuickPreset', 'slimBanner')}>
-                Patla banner strip (cover, 200px)
+                Slim banner strip (cover, 200px)
               </button>
               <button type="button" className="bld-chip" onClick={() => onChange('imageQuickPreset', 'logo')}>
                 Logo / icon (contain, 56px)
@@ -336,9 +336,9 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
           <div className="bld-field">
             <label className="bld-label">Image fit (object-fit)</label>
             <select className="bld-input" value={form.imageFit || 'cover'} onChange={(e) => onChange('imageFit', e.target.value)}>
-              <option value="cover">Cover — poora box bharta hai, thoda crop ho sakta hai</option>
-              <option value="contain">Contain — poori tasveer; side par khali jagah Style/width se control</option>
-              <option value="fill">Fill — stretch (aspect ratio bigad sakta hai)</option>
+              <option value="cover">Cover — fills frame, may crop</option>
+              <option value="contain">Contain — full image, letterboxing</option>
+              <option value="fill">Fill — stretches, may distort</option>
             </select>
           </div>
           <div className="bld-field">
@@ -351,7 +351,7 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
               onChange={(e) => onChange('imageHeightPx', e.target.value)}
               placeholder="0 = natural height"
             />
-            <p className="bld-field-note">0 = image apni height le; fixed box ke liye yahan px set karo.</p>
+            <p className="bld-field-note">0 = natural height. Set px for fixed box.</p>
           </div>
         </>
       ) : null}

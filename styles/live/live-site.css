@@ -18,6 +18,12 @@
   --ease-spring: cubic-bezier(0.2, 0.9, 0.2, 1);
   --hover-lift: -2px;
   --hover-scale: 1.01;
+
+  /*
+   * Builder canvas is physically narrower (sidebars); live was full viewport so rows looked “stretched”.
+   * Cap the content column so published / preview match the artboard; override with --live-content-max-width.
+   */
+  --live-content-max-width: 1200px;
 }
 
 .live-site__main {
@@ -47,9 +53,9 @@
 }
 
 .live-doc {
-  max-width: 100%;
+  max-width: min(100%, var(--live-content-max-width));
   min-width: 0;
-  margin: 0;
+  margin: 0 auto;
   /* Horizontal padding only on content landmarks so header/footer can span edge-to-edge */
   padding: 0;
   width: 100%;
@@ -57,16 +63,58 @@
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
-  /* Space between top-level sections (rows). Reduce to tighten homepage vertical rhythm. */
+  /* Stack rhythm: parent `gap` + per-row margin deltas (!important) beat row `margin` shorthand from style_json. */
   gap: var(--live-section-gap, 12px);
+}
+
+/* Full-bleed strips use negative horizontal margins; hidden overflow clips logo/start columns. */
+.live-doc:has(> [data-live-root-strip='full']) {
+  overflow-x: visible;
+}
+
+/* Theme → Page width (body): full viewport vs contained .live-doc */
+.live-site[data-live-body-layout="full"] .live-doc {
+  max-width: none;
+  width: 100%;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+/*
+ * Per-root-row gap override (Style → Page spacing this section): `--live-row-gap-after` on the row.
+ * Default spacing is `.live-doc` flex `gap`; this margin is the *delta* so total after this row matches the override.
+ */
+.live-doc > header.live-node[data-live-root-gap-after]:not(:last-child),
+.live-doc > [data-site-header='true'][data-live-root-gap-after]:not(:last-child),
+.live-doc > footer.live-node[data-live-root-gap-after]:not(:last-child),
+.live-doc > main.live-node[data-live-root-gap-after]:not(:last-child),
+.live-doc > section.live-node[data-live-root-gap-after]:not(:last-child),
+.live-doc > [data-site-footer='true'][data-live-root-gap-after]:not(:last-child),
+.live-doc > div.live-node.bld-row[data-live-root-gap-after]:not(:last-child) {
+  /* !important: row style_json often sets `margin` shorthand; without it this delta never cancels `.live-doc` flex gap. */
+  margin-bottom: calc(var(--live-row-gap-after) - var(--live-section-gap, 12px)) !important;
+}
+
+/*
+ * Per-root-row gap *before* this landmark (space between previous sibling and this row).
+ * `:not(:first-child)` — no “above” gap on the first strip in `.live-doc`.
+ */
+.live-doc > header.live-node[data-live-root-gap-before]:not(:first-child),
+.live-doc > [data-site-header='true'][data-live-root-gap-before]:not(:first-child),
+.live-doc > footer.live-node[data-live-root-gap-before]:not(:first-child),
+.live-doc > main.live-node[data-live-root-gap-before]:not(:first-child),
+.live-doc > section.live-node[data-live-root-gap-before]:not(:first-child),
+.live-doc > [data-site-footer='true'][data-live-root-gap-before]:not(:first-child),
+.live-doc > div.live-node.bld-row[data-live-root-gap-before]:not(:first-child) {
+  margin-top: calc(var(--live-row-gap-before) - var(--live-section-gap, 12px)) !important;
 }
 
 .live-doc > section.live-node,
 .live-doc > main.live-node {
   padding-left: clamp(10px, 3vw, 22px);
   padding-right: clamp(10px, 3vw, 22px);
-  /* Extra bottom padding can double the perceived inter-section gap. */
-  padding-bottom: var(--live-section-pad-bottom, 12px);
+  /* Theme bottom pad must win over row `padding` shorthand from style_json */
+  padding-bottom: var(--live-root-row-pad-bottom, var(--live-section-pad-bottom, 12px)) !important;
   box-sizing: border-box;
 }
 
@@ -84,6 +132,16 @@
   .live-site[data-sticky-header='true'] .live-doc {
     overflow-x: visible;
   }
+}
+
+/* Full-bleed header + sticky: avoid clipping the widened strip */
+.live-site[data-sticky-header='true'] .live-doc:has(> [data-live-root-strip='full']) {
+  overflow-x: visible;
+}
+
+.live-site[data-sticky-header='true'] .live-doc > header[data-live-root-strip='full'],
+.live-site[data-sticky-header='true'] .live-doc > [data-site-header='true'][data-live-root-strip='full'] {
+  overflow-x: visible;
 }
 
 .live-site[data-sticky-header='true'] .live-doc > header,
@@ -688,7 +746,7 @@
   /* Use surface so it contrasts against hero/background images. */
   background: var(--node-bg, var(--color-surface, #ffffff));
   padding-top: var(--live-footer-pad-top, 18px);
-  padding-bottom: var(--live-footer-pad-bottom, 18px);
+  padding-bottom: var(--live-root-row-pad-bottom, var(--live-footer-pad-bottom, 18px)) !important;
   /* Free-move can accidentally persist `position:absolute` on rows; never allow for footers. */
   position: relative !important;
   inset: auto !important;
@@ -780,6 +838,48 @@
 .live-doc > .live-node:last-child {
   max-width: 100%;
   min-width: 0;
+}
+
+/* Style inspector: per top-level strip — Full (viewport) or Boxed (max-width column). No page-body gate. */
+.live-doc > [data-live-root-strip='full'] {
+  width: 100vw !important;
+  max-width: none !important;
+  margin-left: calc(50% - 50vw) !important;
+  margin-right: calc(50% - 50vw) !important;
+  box-sizing: border-box;
+  position: relative;
+}
+
+/* Landmark header rows default overflow-x: clip; full-bleed breakout needs visible or edges clip. */
+.live-doc > header.live-node[data-live-root-strip='full'],
+.live-doc > [data-site-header='true'][data-live-root-strip='full'] {
+  overflow-x: visible !important;
+}
+
+.live-doc > [data-live-root-strip='boxed'] {
+  max-width: min(100%, var(--live-content-max-width, 1200px)) !important;
+  width: 100%;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  box-sizing: border-box;
+}
+
+/* Nested section rows: same meta key; no viewport breakout — width is relative to parent column/stack. */
+.live-doc .live-node.bld-row[data-live-nested-strip='full'] {
+  width: 100% !important;
+  max-width: none !important;
+  align-self: stretch;
+  box-sizing: border-box;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.live-doc .live-node.bld-row[data-live-nested-strip='boxed'] {
+  max-width: min(100%, var(--live-content-max-width, 1200px)) !important;
+  width: 100%;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  box-sizing: border-box;
 }
 
 /* Current nav link — subtle default; override via node style_json */

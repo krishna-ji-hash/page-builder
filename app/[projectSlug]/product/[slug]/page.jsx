@@ -6,6 +6,7 @@ import { normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesig
 import { resolveMaybeAsyncParams, isPublicSlug } from '@/lib/routeParams';
 import { getItemBySlug } from '@/services/builder/cmsService';
 import { applyBindingsToTree } from '@/lib/cms/cmsBindings';
+import { getPageVarsBucket, livePageCssVarOverrides, resolveBodyLayout, resolveContentMaxWidthPx } from '@/lib/livePageCssVars';
 import { resolveSeoMetadata } from '@/lib/seo/seoEngine';
 import JsonLd from '@/components/seo/JsonLd';
 import '@/styles/live/live-site.css';
@@ -65,14 +66,33 @@ export default async function ProductDetailRoute({ params }) {
     sys: { slug, collection: 'products' },
   });
 
+  const productTemplateSlug = 'product-detail';
+  const productPageVars = getPageVarsBucket(siteTheme, productTemplateSlug);
+  const productSectionGapPx =
+    productPageVars && Number.isFinite(Number(productPageVars.sectionGapPx))
+      ? Number(productPageVars.sectionGapPx)
+      : null;
+  const productSectionPadBottomPx =
+    productPageVars && Number.isFinite(Number(productPageVars.sectionPadBottomPx))
+      ? Number(productPageVars.sectionPadBottomPx)
+      : null;
+  const productContentMaxWidthPx = resolveContentMaxWidthPx(productPageVars);
+  const productBodyLayout = resolveBodyLayout(siteTheme, productTemplateSlug);
+
   return (
     <div
       className="live-site"
       data-project-slug={projectSlug}
       data-page-slug="product-detail"
       data-route-kind="cms-product"
+      data-live-body-layout={productBodyLayout}
       style={{
         ...siteCssVars,
+        ...livePageCssVarOverrides({
+          sectionGapPx: productSectionGapPx,
+          sectionPadBottomPx: productSectionPadBottomPx,
+          contentMaxWidthPx: productContentMaxWidthPx,
+        }),
         fontFamily: siteTheme.typography.fontFamily,
       }}
     >
@@ -83,6 +103,7 @@ export default async function ProductDetailRoute({ params }) {
             currentPath,
             projectPages: page.projectPages || [],
             siteTheme,
+            pageSlug: productTemplateSlug,
             pageId: page.id,
             projectId: page.projectId,
             projectSlug,

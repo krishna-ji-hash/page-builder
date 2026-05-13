@@ -6,6 +6,7 @@ import { normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesig
 import { resolveMaybeAsyncParams, isPublicSlug } from '@/lib/routeParams';
 import { getItemBySlug } from '@/services/builder/cmsService';
 import { applyBindingsToTree, applyBindingsToString } from '@/lib/cms/cmsBindings';
+import { getPageVarsBucket, livePageCssVarOverrides, resolveBodyLayout, resolveContentMaxWidthPx } from '@/lib/livePageCssVars';
 import { resolveSeoMetadata } from '@/lib/seo/seoEngine';
 import JsonLd from '@/components/seo/JsonLd';
 import '@/styles/live/live-site.css';
@@ -66,14 +67,33 @@ export default async function PropertyRoute({ params }) {
     sys: { slug, collection: 'properties' },
   });
 
+  const propertyTemplateSlug = 'property-detail';
+  const propertyPageVars = getPageVarsBucket(siteTheme, propertyTemplateSlug);
+  const propertySectionGapPx =
+    propertyPageVars && Number.isFinite(Number(propertyPageVars.sectionGapPx))
+      ? Number(propertyPageVars.sectionGapPx)
+      : null;
+  const propertySectionPadBottomPx =
+    propertyPageVars && Number.isFinite(Number(propertyPageVars.sectionPadBottomPx))
+      ? Number(propertyPageVars.sectionPadBottomPx)
+      : null;
+  const propertyContentMaxWidthPx = resolveContentMaxWidthPx(propertyPageVars);
+  const propertyBodyLayout = resolveBodyLayout(siteTheme, propertyTemplateSlug);
+
   return (
     <div
       className="live-site"
       data-project-slug={projectSlug}
       data-page-slug="property-detail"
       data-route-kind="cms-property"
+      data-live-body-layout={propertyBodyLayout}
       style={{
         ...siteCssVars,
+        ...livePageCssVarOverrides({
+          sectionGapPx: propertySectionGapPx,
+          sectionPadBottomPx: propertySectionPadBottomPx,
+          contentMaxWidthPx: propertyContentMaxWidthPx,
+        }),
         fontFamily: siteTheme.typography.fontFamily,
       }}
     >
@@ -84,6 +104,7 @@ export default async function PropertyRoute({ params }) {
             currentPath,
             projectPages: page.projectPages || [],
             siteTheme,
+            pageSlug: propertyTemplateSlug,
             pageId: page.id,
             projectId: page.projectId,
             projectSlug,

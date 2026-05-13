@@ -329,6 +329,7 @@ export default function GlobalComponentEditorShell({ projectId, componentId, ret
               onSetPreviewCssForNode={() => {}}
               onSetActiveSpacingEdit={() => {}}
               overflowDiagnostics={null}
+              pageTree={tree}
             />
           </aside>
         </div>

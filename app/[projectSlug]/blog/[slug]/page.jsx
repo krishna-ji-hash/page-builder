@@ -6,6 +6,7 @@ import { normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesig
 import { resolveMaybeAsyncParams, isPublicSlug } from '@/lib/routeParams';
 import { getItemBySlug } from '@/services/builder/cmsService';
 import { applyBindingsToTree, applyBindingsToString } from '@/lib/cms/cmsBindings';
+import { getPageVarsBucket, livePageCssVarOverrides, resolveBodyLayout, resolveContentMaxWidthPx } from '@/lib/livePageCssVars';
 import { resolveSeoMetadata } from '@/lib/seo/seoEngine';
 import JsonLd from '@/components/seo/JsonLd';
 import '@/styles/live/live-site.css';
@@ -67,14 +68,31 @@ export default async function BlogPostRoute({ params }) {
     sys: { slug, collection: 'blog' },
   });
 
+  const blogTemplateSlug = 'blog-post';
+  const blogPageVars = getPageVarsBucket(siteTheme, blogTemplateSlug);
+  const blogSectionGapPx =
+    blogPageVars && Number.isFinite(Number(blogPageVars.sectionGapPx)) ? Number(blogPageVars.sectionGapPx) : null;
+  const blogSectionPadBottomPx =
+    blogPageVars && Number.isFinite(Number(blogPageVars.sectionPadBottomPx))
+      ? Number(blogPageVars.sectionPadBottomPx)
+      : null;
+  const blogContentMaxWidthPx = resolveContentMaxWidthPx(blogPageVars);
+  const blogBodyLayout = resolveBodyLayout(siteTheme, blogTemplateSlug);
+
   return (
     <div
       className="live-site"
       data-project-slug={projectSlug}
       data-page-slug="blog-post"
       data-route-kind="cms-blog"
+      data-live-body-layout={blogBodyLayout}
       style={{
         ...siteCssVars,
+        ...livePageCssVarOverrides({
+          sectionGapPx: blogSectionGapPx,
+          sectionPadBottomPx: blogSectionPadBottomPx,
+          contentMaxWidthPx: blogContentMaxWidthPx,
+        }),
         fontFamily: siteTheme.typography.fontFamily,
       }}
     >
@@ -85,6 +103,7 @@ export default async function BlogPostRoute({ params }) {
             currentPath,
             projectPages: page.projectPages || [],
             siteTheme,
+            pageSlug: blogTemplateSlug,
             pageId: page.id,
             projectId: page.projectId,
             projectSlug,

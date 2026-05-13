@@ -11,7 +11,9 @@ import SizeControls from './SizeControls';
 import BackgroundControls from './BackgroundControls';
 import ResponsiveVisibilityControls from './ResponsiveVisibilityControls';
 import EffectsControls from './EffectsControls';
+import InspectorTipChips from '@/components/builder/inspector/InspectorTipChips';
 import { isHeaderRowNode } from '@/lib/rowLayoutMeta';
+import { isRootPageRow } from '@/lib/liveDocSectionSpacing';
 
 function Section({ title, defaultOpen = true, children }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -43,6 +45,10 @@ export default function StylePanel({
   onResetLayoutKeys,
   onRowLayoutLockedChange,
   onHeaderLayoutQuickAction,
+  pageTree = null,
+  /** Nearest section row for strip width (may differ from `selectedNode` when a child widget is selected). */
+  stripLayoutTargetRow = null,
+  onPatchRootStripLayout = null,
 }) {
   if (!selectedNode) {
     return (
@@ -54,14 +60,80 @@ export default function StylePanel({
 
   const layoutHint = `Layout, gap, and width below apply to the ${deviceLabel} breakpoint (same as the device switcher above). They do not overwrite other breakpoints unless you change those devices too.`;
   const isHeaderSection = selectedNode?.nodeType === 'row' && isHeaderRowNode(selectedNode);
+  const stripRow = stripLayoutTargetRow?.nodeType === 'row' ? stripLayoutTargetRow : null;
+  const isRootStripRow =
+    stripRow &&
+    Array.isArray(pageTree) &&
+    pageTree.length > 0 &&
+    isRootPageRow(pageTree, stripRow);
+  const rootStripValue = String(stripRow?.props?.meta?.rootStripLayout || '').toLowerCase().trim();
+  const stripSelectValue = rootStripValue === 'full' ? 'full' : 'contained';
+  const stripSelectionIsRow = selectedNode?.nodeType === 'row' && stripRow && selectedNode.id === stripRow.id;
 
   return (
     <div className="bld-panel">
       <div className="bld-panel__head">Style</div>
-      {selectedNode.nodeType === 'row' ? (
-        <p className="bld-panel__hint" style={{ margin: '0 0 12px' }}>
-          Poora section chhota / patla: pehle yahi Style tab me Spacing → Padding (top + bottom) kam karein. Phir Size → Height px — 0 = auto. Agar ab bhi zyada uncha ho to canvas par andar ki column ya image select karke un par bhi Style → Size ya Content me image height dekhein (section template kabhi column par min-height laga deta hai).
-        </p>
+      {stripRow && typeof onPatchRootStripLayout === 'function' ? (
+        <Section title="Section width (this strip)" defaultOpen>
+          {!stripSelectionIsRow ? (
+            <p className="bld-field-note" style={{ marginTop: 0, marginBottom: 8 }}>
+              You have a <strong>widget or column</strong> selected; width below applies to the{' '}
+              <strong>section row</strong> that wraps it. Click the section’s top bar on the canvas to select the row
+              directly.
+            </p>
+          ) : null}
+          <p className="bld-field-note" style={{ marginTop: 0 }}>
+            {isRootStripRow ? (
+              <>
+                <strong>Top-level strip</strong> (header, hero, footer, etc.): full width uses the whole screen on the
+                live site; contained follows the page content column.
+              </>
+            ) : (
+              <>
+                <strong>Nested row</strong> inside a column or stack: full width spans that parent; contained keeps the
+                row within the usual content width for that level.
+              </>
+            )}
+          </p>
+          <div className="bld-field">
+            <label className="bld-label" htmlFor="root-strip-layout">
+              Width
+            </label>
+            <select
+              id="root-strip-layout"
+              className="bld-input"
+              value={stripSelectValue}
+              onChange={(e) => onPatchRootStripLayout(e.target.value)}
+            >
+              <option value="contained">Contained</option>
+              <option value="full">{isRootStripRow ? 'Full width (screen)' : 'Full width (parent)'}</option>
+            </select>
+            <InspectorTipChips
+              size="xs"
+              style={{ marginTop: 4 }}
+              chips={
+                isRootStripRow
+                  ? ['Header / hero → Full width', 'Body strips → Often contained', 'Global header: same control']
+                  : ['Full width = column edge to edge', 'Contained = theme max width (capped by parent)']
+              }
+            />
+          </div>
+        </Section>
+      ) : null}
+      {stripRow ? (
+        <InspectorTipChips
+          chips={[
+            'Reduce padding',
+            'Top + bottom',
+            'Then height',
+            'Zero = auto',
+            'Still tall?',
+            'Pick column',
+            'Or image',
+            'Size / Content',
+            'Check min-height',
+          ]}
+        />
       ) : null}
       <Section title="Visibility by breakpoint" defaultOpen>
         <ResponsiveVisibilityControls
@@ -72,6 +144,10 @@ export default function StylePanel({
           onChange={(targetDevice, visible) => onVisibilityForDevice?.(targetDevice, visible)}
         />
       </Section>
+      <p className="bld-field-note" style={{ margin: '0 0 12px' }}>
+        Space between page sections (default or one strip): <strong>Theme</strong> tab →{' '}
+        <strong>Page spacing (this page)</strong>.
+      </p>
       <Section title="Typography">
         <TypographyControls form={form} onUpdate={onChange} selectedNodeType={selectedNode?.nodeType || ''} />
       </Section>
@@ -82,11 +158,17 @@ export default function StylePanel({
         <BackgroundControls form={form} onUpdate={onChange} projectId={projectId} selectedNode={selectedNode} />
       </Section>
       <Section title="Spacing">
-        <p className="bld-field-note" style={{ marginTop: 0 }}>
-          Upar / neeche khali jagah: <strong>Padding</strong> (andar) ya <strong>Margin</strong> (bahar). Har side alag
-          value; blur par save. Plain text me nayi line: Style → Typography → pre-wrap, ya Content tab me multiline
-          text.
-        </p>
+        <InspectorTipChips
+          chips={[
+            'Vertical space',
+            'Padding inside',
+            'Margin outside',
+            'Per-side values',
+            'Blur to save',
+            'New line: pre-wrap',
+            'Or multiline Content',
+          ]}
+        />
         <SpacingControls
           form={form}
           onUpdate={onChange}

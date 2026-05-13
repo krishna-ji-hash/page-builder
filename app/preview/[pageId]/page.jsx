@@ -1,5 +1,6 @@
 import { RuntimeProvider } from '@/components/runtime/RuntimeProvider';
 import { renderTree } from '@/lib/liveRenderer';
+import { getPageVarsBucket, livePageCssVarOverrides, resolveBodyLayout, resolveContentMaxWidthPx } from '@/lib/livePageCssVars';
 import { normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesignTheme';
 import { buildRenderNodesWithGlobals } from '@/lib/globalSectionMerge';
 import { expandLinkedGlobalComponents } from '@/lib/globalComponentExpand';
@@ -81,14 +82,13 @@ export default async function DraftPreviewPage({ params }) {
   const siteTheme = normalizeSiteTheme(state.page?.projectConfig?.siteTheme);
   const siteCssVars = siteThemeToCssVariableStyle(siteTheme);
   const pageSlug = state.page.slug;
-  const pageVars =
-    siteTheme?.pageVars && typeof siteTheme.pageVars === 'object' && !Array.isArray(siteTheme.pageVars)
-      ? siteTheme.pageVars?.[pageSlug] || null
-      : null;
+  const pageVars = getPageVarsBucket(siteTheme, pageSlug);
   const sectionGapPx = pageVars && Number.isFinite(Number(pageVars.sectionGapPx)) ? Number(pageVars.sectionGapPx) : null;
   const sectionPadBottomPx =
     pageVars && Number.isFinite(Number(pageVars.sectionPadBottomPx)) ? Number(pageVars.sectionPadBottomPx) : null;
+  const contentMaxWidthPx = resolveContentMaxWidthPx(pageVars);
   const stickyHeader = Boolean(pageVars?.stickyHeader);
+  const bodyLayout = resolveBodyLayout(siteTheme, pageSlug);
 
   return (
     <div
@@ -97,10 +97,10 @@ export default async function DraftPreviewPage({ params }) {
       data-page-slug={state.page.slug}
       data-route-kind="draft-preview"
       data-sticky-header={stickyHeader ? 'true' : 'false'}
+      data-live-body-layout={bodyLayout}
       style={{
         ...siteCssVars,
-        ...(sectionGapPx != null ? { '--live-section-gap': `${sectionGapPx}px` } : {}),
-        ...(sectionPadBottomPx != null ? { '--live-section-pad-bottom': `${sectionPadBottomPx}px` } : {}),
+        ...livePageCssVarOverrides({ sectionGapPx, sectionPadBottomPx, contentMaxWidthPx }),
         fontFamily: siteTheme.typography.fontFamily,
       }}
     >
@@ -110,6 +110,7 @@ export default async function DraftPreviewPage({ params }) {
             currentPath,
             projectPages,
             siteTheme,
+            pageSlug,
             pageId: state.page.id,
             projectId: state.page.projectId,
             projectSlug: state.page.projectSlug,
