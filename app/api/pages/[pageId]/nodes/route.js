@@ -26,6 +26,7 @@ export async function POST(request, { params }) {
   } catch (error) {
     if (error.message === 'Parent node not found') return fail(error.message, 404);
     if (error.message.startsWith('Invalid')) return fail(error.message, 400);
+    if (/locked/i.test(error.message)) return fail(error.message, 400);
     return fail('Failed to create node', 500, error.message);
   }
 }

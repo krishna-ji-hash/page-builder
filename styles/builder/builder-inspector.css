@@ -1843,3 +1843,107 @@
   display: grid;
   gap: 6px;
 }
+
+.bld-line-tools {
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--bld-border);
+  background: color-mix(in srgb, var(--bld-surface) 94%, var(--bld-border));
+}
+
+.bld-line-tools__head {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--bld-muted);
+  margin-bottom: 8px;
+}
+
+.bld-line-tools__placement {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.bld-line-tools__place {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  min-height: 26px;
+  padding: 2px 4px;
+  border: 1px solid var(--bld-border);
+  border-radius: 6px;
+  background: var(--bld-surface);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--bld-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.bld-line-tools__place:has(input:checked) {
+  border-color: color-mix(in srgb, var(--bld-accent) 45%, var(--bld-border));
+  color: var(--bld-text);
+  background: color-mix(in srgb, var(--bld-accent) 8%, var(--bld-surface));
+}
+
+.bld-line-tools__place:has(input:disabled) {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.bld-line-tools__place input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.bld-line-tools__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.bld-line-tools__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--bld-border);
+  border-radius: 8px;
+  background: var(--bld-surface);
+  color: var(--bld-text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.bld-line-tools__btn:hover:not(:disabled) {
+  background: var(--bld-surface-2);
+  border-color: color-mix(in srgb, var(--bld-accent) 35%, var(--bld-border));
+}
+
+.bld-line-tools__btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.bld-line-tools__icon {
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0.85;
+}
+
+.bld-line-tools__hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--bld-muted);
+}

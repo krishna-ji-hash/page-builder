@@ -16,6 +16,7 @@ test('isWidgetAllowed: website has core marketing widgets only', () => {
   assert.equal(isWidgetAllowed('website', 'heading'), true);
   assert.equal(isWidgetAllowed('website', 'rich_text'), true);
   assert.equal(isWidgetAllowed('website', 'menu'), true);
+  assert.equal(isWidgetAllowed('website', 'divider'), true);
   assert.equal(isWidgetAllowed('website', 'table'), false);
   assert.equal(isWidgetAllowed('website', 'form'), false);
 });

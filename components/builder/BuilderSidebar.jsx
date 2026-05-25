@@ -15,6 +15,8 @@ const ELEMENT_CARDS = [
   { id: 'image', label: 'Image', icon: 'IMG', supported: true },
   { id: 'button', label: 'Button', icon: 'BTN', supported: true },
   { id: 'menu', label: 'Menu', icon: 'MNU', supported: true },
+  { id: 'divider', label: 'H Line', icon: '―', supported: true, dividerOrientation: 'horizontal' },
+  { id: 'divider_v', label: 'V Line', icon: '|', supported: true, dividerOrientation: 'vertical' },
   { id: 'input', label: 'Input', icon: 'IN', supported: true },
   { id: 'textarea', label: 'Textarea', icon: 'TA', supported: true },
   { id: 'select', label: 'Select', icon: 'SEL', supported: true },
@@ -32,6 +34,7 @@ const validParentTypes = new Set(['row', 'column', 'stack']);
 const nodeTypeByBlockId = {};
 
 function resolveNodeType(blockId) {
+  if (blockId === 'divider_v') return 'divider';
   return nodeTypeByBlockId[blockId] || blockId;
 }
 
@@ -486,18 +489,25 @@ export default function BuilderSidebar({
                                 ? friendlyHierarchyTitle({ nodeType, selectedNode })
                                 : block.label
                       }
-                      onClick={() =>
-                        block.supported &&
-                        (canQuickAddWidget
-                          ? onQuickAddNode({
-                              targetNodeId: selectedNode.id,
-                              nodeType,
-                            })
-                          : onCreateNode({
-                              nodeType,
-                              parentNodeId: resolveParentNodeIdForCreate(nodeType, selectedNode),
-                            }))
-                      }
+                      onClick={() => {
+                        if (!block.supported) return;
+                        const dividerExtra = block.dividerOrientation
+                          ? { dividerOrientation: block.dividerOrientation }
+                          : {};
+                        if (canQuickAddWidget) {
+                          onQuickAddNode({
+                            targetNodeId: selectedNode.id,
+                            nodeType,
+                            ...dividerExtra,
+                          });
+                        } else {
+                          onCreateNode({
+                            nodeType,
+                            parentNodeId: resolveParentNodeIdForCreate(nodeType, selectedNode),
+                            ...dividerExtra,
+                          });
+                        }
+                      }}
                     >
                       <span className="bld-block-card__icon">{block.icon}</span>
                       <span className="bld-block-card__label">{block.label}</span>

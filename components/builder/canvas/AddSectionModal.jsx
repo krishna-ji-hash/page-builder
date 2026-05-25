@@ -30,9 +30,14 @@ const PRESETS = [
     description: 'Hero + features + CTA starter layout.',
   },
   {
-    id: 'header',
+    id: 'headerSpread',
     title: 'Header',
-    description: 'Insert a ready header row with logo/menu structure.',
+    description: 'Full width (screen) — logo left, menu center, buttons right.',
+  },
+  {
+    id: 'headerBoxed',
+    title: 'Header',
+    description: 'Contained — logo, menu, and buttons in the content column.',
   },
   {
     id: 'footer',

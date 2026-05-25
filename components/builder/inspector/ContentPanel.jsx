@@ -1,6 +1,11 @@
 'use client';
 
 import { MENU_ALIGNS, MENU_VARIANTS } from '@/lib/menuNav';
+import {
+  MENU_DRAWER_ACTION_LAYOUTS,
+  MENU_DRAWER_DENSITIES,
+  MENU_HAMBURGER_ALIGNS,
+} from '@/lib/menuMobile';
 import { useMemo, useState } from 'react';
 import MediaLibraryModal from '@/components/builder/media/MediaLibraryModal';
 import MenuTreeEditor from '@/components/builder/inspector/MenuTreeEditor';
@@ -129,6 +134,7 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
   const isForm = selectedNode.nodeType === 'form';
   const isRichText = selectedNode.nodeType === 'rich_text';
   const isCarousel = selectedNode.nodeType === 'carousel';
+  const isDivider = selectedNode.nodeType === 'divider';
   const carouselVariantKey =
     isCarousel && ['image', 'hero', 'card', 'logo', 'ticker', 'marquee'].includes(form.carouselVariant)
       ? form.carouselVariant
@@ -148,6 +154,45 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
     <div className="bld-panel">
       <div className="bld-panel__head">Content</div>
       <CmsBindingsPanel selectedNode={selectedNode} projectId={projectId} onChange={onChange} />
+      {isDivider ? (
+        <>
+          <div className="bld-field">
+            <label className="bld-label">Orientation</label>
+            <select
+              className="bld-input"
+              value={form.dividerOrientation || 'horizontal'}
+              onChange={(e) => onChange('dividerOrientation', e.target.value)}
+            >
+              <option value="horizontal">Horizontal</option>
+              <option value="vertical">Vertical</option>
+            </select>
+          </div>
+          <div className="bld-field">
+            <label className="bld-label">Line color</label>
+            <input
+              type="color"
+              className="bld-input"
+              value={form.bgColor || '#cbd5e1'}
+              onChange={(e) => onChange('bgColor', e.target.value)}
+            />
+          </div>
+          <div className="bld-field">
+            <label className="bld-label">Thickness (px)</label>
+            <input
+              type="number"
+              className="bld-input"
+              min={1}
+              max={32}
+              value={form.dividerThicknessPx ?? 2}
+              onChange={(e) => onChange('dividerThicknessPx', e.target.value)}
+            />
+          </div>
+          <InspectorTipChips
+            style={{ marginBottom: 12 }}
+            chips={['Style → Background for gradients', 'Style → Size for length', 'Row stack: use V Line']}
+          />
+        </>
+      ) : null}
       {isTextLike ? (
         <div className="bld-field">
           <label className="bld-label">{isButton ? 'Label' : selectedNode.nodeType === 'heading' ? 'Heading' : 'Text'}</label>
@@ -383,7 +428,7 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
             </select>
           </div>
           <div className="bld-field">
-            <label className="bld-label">Alignment</label>
+            <label className="bld-label">Link alignment (desktop)</label>
             <select
               className="bld-input"
               value={form.menuAlign || 'center'}
@@ -395,6 +440,124 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
                 </option>
               ))}
             </select>
+          </div>
+          <div className="bld-style-section" style={{ marginTop: 12 }}>
+            <div className="bld-style-section__head" style={{ cursor: 'default', padding: '0 0 8px' }}>
+              <span className="bld-style-section__title">Mobile menu (☰)</span>
+            </div>
+            <div className="bld-style-section__body" style={{ paddingTop: 0 }}>
+              <div className="bld-field">
+                <label className="bld-label">Hamburger</label>
+                <select
+                  className="bld-input"
+                  value={form.menuMobileEnabled ? 'yes' : 'no'}
+                  onChange={(e) => onChange('menuMobileEnabled', e.target.value === 'yes')}
+                >
+                  <option value="yes">Show on mobile</option>
+                  <option value="no">Hide (desktop links only)</option>
+                </select>
+              </div>
+              <div className="bld-field">
+                <label className="bld-label">Hamburger position</label>
+                <select
+                  className="bld-input"
+                  value={form.menuMobileHamburgerAlign || 'right'}
+                  onChange={(e) => onChange('menuMobileHamburgerAlign', e.target.value)}
+                  disabled={!form.menuMobileEnabled}
+                >
+                  {MENU_HAMBURGER_ALIGNS.map((a) => (
+                    <option key={a} value={a}>
+                      {a.charAt(0).toUpperCase() + a.slice(1)}
+                    </option>
+                  ))}
+                </select>
+                <p className="bld-field-note">Row mein ☰ icon left / center / right align karein.</p>
+              </div>
+              <div className="bld-field">
+                <label className="bld-label">Drawer title</label>
+                <input
+                  className="bld-input"
+                  value={form.menuMobileTitle || ''}
+                  onChange={(e) => onChange('menuMobileTitle', e.target.value)}
+                  placeholder="Menu"
+                  disabled={!form.menuMobileEnabled}
+                />
+              </div>
+              <div className="bld-field">
+                <label className="bld-label">Screen reader label</label>
+                <input
+                  className="bld-input"
+                  value={form.menuMobileHamburgerLabel || ''}
+                  onChange={(e) => onChange('menuMobileHamburgerLabel', e.target.value)}
+                  placeholder="Open menu"
+                  disabled={!form.menuMobileEnabled}
+                />
+              </div>
+              <div className="bld-field" style={{ marginTop: 8 }}>
+                <label className="bld-label">Compact layout up to</label>
+                <select
+                  className="bld-input"
+                  value={String(form.menuMobileBreakpointPx ?? 1024)}
+                  onChange={(e) => onChange('menuMobileBreakpointPx', Number(e.target.value))}
+                  disabled={!form.menuMobileEnabled}
+                >
+                  <option value="768">768px — phone only</option>
+                  <option value="1024">1024px — phone + tablet (default)</option>
+                  <option value="1200">1200px — large tablets</option>
+                </select>
+                <p className="bld-field-note">Is width par ☰ dikhega; header bar se Login / CTA hide honge.</p>
+              </div>
+              <div className="bld-style-section" style={{ marginTop: 14 }}>
+                <div className="bld-style-section__head" style={{ cursor: 'default', padding: '0 0 8px' }}>
+                  <span className="bld-style-section__title">Drawer panel</span>
+                </div>
+                <div className="bld-style-section__body" style={{ paddingTop: 0 }}>
+                  <div className="bld-field">
+                    <label className="bld-label">Header buttons in drawer</label>
+                    <select
+                      className="bld-input"
+                      value={form.menuMobileShowDrawerActions !== false ? 'yes' : 'no'}
+                      onChange={(e) => onChange('menuMobileShowDrawerActions', e.target.value === 'yes')}
+                      disabled={!form.menuMobileEnabled}
+                    >
+                      <option value="yes">Show Login / CTA in drawer</option>
+                      <option value="no">Hide (links only)</option>
+                    </select>
+                  </div>
+                  <div className="bld-field">
+                    <label className="bld-label">Drawer button layout</label>
+                    <select
+                      className="bld-input"
+                      value={form.menuMobileDrawerActionsLayout || 'row'}
+                      onChange={(e) => onChange('menuMobileDrawerActionsLayout', e.target.value)}
+                      disabled={!form.menuMobileEnabled || form.menuMobileShowDrawerActions === false}
+                    >
+                      {MENU_DRAWER_ACTION_LAYOUTS.map((layout) => (
+                        <option key={layout} value={layout}>
+                          {layout === 'row' ? 'Side by side (Login | Get Started)' : 'Stacked (one per row)'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="bld-field">
+                    <label className="bld-label">Drawer spacing</label>
+                    <select
+                      className="bld-input"
+                      value={form.menuMobileDrawerDensity || 'compact'}
+                      onChange={(e) => onChange('menuMobileDrawerDensity', e.target.value)}
+                      disabled={!form.menuMobileEnabled}
+                    >
+                      {MENU_DRAWER_DENSITIES.map((d) => (
+                        <option key={d} value={d}>
+                          {d === 'compact' ? 'Compact' : d === 'balanced' ? 'Balanced' : 'Roomy'}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="bld-field-note">Links aur footer buttons ke beech gap control karein.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
           <div className="bld-field">
             <label className="bld-label">Aria Label</label>
@@ -411,7 +574,7 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
           />
           {jsonErrors.menuItemsJson ? <p className="bld-field-error">{jsonErrors.menuItemsJson}</p> : null}
           <details className="bld-acc" style={{ marginTop: 10 }}>
-            <summary>Advanced: Mega + Mobile</summary>
+            <summary>Advanced: Mega menu</summary>
             <div className="bld-field" style={{ marginTop: 10 }}>
               <label className="bld-label">Mega menu enabled</label>
               <select
@@ -432,35 +595,6 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
                 className="bld-input"
                 value={Number(form.menuMegaColumns ?? 2)}
                 onChange={(e) => onChange('menuMegaColumns', e.target.value)}
-              />
-            </div>
-            <div className="bld-field">
-              <label className="bld-label">Mobile drawer</label>
-              <select
-                className="bld-input"
-                value={form.menuMobileEnabled ? 'yes' : 'no'}
-                onChange={(e) => onChange('menuMobileEnabled', e.target.value === 'yes')}
-              >
-                <option value="yes">Enabled</option>
-                <option value="no">Disabled</option>
-              </select>
-            </div>
-            <div className="bld-field">
-              <label className="bld-label">Mobile title</label>
-              <input
-                className="bld-input"
-                value={form.menuMobileTitle || ''}
-                onChange={(e) => onChange('menuMobileTitle', e.target.value)}
-                placeholder="Menu"
-              />
-            </div>
-            <div className="bld-field">
-              <label className="bld-label">Hamburger label</label>
-              <input
-                className="bld-input"
-                value={form.menuMobileHamburgerLabel || ''}
-                onChange={(e) => onChange('menuMobileHamburgerLabel', e.target.value)}
-                placeholder="Open menu"
               />
             </div>
           </details>

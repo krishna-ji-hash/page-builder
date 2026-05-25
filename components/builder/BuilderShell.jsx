@@ -4,16 +4,24 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   autoFixTree,
   canonicalNodeId,
+  findAncestorStackNode,
   findNodeInTree,
   getSiblingContext,
   mergeNodePropsJsonPatch,
   reconcileStructuralParents,
+  resolveSectionDuplicateTargetId,
   sameBuilderNodeId,
   validateTree,
 } from '@/lib/builderTree';
 import { isValidNodeHierarchy } from '@/lib/builderHierarchy';
 import { normalizeResponsiveStyle } from '@/lib/styleNormalizer';
 import { getDeviceStyle } from '@/lib/styleToCss';
+import {
+  applyHeaderAlignToRowStyleJson,
+  headerLayoutMetaPatch,
+  resolveHeaderLayoutMode,
+} from '@/lib/headerLayoutMode';
+import { repairHeaderRowsInTree } from '@/lib/headerCompactLayout';
 import { materializeSectionTemplate, SECTION_TEMPLATES } from '@/lib/sectionTemplates';
 import { getFullPageTemplateById } from '@/lib/fullPageTemplates';
 import { flattenTemplateToBulkNodes } from '@/lib/sectionTemplates';
@@ -26,6 +34,8 @@ import BuilderInspector from './BuilderInspector';
 import { getGlobalLinkMeta, isLinkedGlobalPlaceholder, treeContainsLinkedGlobals } from '@/lib/globalComponentLinkMeta';
 import { isNodeEditsDisabledBySectionLock, isSectionLockedRow, isStrictAncestorSectionLocked, metaRepresentsExplicitSectionUnlock } from '@/lib/rowLayoutMeta';
 import { loadAppsForProject } from '@/lib/registry/appLoader';
+import { buildDividerCreatePayload } from '@/lib/dividerDefaults';
+import { resolveDividerInsertPlan } from '@/lib/dividerInsert';
 import PageSeoModal from './seo/PageSeoModal';
 import AuditModal from './audits/AuditModal';
 import AuditBadgesOverlay from './audits/AuditBadgesOverlay';
@@ -106,6 +116,16 @@ function walkNodes(nodes, visit) {
       walkNodes(node.children, visit);
     }
   }
+}
+
+/** All numeric ids in a subtree (used to cancel in-flight saves after delete). */
+function collectSubtreeNodeIds(rootNode) {
+  const ids = [];
+  walkNodes(rootNode ? [rootNode] : [], (n) => {
+    const id = Number(n?.id);
+    if (Number.isInteger(id) && id > 0) ids.push(id);
+  });
+  return ids;
 }
 
 function sanitizeStyleForStrictMode(styleJson, nodeType = null) {
@@ -206,11 +226,8 @@ function collectRowsInDocOrder(nodes) {
 
 /** Presets for header rows (`props.meta.headerLayout`) — aside + data; style hooks can read later. */
 const HEADER_LAYOUT_PRESETS = [
-  { id: 'standard', label: 'Standard bar' },
-  { id: 'minimal', label: 'Minimal' },
-  { id: 'centered', label: 'Centered logo' },
-  { id: 'split', label: 'Split / mega' },
-  { id: 'transparent', label: 'Transparent overlay' },
+  { id: 'spread', label: 'Full width (screen)' },
+  { id: 'boxed', label: 'Contained' },
 ];
 
 const FOOTER_LAYOUT_PRESETS = [
@@ -227,34 +244,6 @@ const HEADER_ALIGN_PRESETS = [
   { id: 'center', label: 'Center' },
   { id: 'right', label: 'Right' },
 ];
-
-function headerAlignToJustifyContent(alignId) {
-  const id = String(alignId || 'between').toLowerCase();
-  if (id === 'left') return 'flex-start';
-  if (id === 'center') return 'center';
-  if (id === 'right') return 'flex-end';
-  return 'space-between';
-}
-
-function applyHeaderAlignToRowStyleJson(styleJson, alignId) {
-  const justify = headerAlignToJustifyContent(alignId);
-  const base = styleJson && typeof styleJson === 'object' ? styleJson : {};
-  const patchLayer = (layer) => {
-    const L = layer && typeof layer === 'object' ? layer : {};
-    const prevLayout = L.layout && typeof L.layout === 'object' ? L.layout : {};
-    const layout = { ...prevLayout, justifyContent: justify };
-    if (prevLayout.gap == null || prevLayout.gap === '') {
-      layout.gap = 'clamp(10px, 2vw, 24px)';
-    }
-    return { ...L, layout };
-  };
-  return {
-    ...base,
-    desktop: patchLayer(base.desktop),
-    tablet: patchLayer(base.tablet),
-    mobile: patchLayer(base.mobile),
-  };
-}
 
 function asideInteriorNodeLabel(nodeType) {
   if (nodeType === 'column') return 'Column';
@@ -472,6 +461,8 @@ export default function BuilderShell({ pageId }) {
   const [isDeletingNode, setIsDeletingNode] = useState(false);
   const [deletingNodeId, setDeletingNodeId] = useState(null);
   const deleteInFlightRef = useRef(false);
+  const blockedNodeUpdateIdsRef = useRef(new Set());
+  const siteThemePersistFlushRef = useRef(null);
   const [isReorderingNode, setIsReorderingNode] = useState(false);
   const [hasUnpublishedEdits, setHasUnpublishedEdits] = useState(false);
   const [saveAckVisible, setSaveAckVisible] = useState(false);
@@ -652,6 +643,19 @@ export default function BuilderShell({ pageId }) {
     [page?.projectConfig?.siteTheme]
   );
 
+  const canInsertDividerLine = useMemo(() => {
+    if (!Array.isArray(tree) || tree.length === 0) return false;
+    if (tree.some((n) => n?.nodeType === 'row')) return true;
+    const walkStacks = (nodes, out = []) => {
+      for (const n of nodes || []) {
+        if (n?.nodeType === 'stack') out.push(n);
+        if (n?.children?.length) walkStacks(n.children, out);
+      }
+      return out;
+    };
+    return walkStacks(tree).some((s) => !isNodeEditsDisabledBySectionLock(tree, s.id));
+  }, [tree]);
+
   const clipboardNodeTypeLabel = useMemo(() => {
     if (!copiedNodeId) return null;
     const n = findNodeInTree(tree, Number(copiedNodeId));
@@ -747,7 +751,7 @@ export default function BuilderShell({ pageId }) {
       throw new Error(formatLoadError(data, response));
     }
     if (signal?.aborted) return;
-    const nextTree = reconcileStructuralParents(autoFixTree(data.tree || []));
+    const nextTree = repairHeaderRowsInTree(reconcileStructuralParents(autoFixTree(data.tree || [])));
     setPage(data.page);
     setDraftVersion(data.draftVersion || null);
     setTree(nextTree);
@@ -757,6 +761,7 @@ export default function BuilderShell({ pageId }) {
       return nextTree[0]?.id ?? null;
     });
     setHasUnpublishedEdits(false);
+    blockedNodeUpdateIdsRef.current.clear();
   }, [pid]);
 
   useEffect(() => {
@@ -916,7 +921,19 @@ export default function BuilderShell({ pageId }) {
       setErrorMessage('Invalid node id');
       return;
     }
+    if (blockedNodeUpdateIdsRef.current.has(normalizedNodeId)) {
+      return;
+    }
     const targetNode = findNodeInTree(tree, normalizedNodeId);
+    if (!targetNode) {
+      if (deleteInFlightRef.current) return;
+      try {
+        await reloadBuilder();
+      } catch {
+        // ignore sync errors
+      }
+      return;
+    }
     if (isStrictAncestorSectionLocked(tree, normalizedNodeId)) {
       setErrorMessage('This layer is inside a locked section. Unlock the section in the left panel to edit.');
       return;
@@ -951,6 +968,18 @@ export default function BuilderShell({ pageId }) {
       });
       const data = await readJsonSafe(response);
       if (!response.ok) {
+        if (response.status === 404) {
+          blockedNodeUpdateIdsRef.current.add(normalizedNodeId);
+          setTree(beforeTree);
+          setUndoStack((prev) => prev.slice(0, -1));
+          setSelectedNodeId((current) => (current === normalizedNodeId ? null : current));
+          try {
+            await reloadBuilder();
+          } catch {
+            // ignore sync errors
+          }
+          return;
+        }
         throw new Error(data.error || 'Failed to update node');
       }
       setTree(data.tree || beforeTree);
@@ -958,7 +987,10 @@ export default function BuilderShell({ pageId }) {
     } catch (error) {
       setTree(beforeTree);
       setUndoStack((prev) => prev.slice(0, -1));
-      setErrorMessage(error.message);
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg !== 'Node not found') {
+        setErrorMessage(msg);
+      }
     } finally {
       setIsSavingNode(false);
     }
@@ -1430,7 +1462,10 @@ export default function BuilderShell({ pageId }) {
         parentNodeId: parentNodeId || null,
         displayName: displayName || `${nodeType[0].toUpperCase()}${nodeType.slice(1)} Block`,
         props:
-          props || {
+          props ||
+          (nodeType === 'divider'
+            ? buildDividerCreatePayload('horizontal').props
+            : {
             text:
               nodeType === 'heading'
                 ? 'New heading'
@@ -1453,8 +1488,10 @@ export default function BuilderShell({ pageId }) {
               nodeType === 'rich_text'
                 ? '<p>Start typing. Double‑click to edit.</p>'
                 : undefined,
-          },
-        style_json,
+          }),
+        style_json:
+          style_json ||
+          (nodeType === 'divider' ? buildDividerCreatePayload('horizontal').style_json : undefined),
         ...(dataJson !== undefined ? { dataJson } : {}),
         ...(actionsJson !== undefined ? { actionsJson } : {}),
         ...(Number.isInteger(positionIndex) ? { positionIndex } : {}),
@@ -1465,7 +1502,7 @@ export default function BuilderShell({ pageId }) {
     }
     const data = await readJsonSafe(response);
     if (!response.ok) {
-      throw new Error(data.error || 'Failed to create node');
+      throw new Error(data.details || data.error || 'Failed to create node');
     }
 
     if (data.tree) {
@@ -1576,13 +1613,23 @@ export default function BuilderShell({ pageId }) {
     'image',
     'button',
     'menu',
+    'divider',
     'table',
     'form',
   ]);
 
+  const dividerPayloadForCreate = (nodeType, dividerOrientation) => {
+    if (nodeType !== 'divider') return {};
+    return buildDividerCreatePayload(dividerOrientation === 'vertical' ? 'vertical' : 'horizontal');
+  };
+
   const resolveQuickAddParentId = async ({ targetNodeId, nodeType }) => {
     const target = findNodeInTree(tree, targetNodeId);
     if (!target?.id) return targetNodeId || null;
+    if (WIDGET_NODE_TYPES.has(nodeType)) {
+      const ancestorStack = findAncestorStackNode(tree, targetNodeId);
+      if (ancestorStack?.id) return ancestorStack.id;
+    }
     if (!WIDGET_NODE_TYPES.has(nodeType)) return target.id;
     if (target.nodeType === 'stack') return target.id;
     if (target.nodeType === 'column') {
@@ -1645,10 +1692,119 @@ export default function BuilderShell({ pageId }) {
       });
       return stack?.id || null;
     }
-    return target.parentNodeId || null;
+    const parentId = target.parentNodeId;
+    if (parentId && WIDGET_NODE_TYPES.has(nodeType)) {
+      const parent = findNodeInTree(tree, parentId);
+      if (parent?.nodeType === 'stack') return parent.id;
+    }
+    return parentId || null;
   };
 
-  const handleCreateNode = async ({ nodeType, parentNodeId }) => {
+  const executeDividerInsertPlan = async (plan) => {
+    if (!plan?.kind) return null;
+    if (plan.kind === 'stack-child') {
+      return createNodeRequest({
+        nodeType: 'divider',
+        parentNodeId: plan.stackId,
+        positionIndex: plan.positionIndex,
+        props: plan.props,
+        style_json: plan.style_json,
+        displayName: 'Line',
+      });
+    }
+    if (plan.kind === 'root-row') {
+      const row = await createNodeRequest({
+        nodeType: 'row',
+        parentNodeId: null,
+        displayName: 'Line section',
+        positionIndex: plan.positionIndex,
+        style_json: plan.rowStyle,
+      });
+      if (!row?.id) return null;
+      const column = await createNodeRequest({
+        nodeType: 'column',
+        parentNodeId: row.id,
+        displayName: 'Column',
+        positionIndex: 0,
+      });
+      if (!column?.id) return null;
+      const stack = await createNodeRequest({
+        nodeType: 'stack',
+        parentNodeId: column.id,
+        displayName: 'Stack',
+        positionIndex: 0,
+      });
+      if (!stack?.id) return null;
+      return createNodeRequest({
+        nodeType: 'divider',
+        parentNodeId: stack.id,
+        positionIndex: 0,
+        props: plan.props,
+        style_json: plan.style_json,
+        displayName: 'Line',
+      });
+    }
+    if (plan.kind === 'row-column') {
+      const column = await createNodeRequest({
+        nodeType: 'column',
+        parentNodeId: plan.rowId,
+        displayName: 'Line column',
+        positionIndex: plan.columnIndex,
+        style_json: plan.columnStyle,
+      });
+      if (!column?.id) return null;
+      const stack = await createNodeRequest({
+        nodeType: 'stack',
+        parentNodeId: column.id,
+        displayName: 'Stack',
+        positionIndex: 0,
+        style_json: plan.stackStyle,
+      });
+      if (!stack?.id) return null;
+      return createNodeRequest({
+        nodeType: 'divider',
+        parentNodeId: stack.id,
+        positionIndex: 0,
+        props: plan.props,
+        style_json: plan.style_json,
+        displayName: 'Line',
+      });
+    }
+    return null;
+  };
+
+  const handleInsertDivider = async (orientation, placement = 'inside') => {
+    const plan = resolveDividerInsertPlan(tree, selectedNodeId, orientation, placement, {
+      isNodeLocked: (id) => isNodeEditsDisabledBySectionLock(tree, id),
+    });
+    if (!plan) {
+      setErrorMessage(
+        'Could not place the line here. Select content in an unlocked section, or use Above/Below to add between sections.'
+      );
+      return;
+    }
+    const beforeTree = tree;
+    pushHistorySnapshot(beforeTree);
+    setIsCreatingNode(true);
+    setErrorMessage('');
+    try {
+      const node = await executeDividerInsertPlan(plan);
+      if (node?.id) {
+        if (plan.kind === 'root-row' || plan.kind === 'row-column') {
+          await reloadBuilder();
+        }
+        setSelectedNodeId(node.id);
+        setHasUnpublishedEdits(true);
+      }
+    } catch (error) {
+      setUndoStack((prev) => prev.slice(0, -1));
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsCreatingNode(false);
+    }
+  };
+
+  const handleCreateNode = async ({ nodeType, parentNodeId, dividerOrientation }) => {
     const beforeTree = tree;
     pushHistorySnapshot(beforeTree);
     setIsCreatingNode(true);
@@ -1664,7 +1820,13 @@ export default function BuilderShell({ pageId }) {
         setUndoStack((prev) => prev.slice(0, -1));
         return;
       }
-      const node = await createNodeRequest({ nodeType, parentNodeId: effectiveParentId });
+      const dividerExtra = dividerPayloadForCreate(nodeType, dividerOrientation);
+      const node = await createNodeRequest({
+        nodeType,
+        parentNodeId: effectiveParentId,
+        props: dividerExtra.props,
+        style_json: dividerExtra.style_json,
+      });
       if (node?.id) {
         // Auto-scaffold empty containers so the user always gets:
         // Section(Row) -> Column -> Stack, and Column -> Stack.
@@ -1704,7 +1866,7 @@ export default function BuilderShell({ pageId }) {
     }
   };
 
-  const handleQuickAddNode = async ({ targetNodeId, nodeType }) => {
+  const handleQuickAddNode = async ({ targetNodeId, nodeType, dividerOrientation }) => {
     const beforeTree = tree;
     pushHistorySnapshot(beforeTree);
     setIsCreatingNode(true);
@@ -1719,7 +1881,13 @@ export default function BuilderShell({ pageId }) {
         setUndoStack((prev) => prev.slice(0, -1));
         return;
       }
-      const node = await createNodeRequest({ nodeType, parentNodeId: resolvedParentNodeId });
+      const dividerExtra = dividerPayloadForCreate(nodeType, dividerOrientation);
+      const node = await createNodeRequest({
+        nodeType,
+        parentNodeId: resolvedParentNodeId,
+        props: dividerExtra.props,
+        style_json: dividerExtra.style_json,
+      });
       if (node?.id) setSelectedNodeId(node.id);
       setHasUnpublishedEdits(true);
     } catch (error) {
@@ -2347,6 +2515,10 @@ export default function BuilderShell({ pageId }) {
     if (deleteInFlightRef.current) return;
     deleteInFlightRef.current = true;
     const beforeTree = tree;
+    const doomedNode = findNodeInTree(beforeTree, normalizedNodeId);
+    for (const id of collectSubtreeNodeIds(doomedNode)) {
+      blockedNodeUpdateIdsRef.current.add(id);
+    }
     pushHistorySnapshot(beforeTree);
     setErrorMessage('');
     const DELETE_ANIM_MS = 230;
@@ -2369,6 +2541,9 @@ export default function BuilderShell({ pageId }) {
       });
       setHasUnpublishedEdits(true);
     } catch (error) {
+      for (const id of collectSubtreeNodeIds(doomedNode)) {
+        blockedNodeUpdateIdsRef.current.delete(id);
+      }
       setTree(beforeTree);
       setUndoStack((prev) => prev.slice(0, -1));
       setErrorMessage(error.message);
@@ -2383,7 +2558,8 @@ export default function BuilderShell({ pageId }) {
     async (nodeId) => {
       if (!nodeId) return null;
       const nid = Number(nodeId);
-      if (isNodeEditsDisabledBySectionLock(tree, nid)) {
+      const duplicateTargetId = Number(resolveSectionDuplicateTargetId(tree, nid)) || nid;
+      if (isNodeEditsDisabledBySectionLock(tree, duplicateTargetId)) {
         setErrorMessage('Cannot duplicate a layer inside a locked section.');
         return null;
       }
@@ -2392,7 +2568,7 @@ export default function BuilderShell({ pageId }) {
       setIsSavingNode(true);
       setErrorMessage('');
       try {
-        const response = await fetch(`/api/nodes/${nodeId}/duplicate`, { method: 'POST' });
+        const response = await fetch(`/api/nodes/${duplicateTargetId}/duplicate`, { method: 'POST' });
         const data = await readJsonSafe(response);
         if (!response.ok) {
           throw new Error(data.error || 'Failed to duplicate node');
@@ -2453,6 +2629,18 @@ export default function BuilderShell({ pageId }) {
       });
       const data = await readJsonSafe(response);
       if (!response.ok) {
+        if (response.status === 404) {
+          blockedNodeUpdateIdsRef.current.add(nid);
+          setTree(beforeTree);
+          setUndoStack((prev) => prev.slice(0, -1));
+          setSelectedNodeId((current) => (current === nid ? null : current));
+          try {
+            await reloadBuilder();
+          } catch {
+            // ignore sync errors
+          }
+          return;
+        }
         throw new Error(data.error || 'Failed to reorder node');
       }
       setTree(data.tree || optimisticTree);
@@ -2460,7 +2648,10 @@ export default function BuilderShell({ pageId }) {
     } catch (error) {
       setTree(beforeTree);
       setUndoStack((prev) => prev.slice(0, -1));
-      setErrorMessage(error.message);
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg !== 'Node not found') {
+        setErrorMessage(msg);
+      }
     } finally {
       setIsReorderingNode(false);
     }
@@ -2533,6 +2724,7 @@ export default function BuilderShell({ pageId }) {
     setIsSyncingDraft(true);
     setErrorMessage('');
     try {
+      await siteThemePersistFlushRef.current?.();
       const fixedTree = autoFixTree(reconcileStructuralParents(tree));
       validateTree(fixedTree);
       const response = await fetch('/api/nodes/update-bulk', {
@@ -2563,6 +2755,7 @@ export default function BuilderShell({ pageId }) {
     setIsPublishing(true);
     setErrorMessage('');
     try {
+      await siteThemePersistFlushRef.current?.();
       // Always publish from authoritative draft nodes in DB to avoid
       // client-tree snapshot drift, duplicate blocks, or style conflicts.
       const treeForSync = autoFixTree(reconcileStructuralParents(tree));
@@ -3590,9 +3783,14 @@ export default function BuilderShell({ pageId }) {
         window.confirm('Autosave recovery found. Restore the last autosaved snapshot?\n\nTip: you can still Undo after restore.');
       if (!ok) return;
       pushHistorySnapshot(cloneTreeSnapshot(tree));
-      applyTreeWithSelectionGuard(reconcileStructuralParents(autoFixTree(savedTree)));
+      const restored = reconcileStructuralParents(autoFixTree(savedTree));
+      setTree(restored);
+      setSelectedNodeId(() => {
+        const sid = Number(saved.selectedNodeId);
+        if (Number.isInteger(sid) && sid > 0 && findNodeInTree(restored, sid)) return sid;
+        return restored[0]?.id ?? null;
+      });
       setHasUnpublishedEdits(true);
-      if (saved.selectedNodeId != null) setSelectedNodeId(saved.selectedNodeId);
     } catch {
       // ignore parse errors
     }
@@ -3672,7 +3870,7 @@ export default function BuilderShell({ pageId }) {
   }, [copiedNodeId, handleDuplicateNode, handlePasteNode, handleRedo, handleUndo, selectedNodeId]);
 
   return (
-    <BuilderThemeProvider persistence={siteThemePersistence}>
+    <BuilderThemeProvider persistence={siteThemePersistence} persistFlushRef={siteThemePersistFlushRef}>
       <div className="bld-shell">
         {copyToastMessage ? (
           <div className="bld-shell__copy-toast" role="status" aria-live="polite">
@@ -4000,13 +4198,24 @@ export default function BuilderShell({ pageId }) {
                       <select
                         id={`bld-header-layout-${interiorScopeRow.id}`}
                         className="bld-left__interior-select"
-                        value={String(interiorScopeRow.props?.meta?.headerLayout || 'standard')}
+                        value={resolveHeaderLayoutMode(interiorScopeRow.props?.meta || {})}
                         disabled={isSavingNode || interiorSectionLocked}
                         onChange={async (e) => {
                           const rowId = interiorScopeRow.id;
                           const n = findNodeInTree(tree, rowId);
                           if (!n) return;
                           const nextLayout = e.target.value;
+                          if (nextLayout === 'spread' || nextLayout === 'boxed') {
+                            const nextMeta = headerLayoutMetaPatch(nextLayout, n.props?.meta || {});
+                            await handleNodeUpdate({
+                              nodeId: rowId,
+                              payload: {
+                                props: { ...n.props, meta: nextMeta },
+                                style_json: applyHeaderAlignToRowStyleJson(n.style_json, nextMeta.headerAlign),
+                              },
+                            });
+                            return;
+                          }
                           await handleNodeUpdate({
                             nodeId: rowId,
                             payload: {
@@ -4359,6 +4568,9 @@ export default function BuilderShell({ pageId }) {
               onDetachFromGlobalComponent={handleDetachFromGlobalComponent}
               editingDisabledBySectionLock={editingDisabledBySectionLock}
               pageTree={tree}
+              onInsertDivider={handleInsertDivider}
+              canInsertDivider={canInsertDividerLine}
+              isCreatingNode={isCreatingNode}
             />
           </aside>
         </div>

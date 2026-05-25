@@ -14,18 +14,33 @@ import {
 } from '@dnd-kit/core';
 import { isValidNodeHierarchy } from '@/lib/builderHierarchy';
 import { computeReorderFromDrop, findNodeInTree } from '@/lib/builderTree';
-import { isNodeEditsDisabledBySectionLock } from '@/lib/rowLayoutMeta';
+import { isFooterRowNode, isHeaderRowNode, isNodeEditsDisabledBySectionLock } from '@/lib/rowLayoutMeta';
 import { normalizeResponsiveStyle } from '@/lib/styleNormalizer';
 import { withResolvedLayoutGap } from '@/lib/layoutGapUtils';
 import { mergeDeviceStyleWithTypeDefaults, mergeMenuDeviceStyle } from '@/lib/nodeLayoutDefaults';
 import { SECTION_TEMPLATES } from '@/lib/sectionTemplates';
+import { mergeImageFigureStyleForShadow } from '@/lib/boxShadowLayout';
+import { sanitizeLiveFlowPositionCss, sanitizeLiveRootContentRowCss } from '@/lib/sanitizeLiveLayout';
 import { imageFitMode, mergeImageFigureStyleForContain } from '@/lib/imageFigureStyle';
-
-const SECTION_TEMPLATE_IDS = new Set(Object.keys(SECTION_TEMPLATES));
 import { getRichTextAnimationStyle } from '@/lib/richTextAnimation';
 import { rootSemanticTag } from '@/lib/rootSemanticTag';
-import { isRootPageRow, liveDocRootRowSpacingVars } from '@/lib/liveDocSectionSpacing';
-import { livePageCssVarOverrides, resolveBodyLayout, resolveContentMaxWidthPx, rowSectionStripDataAttrs } from '@/lib/livePageCssVars';
+import { isRootPageRow, liveDocRootRowSpacingVars, rowHasSpacingPadding } from '@/lib/liveDocSectionSpacing';
+import {
+  resolveHeaderLayoutMode,
+  sanitizeHeaderRowCss,
+} from '@/lib/headerLayoutMode';
+import {
+  landmarkContentDataAttrs,
+  livePageCssVarOverrides,
+  resolveBodyLayout,
+  resolveContentMaxWidthPx,
+  resolveLandmarkContentMaxWidthPx,
+  resolveLandmarkContentWidth,
+  resolveSectionContentMaxWidthPx,
+  resolveSectionContentWidth,
+  rowSectionStripDataAttrs,
+  sectionContentDataAttrs,
+} from '@/lib/livePageCssVars';
 import { getDeviceStyle, styleToCss } from '@/lib/styleToCss';
 import { useBuilderTheme } from '@/context/BuilderThemeContext';
 import { mergeNodeStyleWithSiteTheme, normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesignTheme';
@@ -33,6 +48,7 @@ import Carousel from '@/components/runtime/Carousel';
 import Menu from '@/components/runtime/Menu';
 import { applyBindingsToString } from '@/lib/cms/cmsBindings';
 import { isProbablyInlineHtml, sanitizeInlineLeafHtml } from '@/lib/inlineTextHtml';
+import { neutralizeLeafTextCssObject } from '@/lib/sanitizeRichHtml';
 import ResizeHandle from './canvas/ResizeHandle';
 import InlineEdit from './canvas/InlineEdit';
 import AddSectionModal from './canvas/AddSectionModal';
@@ -46,6 +62,26 @@ import RichTextEditor from './RichTextEditor';
 import { getGlobalLinkMeta } from '@/lib/globalComponentLinkMeta';
 import { normalizeHeadingLevel as normalizeHeadingTag, semanticHeadingTypography } from '@/lib/headingLevel';
 import { finalizeLeafDeviceStyle } from '@/lib/leafStylePipeline';
+import {
+  applyCompactHeaderDeviceStyle,
+  ensureHeaderActionsVisibleCss,
+  headerBarClassesForNode,
+  headerColumnHasMultipleStacks,
+  isHeaderActionsColumnNode,
+  isHeaderActionsStackNode,
+  isSiteHeaderRowForCompact,
+  nodeSubtreeHasType,
+} from '@/lib/headerCompactLayout';
+import {
+  buildImageAlignStylePatch,
+  getImageParentFlexDirection,
+  mapImageObjectPositionCss,
+  readImageAlignAxes,
+  resolveImageShellAlignFromProps,
+  splitImageNodeCss,
+} from '@/lib/imageBlockAlign';
+
+const SECTION_TEMPLATE_IDS = new Set(Object.keys(SECTION_TEMPLATES));
 
 /** WordPress-like inline formatting toolbar icons (24px viewBox). */
 function WpIconBold() {
@@ -94,6 +130,22 @@ function WpIconAlignRight() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width={20} height={20} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
       <path d="M3 5h18v2H3V5zm6 6h12v2H9v-2zm0 6h12v2H9v-2z" />
+    </svg>
+  );
+}
+
+function WpIconAlignTop() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={20} height={20} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M12 4l-6 6h4v10h4V10h4l-6-6z" />
+    </svg>
+  );
+}
+
+function WpIconAlignBottom() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={20} height={20} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M12 20l6-6h-4V4h-4v10H6l6 6z" />
     </svg>
   );
 }
@@ -311,6 +363,8 @@ function renderNodeContent(
     widgetCss,
     device,
     cmsBindingContext,
+    neutralizeBodyColorsPreview = false,
+    neutralizeBodyColorsPersist = false,
   }
 ) {
   const bind = (s) => (cmsBindingContext ? applyBindingsToString(String(s || ''), cmsBindingContext) : s);
@@ -335,7 +389,9 @@ function renderNodeContent(
     }
     const defaultLabel = 'Heading';
     if (!cmsBindingContext && isProbablyInlineHtml(rawText)) {
-      const safe = sanitizeInlineLeafHtml(rawText);
+      const safe = sanitizeInlineLeafHtml(rawText, {
+        neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPreview,
+      });
       return (
         <HeadingTag
           className={`bld-demo-heading ${anim.className || ''}`.trim()}
@@ -376,7 +432,9 @@ function renderNodeContent(
     }
     const defaultLabel = 'Text block content';
     if (!cmsBindingContext && isProbablyInlineHtml(rawText)) {
-      const safe = sanitizeInlineLeafHtml(rawText);
+      const safe = sanitizeInlineLeafHtml(rawText, {
+        neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPreview,
+      });
       return (
         <p
           className={`bld-demo-text ${anim.className || ''}`.trim()}
@@ -438,19 +496,26 @@ function renderNodeContent(
       />
     );
   }
+  if (node.nodeType === 'divider') {
+    return <div className="bld-demo-divider live-divider bld-divider-leaf" aria-hidden />;
+  }
   if (node.nodeType === 'image') {
+    const objectPosition = mapImageObjectPositionCss(node.props?.imageObjectPosition);
     const imageStyle = {
       objectFit: node.props?.imageFit || 'cover',
+      ...(objectPosition ? { objectPosition } : {}),
       ...(Number(node.props?.imageHeightPx || 0) > 0
         ? { height: `${Number(node.props?.imageHeightPx || 0)}px` }
         : {}),
     };
     const src = cmsBindingContext ? bind(node.props?.src || '') : node.props?.src || '';
     const alt = cmsBindingContext ? bind(node.props?.alt || '') : node.props?.alt || '';
-    const figureStyle =
+    const figureStyle = mergeImageFigureStyleForShadow(
       imageFitMode(node.props?.imageFit) === 'contain'
         ? mergeImageFigureStyleForContain(widgetCss || {})
-        : widgetCss || undefined;
+        : widgetCss || {},
+      widgetCss?.boxShadow
+    );
     return (
       <figure className="bld-demo-image-wrap" style={figureStyle}>
         <img
@@ -612,6 +677,8 @@ function renderNodeContent(
         disabled={Boolean(isSavingNode || sectionEditLocked)}
         style={{ ...(widgetCss || {}), ...(mergedRt || {}) }}
         className={`bld-rich-text--canvas ${animRich.className || ''}`.trim()}
+        neutralizeBodyColorsPreview={neutralizeBodyColorsPreview}
+        neutralizeBodyColorsPersist={neutralizeBodyColorsPersist}
       />
     );
   }
@@ -890,6 +957,8 @@ function NodeRenderer({
   onFreeMoveBrush,
   freeMoveBrushActive = false,
   cmsContext = null,
+  cmsPreviewByCollection = null,
+  insideSiteHeaderRow = false,
 }) {
   const isSelected = node.id === selectedNodeId;
   const handleSelect = (event) => {
@@ -957,7 +1026,9 @@ function NodeRenderer({
     disabled: dragLocked,
   });
   const usesLiveNodeClass =
-    isContainer || node.nodeType === 'menu' || node.nodeType === 'rich_text';
+    isContainer || node.nodeType === 'menu' || node.nodeType === 'rich_text' || node.nodeType === 'divider';
+  const isDividerLeaf = node.nodeType === 'divider';
+  const shellCarriesLeafLayout = isContainer || isDividerLeaf;
   const selKind =
     isSelected && node.nodeType === 'row'
       ? 'bld-sel-section'
@@ -968,6 +1039,13 @@ function NodeRenderer({
           : isSelected
             ? 'bld-sel-widget'
             : '';
+  const headerBarClasses = headerBarClassesForNode(node, {
+    device,
+    insideSiteHeaderRow,
+    headerLayout:
+      node.props?.meta?.headerLayout ||
+      (isSiteHeaderRowForCompact(node) ? resolveHeaderLayoutMode(node.props?.meta || {}) : ''),
+  });
   const classNames = [
     ...(usesLiveNodeClass ? ['live-node'] : []),
     node.nodeType === 'row'
@@ -977,6 +1055,7 @@ function NodeRenderer({
         : node.nodeType === 'stack'
           ? 'bld-stack'
           : 'bld-block',
+    headerBarClasses,
     selKind,
     isSelected ? 'is-selected' : '',
     isDragging ? 'is-dragging' : '',
@@ -986,7 +1065,9 @@ function NodeRenderer({
     isInlineEditing || isRichTextEditing ? 'bld-node--editing-focus' : '',
     sectionEditLocked ? 'bld-node--section-locked' : '',
     node.nodeType === 'image' ? 'bld-block--image' : '',
+    isDividerLeaf ? 'live-divider bld-divider-shell' : '',
   ]
+    .filter(Boolean)
     .join(' ')
     .trim();
   const [inlineDraftText, setInlineDraftText] = useState('');
@@ -1004,11 +1085,15 @@ function NodeRenderer({
   const inlineEditWrapRef = useRef(null);
   const [floatingToolbarPos, setFloatingToolbarPos] = useState(null);
   const [quickTextToolbarPos, setQuickTextToolbarPos] = useState(null);
-  const { siteTheme } = useBuilderTheme();
+  const { siteTheme, theme } = useBuilderTheme();
+  /** Persist stripping only for dark *site* preset so light sites are not rewritten when only builder UI is dark. */
+  const neutralizeBodyColorsPersist = normalizeSiteTheme(siteTheme).presetId === 'dark';
+  /** Preview: dark site or dark builder chrome — pasted inline neutrals must not disappear on dark surfaces. */
+  const neutralizeBodyColorsPreview = neutralizeBodyColorsPersist || theme === 'dark';
   const rawDevice = getDeviceStyle(node.style_json, device);
   const themed = mergeNodeStyleWithSiteTheme(rawDevice, siteTheme, node.nodeType);
   const gapReady = withResolvedLayoutGap(themed, siteTheme);
-  const deviceStyle = finalizeLeafDeviceStyle(
+  let deviceStyle = finalizeLeafDeviceStyle(
     node,
     device,
     mergeDeviceStyleWithTypeDefaults(
@@ -1024,9 +1109,139 @@ function NodeRenderer({
       { treeNode: node }
     )
   );
-  const nodeCss = styleToCss(deviceStyle, siteTheme) || undefined;
+  const siteHeaderRow = isSiteHeaderRowForCompact(node);
+  const compactHeaderBar =
+    (device === 'mobile' || device === 'tablet') && (siteHeaderRow || insideSiteHeaderRow);
+  deviceStyle = applyCompactHeaderDeviceStyle(node, device, deviceStyle, insideSiteHeaderRow);
+  const childInsideSiteHeaderRow = insideSiteHeaderRow || siteHeaderRow;
+  const imageAlignAxes = readImageAlignAxes(node.props || {});
+  const imageParentFlexDirection = useMemo(() => {
+    if (node.nodeType !== 'image' || !Array.isArray(tree) || !tree.length) return 'column';
+    return getImageParentFlexDirection(tree, node.id, device, siteTheme);
+  }, [node.nodeType, node.id, tree, device, siteTheme]);
+  let nodeCss = styleToCss(deviceStyle, siteTheme) || undefined;
+  if (compactHeaderBar && siteHeaderRow) {
+    nodeCss = {
+      ...(nodeCss || {}),
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, max-content) auto',
+      gridTemplateRows: 'auto',
+      alignItems: 'center',
+      columnGap: '10px',
+      width: '100%',
+      flexDirection: undefined,
+      flexWrap: undefined,
+      justifyContent: undefined,
+    };
+  }
+  if (compactHeaderBar && insideSiteHeaderRow && node.nodeType === 'column' && headerColumnHasMultipleStacks(node)) {
+    nodeCss = {
+      ...(nodeCss || {}),
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, max-content) auto',
+      gridTemplateRows: 'auto',
+      alignItems: 'center',
+      columnGap: '10px',
+      width: '100%',
+    };
+  }
+  if (compactHeaderBar && insideSiteHeaderRow && node.nodeType === 'column') {
+    if (nodeSubtreeHasType(node, 'menu')) {
+      nodeCss = {
+        ...(nodeCss || {}),
+        display: 'flex',
+        gridColumn: '2',
+        gridRow: '1',
+        justifySelf: 'end',
+        alignSelf: 'center',
+        marginLeft: 0,
+        marginRight: 0,
+        width: 'auto',
+        maxWidth: 'none',
+        flexGrow: 0,
+        flexShrink: 0,
+        flexBasis: 'auto',
+        flex: undefined,
+        justifyContent: 'flex-end',
+        alignItems: 'center',
+      };
+    } else if (
+      nodeSubtreeHasType(node, 'image') ||
+      String(node.displayName || '')
+        .toLowerCase()
+        .includes('logo')
+    ) {
+      nodeCss = {
+        ...(nodeCss || {}),
+        gridColumn: '1',
+        gridRow: '1',
+        justifySelf: 'start',
+        alignSelf: 'center',
+        width: 'auto',
+        maxWidth: 'min(56vw, 200px)',
+        flexGrow: 0,
+        flex: undefined,
+      };
+    }
+  }
+  if (compactHeaderBar && insideSiteHeaderRow && node.nodeType === 'stack') {
+    if (nodeSubtreeHasType(node, 'menu')) {
+      nodeCss = {
+        ...(nodeCss || {}),
+        display: 'flex',
+        gridColumn: '2',
+        gridRow: '1',
+        justifySelf: 'end',
+        alignSelf: 'center',
+        marginLeft: 0,
+        width: 'auto',
+        justifyContent: 'flex-end',
+        alignItems: 'center',
+      };
+    } else if (
+      nodeSubtreeHasType(node, 'image') ||
+      String(node.displayName || '')
+        .toLowerCase()
+        .includes('logo')
+    ) {
+      nodeCss = {
+        ...(nodeCss || {}),
+        gridColumn: '1',
+        gridRow: '1',
+        justifySelf: 'start',
+        alignSelf: 'center',
+        width: 'auto',
+        maxWidth: 'min(56vw, 200px)',
+      };
+    }
+  }
+  if (compactHeaderBar && node.nodeType === 'menu') {
+    nodeCss = {
+      ...(nodeCss || {}),
+      marginLeft: 'auto',
+      width: 'auto',
+      justifyContent: 'flex-end',
+      alignSelf: 'center',
+    };
+  }
+  if (
+    device === 'desktop' &&
+    insideSiteHeaderRow &&
+    (isHeaderActionsStackNode(node) || isHeaderActionsColumnNode(node))
+  ) {
+    nodeCss = ensureHeaderActionsVisibleCss(nodeCss);
+  }
+  if (
+    neutralizeBodyColorsPreview &&
+    (node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'rich_text')
+  ) {
+    nodeCss = neutralizeLeafTextCssObject(nodeCss || {});
+  }
   /** Match liveRenderer: any direct `.live-doc` child row gets spacing vars (not only when semantic tag resolves). */
   const isRootLiveDocRow = node.nodeType === 'row' && Array.isArray(tree) && isRootPageRow(tree, node);
+  if (isRootLiveDocRow && isHeaderRowNode(node)) {
+    nodeCss = sanitizeHeaderRowCss(nodeCss || {}, node.props?.meta || {});
+  }
   const rootRowSpacingVars =
     isRootLiveDocRow && node?.props?.meta ? liveDocRootRowSpacingVars(node.props.meta) : null;
   const nodeCssWithRootSpacing =
@@ -1043,15 +1258,88 @@ function NodeRenderer({
     Object.prototype.hasOwnProperty.call(rootRowSpacingVars, '--live-row-gap-before')
       ? { 'data-live-root-gap-before': 'true' }
       : {};
+  const rowMetaForStrip =
+    node.props?.meta && typeof node.props.meta === 'object' && !Array.isArray(node.props.meta) ? node.props.meta : {};
+  const stripRowIsHeader = isHeaderRowNode(node);
+  const stripRowIsFooter = isFooterRowNode(node);
+  const isRootContentRow =
+    isRootLiveDocRow &&
+    node.nodeType === 'row' &&
+    !stripRowIsHeader &&
+    !stripRowIsFooter &&
+    (rowSemanticTag === 'section' || rowSemanticTag === 'main');
+  const sectionWidthCtx = {
+    isLiveDocRootRow: isRootLiveDocRow,
+    isHeaderRow: stripRowIsHeader,
+    isFooterRow: stripRowIsFooter,
+    isRootContentRow,
+  };
   const stripAttrs =
-    node.nodeType === 'row'
-      ? rowSectionStripDataAttrs(
-          isRootLiveDocRow,
-          node.props?.meta && typeof node.props.meta === 'object' && !Array.isArray(node.props.meta) ? node.props.meta : {},
-        )
+    node.nodeType === 'row' ? rowSectionStripDataAttrs(isRootLiveDocRow, rowMetaForStrip, sectionWidthCtx) : {};
+  const landmarkContentAttrs =
+    node.nodeType === 'row' ? landmarkContentDataAttrs(rowMetaForStrip, sectionWidthCtx) : {};
+  const sectionContentAttrs =
+    node.nodeType === 'row' ? sectionContentDataAttrs(rowMetaForStrip, sectionWidthCtx) : {};
+  const landmarkContentMode =
+    isRootLiveDocRow && (stripRowIsHeader || stripRowIsFooter)
+      ? resolveLandmarkContentWidth(rowMetaForStrip, {
+          isHeaderRow: stripRowIsHeader,
+          isFooterRow: stripRowIsFooter,
+        })
+      : '';
+  const nodeCssWithLandmarkContent =
+    landmarkContentMode === 'boxed'
+      ? {
+          ...(nodeCssWithRootSpacing || {}),
+          '--live-header-content-max-width': `${resolveLandmarkContentMaxWidthPx(rowMetaForStrip, deviceStyle?.layout?.maxWidth)}px`,
+        }
+      : nodeCssWithRootSpacing;
+  const sectionContentMode =
+    node.nodeType === 'row' ? resolveSectionContentWidth(rowMetaForStrip, sectionWidthCtx) : '';
+  const nodeCssWithSectionContent =
+    sectionContentMode === 'boxed'
+      ? {
+          ...(nodeCssWithLandmarkContent || {}),
+          '--live-section-content-max-width': `${resolveSectionContentMaxWidthPx(rowMetaForStrip, deviceStyle?.layout?.maxWidth)}px`,
+        }
+      : nodeCssWithLandmarkContent;
+  const rowPaddingDefinedAttrs =
+    isRootLiveDocRow &&
+    (rowSemanticTag === 'section' || rowSemanticTag === 'main') &&
+    rowHasSpacingPadding(deviceStyle)
+      ? { 'data-live-row-padding-defined': 'true' }
       : {};
-  const externalPreview = previewCssByNodeId?.[node.id] || null;
-  const inlineStyle = interactionPreviewStyle || externalPreview || nodeCssWithRootSpacing || undefined;
+  let nodeCssLiveLayout = nodeCssWithSectionContent;
+  if (nodeCssLiveLayout) {
+    nodeCssLiveLayout = sanitizeLiveFlowPositionCss(nodeCssLiveLayout);
+    if (isRootContentRow) {
+      nodeCssLiveLayout = sanitizeLiveRootContentRowCss(nodeCssLiveLayout);
+    }
+    /* Shadow reserve margin only on published live — avoids a large empty gap under images in the canvas. */
+  }
+  const externalPreviewRaw = previewCssByNodeId?.[node.id] || null;
+  const externalPreview =
+    device === 'desktop' &&
+    insideSiteHeaderRow &&
+    (isHeaderActionsStackNode(node) || isHeaderActionsColumnNode(node)) &&
+    externalPreviewRaw
+      ? ensureHeaderActionsVisibleCss(externalPreviewRaw)
+      : externalPreviewRaw;
+  const inlineStyle = interactionPreviewStyle || externalPreview || nodeCssLiveLayout || undefined;
+  const isImageLeaf = node.nodeType === 'image';
+  const imageCssSplit = isImageLeaf ? splitImageNodeCss(inlineStyle) : null;
+  const imageShellAlignLive = resolveImageShellAlignFromProps(node.props || {}, imageParentFlexDirection);
+  const hasImageAlign =
+    imageAlignAxes.horizontal || imageAlignAxes.vertical || node.props?.imageBlockAlign;
+  const imageShellStyle = (() => {
+    if (!isImageLeaf || (!imageCssSplit?.shell && !hasImageAlign)) return undefined;
+    const shellBase = { ...(imageCssSplit?.shell || {}) };
+    if (hasImageAlign) {
+      delete shellBase.margin;
+    }
+    return { ...shellBase, ...imageShellAlignLive };
+  })();
+  const imageFigureStyle = imageCssSplit?.figure;
   const isRow = node.nodeType === 'row';
   const linkedMeta = isRow ? getGlobalLinkMeta(node) : null;
   const isLinkedGlobal = Boolean(linkedMeta);
@@ -1590,7 +1878,7 @@ function NodeRenderer({
       (targetNode.nodeType === 'heading' || targetNode.nodeType === 'text') &&
       isProbablyInlineHtml(nextText)
     ) {
-      nextText = sanitizeInlineLeafHtml(nextText);
+      nextText = sanitizeInlineLeafHtml(nextText, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist });
     }
     setIsInlineEditing(false);
     if (!onUpdateNode) {
@@ -1770,8 +2058,12 @@ function NodeRenderer({
     const result = execRichCommandInRoot(root, 'bold');
     if (!result) return;
     const { before, after } = result;
-    if (sanitizeInlineLeafHtml(before) === sanitizeInlineLeafHtml(after)) return;
-    const text = sanitizeInlineLeafHtml(after);
+    if (
+      sanitizeInlineLeafHtml(before, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist }) ===
+      sanitizeInlineLeafHtml(after, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist })
+    )
+      return;
+    const text = sanitizeInlineLeafHtml(after, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist });
     if (isInlineEditing) {
       setInlineDraftText(text);
       return;
@@ -1799,8 +2091,12 @@ function NodeRenderer({
     });
     if ((node.nodeType === 'heading' || node.nodeType === 'text') && root && selectionNonCollapsedInRoot(root)) {
       const result = execRichCommandInRoot(root, 'foreColor', color);
-      if (result && sanitizeInlineLeafHtml(result.before) !== sanitizeInlineLeafHtml(result.after)) {
-        const text = sanitizeInlineLeafHtml(result.after);
+      if (
+        result &&
+        sanitizeInlineLeafHtml(result.before, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist }) !==
+          sanitizeInlineLeafHtml(result.after, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist })
+      ) {
+        const text = sanitizeInlineLeafHtml(result.after, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist });
         if (isInlineEditing) {
           setInlineDraftText(text);
           return;
@@ -1857,8 +2153,12 @@ function NodeRenderer({
     const result = execRichCommandInRoot(root, 'createLink', String(next).trim());
     if (!result) return;
     const { before, after } = result;
-    if (sanitizeInlineLeafHtml(before) === sanitizeInlineLeafHtml(after)) return;
-    const text = sanitizeInlineLeafHtml(after);
+    if (
+      sanitizeInlineLeafHtml(before, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist }) ===
+      sanitizeInlineLeafHtml(after, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist })
+    )
+      return;
+    const text = sanitizeInlineLeafHtml(after, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist });
     if (isInlineEditing) {
       setInlineDraftText(text);
       return;
@@ -2044,10 +2344,63 @@ function NodeRenderer({
     await updateImageProps({ imageFit: next });
   };
 
+  const quickAlignImageBlock = async (axis, slot) => {
+    if (node.nodeType !== 'image' || sectionEditLocked || !onUpdateNode) return;
+    const parentFlex = getImageParentFlexDirection(tree, node.id, device, siteTheme);
+    const built = buildImageAlignStylePatch(
+      axis,
+      slot,
+      deviceStyle,
+      nodeElementRef.current,
+      parentFlex,
+      node.props || {}
+    );
+    if (!built) return;
+
+    const keepPosition = String(deviceStyle?.layout?.position || '').trim();
+    const stylePatch = {
+      layout: {
+        ...(built.layout || {}),
+        ...(keepPosition ? { position: keepPosition } : {}),
+      },
+      spacing: built.spacing,
+      ...(built.size ? { size: built.size } : {}),
+    };
+
+    let nextStyleJson = node.style_json;
+    for (const d of ['desktop', 'tablet', 'mobile']) {
+      const next = applyDeviceStylePatch(
+        nextStyleJson,
+        d,
+        withFlexWidthOverride(node.nodeType, stylePatch),
+        node.nodeType,
+        siteTheme
+      );
+      nextStyleJson = next.style_json;
+    }
+
+    await onUpdateNode({
+      nodeId: node.id,
+      payload: {
+        style_json: nextStyleJson,
+        props: {
+          ...(node.props || {}),
+          ...built.propsPatch,
+        },
+      },
+    });
+  };
+
   const quickImageFullWidth = async () => {
     if (node.nodeType !== 'image') return;
     // Apply across all devices so it stays consistent on Desktop/Tablet/Mobile.
-    await updateImageProps({ imageHeightPx: 0, imageFit: String(node.props?.imageFit || 'contain') || 'contain' });
+    await updateImageProps({
+      imageHeightPx: 0,
+      imageFit: String(node.props?.imageFit || 'contain') || 'contain',
+      imageBlockAlign: '',
+      imageAlignHorizontal: '',
+      imageAlignVertical: '',
+    });
     await commitStylePatchAllDevices({
       layout: {
         alignSelf: 'stretch',
@@ -2169,6 +2522,65 @@ function NodeRenderer({
     });
   };
 
+  /** Main axis from merged style (row = horizontal children, column = vertical). */
+  const flexDirForFlip = String(deviceStyle?.layout?.flexDirection || 'row').trim();
+  const isColumnMainAxis = flexDirForFlip === 'column' || flexDirForFlip === 'column-reverse';
+  const isRowMainAxis = !isColumnMainAxis;
+
+  /** Swap horizontal order: two-column rows use sibling reorder (no row-reverse → avoids clip / “lost” media). */
+  const quickFlipHorizontal = async () => {
+    if (!isRowMainAxis) return;
+    const kids = Array.isArray(node.children) ? node.children : [];
+    const swapTwoColumns =
+      typeof onReorderNode === 'function' &&
+      node.nodeType === 'row' &&
+      kids.length === 2 &&
+      kids[0]?.nodeType === 'column' &&
+      kids[1]?.nodeType === 'column';
+    if (swapTwoColumns) {
+      await onReorderNode({
+        nodeId: kids[1].id,
+        newParentId: node.id,
+        newIndex: 0,
+      });
+      return;
+    }
+    const nextDir = flexDirForFlip === 'row-reverse' ? 'row' : 'row-reverse';
+    await applyQuickFlexPatch({
+      layout: {
+        flexDirection: nextDir,
+        justifyContent: deviceStyle?.layout?.justifyContent || 'flex-start',
+        alignItems: deviceStyle?.layout?.alignItems || 'stretch',
+      },
+    });
+  };
+
+  /** Swap vertical order: exactly two children → reorder (safe); else column ↔ column-reverse. */
+  const quickFlipVertical = async () => {
+    if (!isColumnMainAxis) return;
+    const kids = Array.isArray(node.children) ? node.children : [];
+    const swapTwoChildren =
+      typeof onReorderNode === 'function' &&
+      (node.nodeType === 'row' || node.nodeType === 'column' || node.nodeType === 'stack') &&
+      kids.length === 2;
+    if (swapTwoChildren) {
+      await onReorderNode({
+        nodeId: kids[1].id,
+        newParentId: node.id,
+        newIndex: 0,
+      });
+      return;
+    }
+    const nextDir = flexDirForFlip === 'column-reverse' ? 'column' : 'column-reverse';
+    await applyQuickFlexPatch({
+      layout: {
+        flexDirection: nextDir,
+        justifyContent: deviceStyle?.layout?.justifyContent || 'flex-start',
+        alignItems: deviceStyle?.layout?.alignItems || 'stretch',
+      },
+    });
+  };
+
   const quickLayoutControls =
     isLayoutContainer && isSelected && !sectionEditLocked ? (
       <div
@@ -2182,6 +2594,28 @@ function NodeRenderer({
         <button type="button" className="bld-quick-layout-controls__btn" onClick={() => quickSetDirection('column')} disabled={isSavingNode}>
           Column
         </button>
+        {isRowMainAxis ? (
+          <button
+            type="button"
+            className="bld-quick-layout-controls__btn"
+            onClick={() => void quickFlipHorizontal()}
+            disabled={isSavingNode}
+            title="Left ↔ Right (and Right ↔ Left): swaps the two columns in a section when possible; otherwise toggles row / row-reverse."
+          >
+            L↔R
+          </button>
+        ) : null}
+        {isColumnMainAxis ? (
+          <button
+            type="button"
+            className="bld-quick-layout-controls__btn"
+            onClick={() => void quickFlipVertical()}
+            disabled={isSavingNode}
+            title="Top ↔ Bottom (and Bottom ↔ Top): swaps two stacked children when possible; otherwise toggles column / column-reverse."
+          >
+            T↔B
+          </button>
+        ) : null}
         <button type="button" className="bld-quick-layout-controls__btn" onClick={() => quickSetJustify('flex-start')} disabled={isSavingNode}>
           Left
         </button>
@@ -2511,12 +2945,20 @@ function NodeRenderer({
           {...liveRootGapAfterAttrs}
           {...liveRootGapBeforeAttrs}
           {...stripAttrs}
-          {...(node.props?.meta?.isHeader || node.props?.meta?.role === 'header'
+          {...landmarkContentAttrs}
+          {...sectionContentAttrs}
+          {...rowPaddingDefinedAttrs}
+          {...(node.props?.meta?.isHeader ||
+          node.props?.meta?.role === 'header' ||
+          isSiteHeaderRowForCompact(node)
             ? {
                 'data-site-header': 'true',
                 ...(node.props?.meta?.headerAlign
                   ? { 'data-header-align': String(node.props.meta.headerAlign) }
                   : {}),
+                'data-header-layout': String(
+                  node.props?.meta?.headerLayout || resolveHeaderLayoutMode(node.props?.meta || {})
+                ),
               }
             : {})}
           {...(rowSemanticTag === 'footer' || node.props?.meta?.isFooter || node.props?.meta?.role === 'footer'
@@ -2577,8 +3019,10 @@ function NodeRenderer({
                   menuItems={rowMoreMenuItems}
                 />
               </div>
-                {quickLayoutControls ? <div className="bld-node__chrome-layout">{quickLayoutControls}</div> : null}
-              </div>
+              {quickLayoutControls ? (
+                <div className="bld-node__chrome-layout">{quickLayoutControls}</div>
+              ) : null}
+            </div>
           ) : null}
           {inlineDirectionControls}
           {quickAddControls}
@@ -2698,6 +3142,8 @@ function NodeRenderer({
                     onAddSectionPreviewLeave={onAddSectionPreviewLeave}
                     onFreeMoveBrush={onFreeMoveBrush}
                     freeMoveBrushActive={freeMoveBrushActive}
+                    cmsPreviewByCollection={cmsPreviewByCollection}
+                    insideSiteHeaderRow={childInsideSiteHeaderRow}
                   />
                 ))}
               </div>
@@ -2712,12 +3158,29 @@ function NodeRenderer({
           }}
           {...attributes}
           data-bld-node={node.id}
+          {...(isImageLeaf && (imageAlignAxes.horizontal || imageAlignAxes.vertical)
+            ? {
+                ...(imageAlignAxes.horizontal
+                  ? { 'data-image-align-h': imageAlignAxes.horizontal }
+                  : {}),
+                ...(imageAlignAxes.vertical
+                  ? { 'data-image-align-v': imageAlignAxes.vertical }
+                  : {}),
+              }
+            : {})}
           className={`${classNames} bld-node bld-node__shell ${isSelected ? 'bld-selected' : ''}`.trim()}
-          style={isContainer ? inlineStyle : undefined}
+          style={isImageLeaf ? imageShellStyle : shellCarriesLeafLayout ? inlineStyle : undefined}
           onClick={handleSelect}
           onMouseDown={maybeStartDirectMove}
           onKeyDown={handleKeyDown}
-          role="button"
+          role={isDividerLeaf ? 'separator' : 'button'}
+          aria-orientation={
+            isDividerLeaf
+              ? node.props?.orientation === 'vertical'
+                ? 'vertical'
+                : 'horizontal'
+              : undefined
+          }
           tabIndex={0}
           onMouseEnter={() => onHoverNode?.(node.id)}
           onMouseLeave={() => {
@@ -2846,9 +3309,11 @@ function NodeRenderer({
                   onRichTextCancel: handleRichTextCancel,
                   richBlockStyle: inlineStyle,
                   menuStyle: deviceStyle,
-                  widgetCss: inlineStyle,
+                  widgetCss: isImageLeaf ? imageFigureStyle : inlineStyle,
                   device,
                   cmsBindingContext: childCmsContext?.item ? { item: childCmsContext.item, sys: childCmsContext.sys || {} } : null,
+                  neutralizeBodyColorsPreview,
+                  neutralizeBodyColorsPersist,
                 })}
               </div>
             ) : (
@@ -2867,94 +3332,150 @@ function NodeRenderer({
                 onRichTextCancel: handleRichTextCancel,
                 richBlockStyle: inlineStyle,
                 menuStyle: deviceStyle,
-                widgetCss: inlineStyle,
+                widgetCss: isImageLeaf ? imageFigureStyle : inlineStyle,
                 device,
                 cmsBindingContext: childCmsContext?.item ? { item: childCmsContext.item, sys: childCmsContext.sys || {} } : null,
+                neutralizeBodyColorsPreview,
+                neutralizeBodyColorsPersist,
               })
             )}
             {null}
             {(node.nodeType === 'image' || node.nodeType === 'menu') && isNodeActive ? (
               <div
-                className="bld-node__media-toolbar"
+                className={`bld-node__media-toolbar ${node.nodeType === 'image' ? 'bld-node__media-toolbar--image' : ''}`.trim()}
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={(event) => event.stopPropagation()}
               >
-                <div className="bld-image-quick-tools">
-                  {node.nodeType === 'image' ? (
+                {node.nodeType === 'image' ? (
+                  <div className="bld-image-toolbar bld-image-toolbar--compact">
+                    <div className="bld-image-toolbar__line">
+                      <span className="bld-image-toolbar__tag">Align</span>
+                      <div className="bld-image-toolbar__segmented" role="group" aria-label="Image alignment">
+                        {[
+                          { axis: 'horizontal', slot: 'left', Icon: WpIconAlignLeft, label: 'Left' },
+                          { axis: 'horizontal', slot: 'center', Icon: WpIconAlignCenter, label: 'Center' },
+                          { axis: 'horizontal', slot: 'right', Icon: WpIconAlignRight, label: 'Right' },
+                          { axis: 'vertical', slot: 'top', Icon: WpIconAlignTop, label: 'Top' },
+                          { axis: 'vertical', slot: 'bottom', Icon: WpIconAlignBottom, label: 'Bottom' },
+                        ].map(({ axis, slot, Icon, label }, index, arr) => {
+                          const active =
+                            axis === 'horizontal'
+                              ? imageAlignAxes.horizontal === slot
+                              : imageAlignAxes.vertical === slot;
+                          return (
+                            <button
+                              key={`${axis}-${slot}`}
+                              type="button"
+                              className={`bld-image-toolbar__seg ${active ? 'is-active' : ''} ${
+                                index === 0 ? 'is-first' : ''
+                              } ${index === arr.length - 1 ? 'is-last' : ''}`.trim()}
+                              title={`Align ${label.toLowerCase()}`}
+                              aria-label={`Align ${label.toLowerCase()}`}
+                              aria-pressed={active}
+                              onClick={() => quickAlignImageBlock(axis, slot)}
+                              disabled={isSavingNode || sectionEditLocked}
+                            >
+                              <Icon />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div className="bld-image-toolbar__line">
+                      <span className="bld-image-toolbar__tag">Size</span>
+                      <div className="bld-image-toolbar__size" role="group" aria-label="Image size and crop">
+                        <button
+                          type="button"
+                          className="bld-image-toolbar__btn"
+                          title="Full width (all devices)"
+                          aria-label="Full width"
+                          onClick={quickImageFullWidth}
+                          disabled={isSavingNode || sectionEditLocked}
+                        >
+                          Full
+                        </button>
+                        <button
+                          type="button"
+                          className="bld-image-toolbar__btn"
+                          title="Decrease width"
+                          aria-label="Decrease width"
+                          onClick={() => adjustImageBlockWidth(-30)}
+                          disabled={isSavingNode || sectionEditLocked}
+                        >
+                          W−
+                        </button>
+                        <button
+                          type="button"
+                          className="bld-image-toolbar__btn"
+                          title="Increase width"
+                          aria-label="Increase width"
+                          onClick={() => adjustImageBlockWidth(30)}
+                          disabled={isSavingNode || sectionEditLocked}
+                        >
+                          W+
+                        </button>
+                        <span className="bld-image-toolbar__sep-v" aria-hidden />
+                        <button
+                          type="button"
+                          className="bld-image-toolbar__btn bld-image-toolbar__btn--icon"
+                          title="Decrease crop height"
+                          aria-label="Decrease crop height"
+                          onClick={() => adjustImageCropHeight(-20)}
+                          disabled={isSavingNode || sectionEditLocked}
+                        >
+                          −
+                        </button>
+                        <button
+                          type="button"
+                          className="bld-image-toolbar__btn bld-image-toolbar__btn--fit"
+                          title="Change image fit (cover / contain / fill)"
+                          aria-label="Change image fit"
+                          onClick={cycleImageFit}
+                          disabled={isSavingNode || sectionEditLocked}
+                        >
+                          {String(node.props?.imageFit || 'cover') === 'contain'
+                            ? 'Contain'
+                            : String(node.props?.imageFit || 'cover') === 'fill'
+                              ? 'Fill'
+                              : 'Cover'}
+                        </button>
+                        <button
+                          type="button"
+                          className="bld-image-toolbar__btn bld-image-toolbar__btn--icon"
+                          title="Increase crop height"
+                          aria-label="Increase crop height"
+                          onClick={() => adjustImageCropHeight(20)}
+                          disabled={isSavingNode || sectionEditLocked}
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bld-image-quick-tools">
                     <button
                       type="button"
                       className="bld-image-quick-tools__btn"
-                      title="Full width (all devices)"
-                      aria-label="Full width (all devices)"
-                      onClick={quickImageFullWidth}
+                      title="Decrease width"
+                      aria-label="Decrease width"
+                      onClick={() => adjustNodeWidth(-30)}
                       disabled={isSavingNode || sectionEditLocked}
                     >
-                      Full
+                      W−
                     </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="bld-image-quick-tools__btn"
-                    title="Decrease width"
-                    aria-label="Decrease width"
-                    onClick={() =>
-                      node.nodeType === 'image' ? adjustImageBlockWidth(-30) : adjustNodeWidth(-30)
-                    }
-                    disabled={isSavingNode || sectionEditLocked}
-                  >
-                    W−
-                  </button>
-                  <button
-                    type="button"
-                    className="bld-image-quick-tools__btn"
-                    title="Increase width"
-                    aria-label="Increase width"
-                    onClick={() =>
-                      node.nodeType === 'image' ? adjustImageBlockWidth(30) : adjustNodeWidth(30)
-                    }
-                    disabled={isSavingNode || sectionEditLocked}
-                  >
-                    W+
-                  </button>
-                  {node.nodeType === 'image' ? (
-                    <>
-                      <button
-                        type="button"
-                        className="bld-image-quick-tools__btn"
-                        title="Decrease crop height"
-                        aria-label="Decrease crop height"
-                        onClick={() => adjustImageCropHeight(-20)}
-                        disabled={isSavingNode || sectionEditLocked}
-                      >
-                        −
-                      </button>
-                      <button
-                        type="button"
-                        className="bld-image-quick-tools__btn"
-                        title="Change image fit"
-                        aria-label="Change image fit"
-                        onClick={cycleImageFit}
-                        disabled={isSavingNode || sectionEditLocked}
-                      >
-                        {String(node.props?.imageFit || 'cover') === 'contain'
-                          ? 'Contain'
-                          : String(node.props?.imageFit || 'cover') === 'fill'
-                            ? 'Fill'
-                            : 'Cover'}
-                      </button>
-                      <button
-                        type="button"
-                        className="bld-image-quick-tools__btn"
-                        title="Increase crop height"
-                        aria-label="Increase crop height"
-                        onClick={() => adjustImageCropHeight(20)}
-                        disabled={isSavingNode || sectionEditLocked}
-                      >
-                        +
-                      </button>
-                    </>
-                  ) : null}
-                </div>
+                    <button
+                      type="button"
+                      className="bld-image-quick-tools__btn"
+                      title="Increase width"
+                      aria-label="Increase width"
+                      onClick={() => adjustNodeWidth(30)}
+                      disabled={isSavingNode || sectionEditLocked}
+                    >
+                      W+
+                    </button>
+                  </div>
+                )}
                 {supportsDirectManipulation && canResizeNode ? (
                   <ResizeHandle
                     className="bld-transform-handle--inline-resize"
@@ -3013,6 +3534,20 @@ function NodeRenderer({
                   <NodeRenderer
                     key={childNode.id}
                     node={childNode}
+                    cmsContext={
+                      childCmsContext?.item
+                        ? childCmsContext
+                        : repeatEnabled && repeatCollectionSlug && cmsPreviewByCollection?.[repeatCollectionSlug]?.item
+                          ? {
+                              item: cmsPreviewByCollection[repeatCollectionSlug].item,
+                              sys: {
+                                slug: cmsPreviewByCollection[repeatCollectionSlug].item?.slug || '',
+                                collection: repeatCollectionSlug,
+                              },
+                            }
+                          : childCmsContext
+                    }
+                    cmsPreviewByCollection={cmsPreviewByCollection}
                     selectedNodeId={selectedNodeId}
                     onSelectNode={onSelectNode}
                     parentNodeType={node.nodeType}
@@ -3057,6 +3592,7 @@ function NodeRenderer({
                     onAddSectionPreviewLeave={onAddSectionPreviewLeave}
                     onFreeMoveBrush={onFreeMoveBrush}
                     freeMoveBrushActive={freeMoveBrushActive}
+                    insideSiteHeaderRow={childInsideSiteHeaderRow}
                   />
                 ))}
               </div>
@@ -3942,7 +4478,7 @@ export default function BuilderCanvas({
                 }}
               >
                 {showGrid ? <GridOverlay containerSelector=".bld-canvas__live-mirror .live-doc" /> : null}
-                <div className="live-doc">
+                <div className="live-doc" data-bld-device={device}>
                   {tree.map((node, index) => (
                     <NodeRenderer
                       key={node.id}
@@ -4006,6 +4542,7 @@ export default function BuilderCanvas({
                       onAddSectionPreviewLeave={hideAddSectionPreviewAnchorDebounced}
                       onFreeMoveBrush={onFreeMoveBrush}
                       freeMoveBrushActive={canvasFreeMoveActive}
+                      cmsPreviewByCollection={cmsPreviewByCollection}
                     />
                   ))}
                 </div>

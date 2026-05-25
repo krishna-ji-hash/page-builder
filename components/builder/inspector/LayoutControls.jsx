@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { useBuilderTheme } from '@/context/BuilderThemeContext';
 import { buildFlexLayoutPresets } from '@/lib/flexLayoutPresets';
 import { GAP_SCALE_IDS } from '@/lib/layoutGapUtils';
-import { isLayoutLockedRow } from '@/lib/rowLayoutMeta';
+import { isHeaderRowNode, isLayoutLockedRow } from '@/lib/rowLayoutMeta';
 import { themeSpacingPx } from '@/lib/siteDesignTheme';
 import FlexLayoutPreview from './FlexLayoutPreview';
 import FlexLayoutControlsPanel from './FlexLayoutControlsPanel';
@@ -43,7 +43,7 @@ function LayoutFieldLabel({ children, resetKeys, onResetLayoutKeys, disabled }) 
   );
 }
 
-function RowContentWidthControls({ form, onUpdate }) {
+function RowContentWidthControls({ form, onUpdate, isHeaderLandmark = false }) {
   const mode = form.containerWidthMode === 'boxed' || form.containerWidthMode === 'custom' ? 'boxed' : 'full';
   const pct = Math.min(100, Math.max(10, Number(form.rowWidthPercent) || 100));
   const maxPx = Math.min(2400, Math.max(320, Number(form.containerWidthPx) || 1200));
@@ -51,7 +51,11 @@ function RowContentWidthControls({ form, onUpdate }) {
   return (
     <div className="bld-field bld-field--row-content-width">
       <label className="bld-label">Content width</label>
-      <p className="bld-field-note">Section (row) width on the page — boxed vs full-width headers.</p>
+      <p className="bld-field-note">
+        {isHeaderLandmark
+          ? 'Logo, menu, and buttons stay in a centered column; the header background still spans the full screen.'
+          : 'Section (row) width on the page — boxed vs full-width headers.'}
+      </p>
       <select className="bld-input" value={mode} onChange={(e) => onUpdate('containerWidthMode', e.target.value)}>
         <option value="full">Full width</option>
         <option value="boxed">Boxed (max-width + centered)</option>
@@ -140,7 +144,13 @@ export default function LayoutControls({
           Breakpoint: <strong>{breakpointLabel}</strong>
         </p>
       ) : null}
-      {isRow ? <RowContentWidthControls form={form} onUpdate={onUpdate} /> : null}
+      {isRow ? (
+        <RowContentWidthControls
+          form={form}
+          onUpdate={onUpdate}
+          isHeaderLandmark={isHeaderRowNode(selectedNode)}
+        />
+      ) : null}
       {isFlexContainer ? (
         <>
           {isRow ? (

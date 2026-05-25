@@ -6,15 +6,27 @@ import { dataSourceRegistry } from '@/lib/runtime/dataSourceRegistry';
 import { normalizeResponsiveStyle, stripDeviceLayoutKeysInStyleJson } from '@/lib/styleNormalizer';
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
 import { normalizeMenuAlign, normalizeMenuVariant } from '@/lib/menuNav';
+import {
+  normalizeMenuDrawerActionsLayout,
+  normalizeMenuDrawerDensity,
+  normalizeMenuHamburgerAlign,
+  resolveMenuMobileBreakpointPx,
+} from '@/lib/menuMobile';
 import { normalizeMenuItems } from '@/lib/menuItems';
 import { mergeDeviceStyleWithTypeDefaults, mergeMenuDeviceStyle } from '@/lib/nodeLayoutDefaults';
 import { finalizeLeafDeviceStyle } from '@/lib/leafStylePipeline';
 import { mergeNodeStyleWithSiteTheme, themeSpacingPx } from '@/lib/siteDesignTheme';
 import { GAP_SCALE_IDS, inferGapScaleFromPx, withResolvedLayoutGap } from '@/lib/layoutGapUtils';
 import { buildFlexLayoutPresets } from '@/lib/flexLayoutPresets';
-import { isLayoutLockedRow } from '@/lib/rowLayoutMeta';
+import {
+  applyHeaderAlignToRowStyleJson,
+  headerLayoutMetaPatch,
+  resolveHeaderLayoutMode,
+} from '@/lib/headerLayoutMode';
+import { isFooterRowNode, isHeaderRowNode, isLayoutLockedRow } from '@/lib/rowLayoutMeta';
 import { getDeviceStyle, styleToCss } from '@/lib/styleToCss';
 import InspectorTabs from './inspector/InspectorTabs';
+import LineToolsPanel from './inspector/LineToolsPanel';
 import InspectorResponsiveBar from './inspector/InspectorResponsiveBar';
 import ContentPanel from './inspector/ContentPanel';
 import StylePanel from './inspector/StylePanel';
@@ -23,7 +35,13 @@ import ThemePanel from './inspector/ThemePanel';
 import OverflowSuggestions from './inspector/OverflowSuggestions';
 import { getGlobalLinkMeta, isLinkedGlobalPlaceholder } from '@/lib/globalComponentLinkMeta';
 import { isRootPageRow } from '@/lib/liveDocSectionSpacing';
+import { resolveSectionWidthMode, SECTION_WIDTH_MODES } from '@/lib/liveContentContainer';
 import { findAncestorRowNode, findNodeInTree } from '@/lib/builderTree';
+import {
+  dividerOrientationFromProps,
+  dividerSizePatchForOrientation,
+  dividerSizePatchForThickness,
+} from '@/lib/dividerDefaults';
 
 function inspectorRoleLabel(node) {
   if (!node?.nodeType) return '';
@@ -210,6 +228,15 @@ function boxSidesFromShorthandOrUnset(shorthand) {
   return { top: o.top, right: o.right, bottom: o.bottom, left: o.left };
 }
 
+/** Inspector fields: prefer saved shorthand; if unset, show effective spacing (theme / type defaults) so values match canvas. */
+function boxSidesFromStoredOrResolved(storedShorthand, resolvedShorthand) {
+  const stored = storedShorthand != null ? String(storedShorthand).trim() : '';
+  if (stored) return boxSidesFromShorthandOrUnset(stored);
+  const resolved = resolvedShorthand != null ? String(resolvedShorthand).trim() : '';
+  if (resolved) return boxSidesFromShorthandOrUnset(resolved);
+  return { top: '', right: '', bottom: '', left: '' };
+}
+
 function mergeSpacingPatch(baseSpacing = {}, patchSpacing = {}) {
   const out = { ...(baseSpacing || {}) };
   for (const [k, v] of Object.entries(patchSpacing || {})) {
@@ -239,6 +266,9 @@ export default function BuilderInspector({
   editingDisabledBySectionLock = false,
   /** Top-level page rows (same array the canvas passes as `tree`). Used for per-section page spacing overrides. */
   pageTree = [],
+  onInsertDivider,
+  canInsertDivider = true,
+  isCreatingNode = false,
 }) {
   const [internalTab, setInternalTab] = useState('content');
   const activeTab = activeTabProp || internalTab;
@@ -266,12 +296,29 @@ export default function BuilderInspector({
           ? sectionStripLayoutRow.props.meta
           : {};
       const nextMeta = { ...prevMeta };
-      if (strip === 'full') {
+      const isRootHeaderFooter =
+        Array.isArray(pageTree) &&
+        pageTree.length > 0 &&
+        isRootPageRow(pageTree, sectionStripLayoutRow) &&
+        (isHeaderRowNode(sectionStripLayoutRow) || isFooterRowNode(sectionStripLayoutRow));
+      const isRootContentStrip =
+        Array.isArray(pageTree) &&
+        pageTree.length > 0 &&
+        isRootPageRow(pageTree, sectionStripLayoutRow) &&
+        !isHeaderRowNode(sectionStripLayoutRow) &&
+        !isFooterRowNode(sectionStripLayoutRow);
+      if (isRootHeaderFooter || strip === 'fullBleed') {
         nextMeta.rootStripLayout = 'full';
+        nextMeta.sectionWidthMode = 'fullWidth';
+      } else if (strip === 'full' && isRootContentStrip) {
+        nextMeta.rootStripLayout = 'full';
+        nextMeta.sectionWidthMode = 'fullWidthContentBoxed';
+      } else if (strip === 'full') {
+        nextMeta.rootStripLayout = 'full';
+        nextMeta.sectionWidthMode = 'fullWidth';
       } else {
-        // Must set explicitly: `mergeNodePropsJsonPatch` deep-merges meta with `{ ...prev, ...patch }`, so omitting
-        // this key would keep a previous `'full'` value and the dropdown would snap back.
         nextMeta.rootStripLayout = 'boxed';
+        nextMeta.sectionWidthMode = 'boxed';
       }
       await onUpdateNode({
         nodeId: sectionStripLayoutRow.id,
@@ -280,6 +327,38 @@ export default function BuilderInspector({
             ...sectionStripLayoutRow.props,
             meta: nextMeta,
           },
+        },
+      });
+    },
+    [sectionStripLayoutRow, pageTree, editingDisabledBySectionLock, onUpdateNode],
+  );
+
+  const patchHeaderLayoutMode = useCallback(
+    async (mode) => {
+      if (!sectionStripLayoutRow || sectionStripLayoutRow.nodeType !== 'row') return;
+      if (!isHeaderRowNode(sectionStripLayoutRow)) return;
+      if (isLinkedGlobalPlaceholder(sectionStripLayoutRow)) return;
+      if (editingDisabledBySectionLock) return;
+      if (!onUpdateNode) return;
+      const prevMeta =
+        sectionStripLayoutRow.props?.meta &&
+        typeof sectionStripLayoutRow.props.meta === 'object' &&
+        !Array.isArray(sectionStripLayoutRow.props.meta)
+          ? sectionStripLayoutRow.props.meta
+          : {};
+      const nextMeta = headerLayoutMetaPatch(mode, prevMeta);
+      const nextStyleJson = applyHeaderAlignToRowStyleJson(
+        sectionStripLayoutRow.style_json,
+        nextMeta.headerAlign
+      );
+      await onUpdateNode({
+        nodeId: sectionStripLayoutRow.id,
+        payload: {
+          props: {
+            ...sectionStripLayoutRow.props,
+            meta: nextMeta,
+          },
+          style_json: nextStyleJson,
         },
       });
     },
@@ -384,8 +463,13 @@ export default function BuilderInspector({
     menuMegaEnabled: false,
     menuMegaColumns: 2,
     menuMobileEnabled: true,
+    menuMobileHamburgerAlign: 'right',
     menuMobileTitle: '',
     menuMobileHamburgerLabel: '',
+    menuMobileShowDrawerActions: true,
+    menuMobileDrawerActionsLayout: 'row',
+    menuMobileDrawerDensity: 'compact',
+    menuMobileBreakpointPx: 1024,
     richTextHtml: '',
     animationPreset: 'none',
     animationDuration: 0.6,
@@ -433,15 +517,50 @@ export default function BuilderInspector({
     if (!selectedNode) return;
     const style = getInspectorResolvedStyle(selectedNode, device, siteTheme);
     const storedSp = getStoredSpacingShorthands(selectedNode.style_json, device);
-    const marginSides = boxSidesFromShorthandOrUnset(storedSp.margin);
-    const paddingSides = boxSidesFromShorthandOrUnset(storedSp.padding);
+    const marginSides = boxSidesFromStoredOrResolved(storedSp.margin, style?.spacing?.margin);
+    const paddingSides = boxSidesFromStoredOrResolved(storedSp.padding, style?.spacing?.padding);
     const maxWidthRaw = String(style?.layout?.maxWidth || '').trim();
     const hasAutoMargins = String(style?.spacing?.margin || '').includes('auto');
-    const parsedMaxWidthPx = parsePxValue(maxWidthRaw, 1200);
+    let parsedMaxWidthPx = parsePxValue(maxWidthRaw, 1280);
     let inferredContainerWidthMode = 'full';
+    let inferredSectionWidthMode = '';
     let rowWidthPercent = 100;
     if (selectedNode?.nodeType === 'row') {
-      if (maxWidthRaw.endsWith('px') && hasAutoMargins) {
+      const rowMeta = selectedNode.props?.meta || {};
+      const isRootLandmark =
+        Array.isArray(pageTree) &&
+        pageTree.length > 0 &&
+        isRootPageRow(pageTree, selectedNode) &&
+        (isHeaderRowNode(selectedNode) || isFooterRowNode(selectedNode));
+      const isRootContent =
+        Array.isArray(pageTree) &&
+        pageTree.length > 0 &&
+        isRootPageRow(pageTree, selectedNode) &&
+        !isHeaderRowNode(selectedNode) &&
+        !isFooterRowNode(selectedNode);
+      if (isRootLandmark) {
+        const contentKey = isHeaderRowNode(selectedNode) ? 'headerContentWidth' : 'footerContentWidth';
+        const contentMode = String(rowMeta[contentKey] || '').toLowerCase().trim();
+        inferredContainerWidthMode =
+          contentMode === 'full' || resolveHeaderLayoutMode(rowMeta) === 'spread' ? 'full' : 'boxed';
+        const metaMax = Number(
+          rowMeta.headerContentMaxWidthPx ?? rowMeta.footerContentMaxWidthPx ?? parsedMaxWidthPx
+        );
+        if (Number.isFinite(metaMax) && metaMax >= 320) {
+          parsedMaxWidthPx = Math.min(2400, Math.floor(metaMax));
+        }
+      } else if (isRootContent) {
+        inferredSectionWidthMode = resolveSectionWidthMode(rowMeta, {
+          isLiveDocRootRow: true,
+          isRootContentRow: true,
+        });
+        const sectionMax = Number(rowMeta.sectionContentMaxWidthPx);
+        if (Number.isFinite(sectionMax) && sectionMax >= 320) {
+          parsedMaxWidthPx = Math.min(2400, Math.floor(sectionMax));
+        }
+        inferredContainerWidthMode =
+          inferredSectionWidthMode === SECTION_WIDTH_MODES.BOXED ? 'boxed' : 'full';
+      } else if (maxWidthRaw.endsWith('px') && hasAutoMargins) {
         inferredContainerWidthMode = 'boxed';
       } else if (maxWidthRaw.endsWith('%')) {
         inferredContainerWidthMode = 'full';
@@ -489,6 +608,8 @@ export default function BuilderInspector({
         return selectedNode?.nodeType === 'text' ? 'pre-wrap' : 'normal';
       })(),
       textColor: style?.colors?.textColor || style?.typography?.color || '#0f172a',
+      dividerOrientation: selectedNode.props?.orientation === 'vertical' ? 'vertical' : 'horizontal',
+      dividerThicknessPx: Number(selectedNode.props?.thicknessPx) > 0 ? Number(selectedNode.props.thicknessPx) : 2,
     bgColor: style?.colors?.backgroundColor || style?.background?.backgroundColor || '#ffffff',
     bgImageUrl: style?.background?.backgroundImage || '',
     bgImageAlt: style?.background?.meta?.altText || '',
@@ -556,7 +677,8 @@ export default function BuilderInspector({
       widthPx: parsePxValue(style?.size?.width, 320),
       heightPx: parsePxValue(style?.size?.height, 0),
       containerWidthMode: inferredContainerWidthMode,
-      containerWidthPx: parsedMaxWidthPx || 1200,
+      containerWidthPx: parsedMaxWidthPx || 1280,
+      sectionWidthMode: inferredSectionWidthMode,
       rowWidthPercent,
       actionType: selectedNode.actionsJson?.onClick?.type || 'none',
       actionJson: JSON.stringify(selectedNode.actionsJson || {}, null, 2),
@@ -575,9 +697,17 @@ export default function BuilderInspector({
       menuMegaEnabled: Boolean(selectedNode.props?.mega?.enabled),
       menuMegaColumns: Number(selectedNode.props?.mega?.columns ?? 2),
       menuMobileEnabled: selectedNode.props?.mobile?.enabled !== false,
+      menuMobileHamburgerAlign: normalizeMenuHamburgerAlign(selectedNode.props?.mobile?.hamburgerAlign, 'right'),
       menuMobileTitle: typeof selectedNode.props?.mobile?.title === 'string' ? selectedNode.props.mobile.title : '',
       menuMobileHamburgerLabel:
         typeof selectedNode.props?.mobile?.hamburgerLabel === 'string' ? selectedNode.props.mobile.hamburgerLabel : '',
+      menuMobileShowDrawerActions: selectedNode.props?.mobile?.showDrawerActions !== false,
+      menuMobileDrawerActionsLayout: normalizeMenuDrawerActionsLayout(
+        selectedNode.props?.mobile?.drawerActionsLayout,
+        'row'
+      ),
+      menuMobileDrawerDensity: normalizeMenuDrawerDensity(selectedNode.props?.mobile?.drawerDensity, 'compact'),
+      menuMobileBreakpointPx: resolveMenuMobileBreakpointPx(selectedNode.props?.mobile || {}),
       richTextHtml: selectedNode.props?.content || '',
       animationPreset: selectedNode.props?.animation?.preset || 'none',
       animationDuration: Number(selectedNode.props?.animation?.duration ?? 0.6),
@@ -1088,11 +1218,42 @@ export default function BuilderInspector({
     if (key === 'menuMobileEnabled' && selectedNode.nodeType === 'menu') {
       await updateProps({ mobile: { ...(selectedNode.props?.mobile || {}), enabled: Boolean(value) } });
     }
+    if (key === 'menuMobileHamburgerAlign' && selectedNode.nodeType === 'menu') {
+      await updateProps({
+        mobile: {
+          ...(selectedNode.props?.mobile || {}),
+          hamburgerAlign: normalizeMenuHamburgerAlign(value, 'right'),
+        },
+      });
+    }
     if (key === 'menuMobileTitle' && selectedNode.nodeType === 'menu') {
       await updateProps({ mobile: { ...(selectedNode.props?.mobile || {}), title: String(value || '') } });
     }
     if (key === 'menuMobileHamburgerLabel' && selectedNode.nodeType === 'menu') {
       await updateProps({ mobile: { ...(selectedNode.props?.mobile || {}), hamburgerLabel: String(value || '') } });
+    }
+    if (key === 'menuMobileShowDrawerActions' && selectedNode.nodeType === 'menu') {
+      await updateProps({ mobile: { ...(selectedNode.props?.mobile || {}), showDrawerActions: Boolean(value) } });
+    }
+    if (key === 'menuMobileDrawerActionsLayout' && selectedNode.nodeType === 'menu') {
+      await updateProps({
+        mobile: {
+          ...(selectedNode.props?.mobile || {}),
+          drawerActionsLayout: normalizeMenuDrawerActionsLayout(value, 'row'),
+        },
+      });
+    }
+    if (key === 'menuMobileDrawerDensity' && selectedNode.nodeType === 'menu') {
+      await updateProps({
+        mobile: {
+          ...(selectedNode.props?.mobile || {}),
+          drawerDensity: normalizeMenuDrawerDensity(value, 'compact'),
+        },
+      });
+    }
+    if (key === 'menuMobileBreakpointPx' && selectedNode.nodeType === 'menu') {
+      const bp = Math.max(320, Math.min(1200, Math.round(Number(value) || 1024)));
+      await updateProps({ mobile: { ...(selectedNode.props?.mobile || {}), breakpointPx: bp } });
     }
     if (key === 'menuTextColor' && selectedNode.nodeType === 'menu') {
       await updateStyle({
@@ -1318,6 +1479,26 @@ export default function BuilderInspector({
         setForm((prevForm) => ({ ...prevForm, carouselSlidesJson: JSON.stringify(normalized, null, 2) }));
         return;
       }
+    }
+    if (key === 'dividerOrientation' && selectedNode.nodeType === 'divider') {
+      const orientation = value === 'vertical' ? 'vertical' : 'horizontal';
+      const thickness = Number(selectedNode.props?.thicknessPx) > 0 ? Number(selectedNode.props.thicknessPx) : 2;
+      await updateProps({ orientation });
+      await updateStyle({ size: dividerSizePatchForOrientation(orientation, thickness) });
+    }
+    if (key === 'dividerThicknessPx' && selectedNode.nodeType === 'divider') {
+      const thickness = Math.max(1, Math.min(32, parsePxValue(value, 2)));
+      const orientation = dividerOrientationFromProps(selectedNode.props);
+      await updateProps({ thicknessPx: thickness });
+      await updateStyle({ size: dividerSizePatchForThickness(orientation, thickness) });
+    }
+    if (key === 'bgColor' && selectedNode.nodeType === 'divider') {
+      setForm((prev) => ({ ...prev, bgColor: value }));
+      await updateStyle({
+        colors: { backgroundColor: value },
+        background: { backgroundColor: value },
+      });
+      return;
     }
     if (key === 'imageFit' && selectedNode.nodeType === 'image') await updateProps({ imageFit: value });
     if (key === 'imageHeightPx' && selectedNode.nodeType === 'image') {
@@ -1586,20 +1767,27 @@ export default function BuilderInspector({
     }
 
     const isRow = selectedNode?.nodeType === 'row';
+    const isRootLandmarkRow =
+      isRow &&
+      Array.isArray(pageTree) &&
+      pageTree.length > 0 &&
+      isRootPageRow(pageTree, selectedNode) &&
+      (isHeaderRowNode(selectedNode) || isFooterRowNode(selectedNode));
     const rawMode = isRow ? String(nextForm.containerWidthMode || 'full') : 'full';
     const containerMode = rawMode === 'custom' ? 'boxed' : rawMode;
     const containerPx = Math.max(320, Math.min(2400, parsePxValue(nextForm.containerWidthPx, 1200)));
     const rowWidthPct = Math.min(100, Math.max(10, Number(nextForm.rowWidthPercent) || 100));
     const isBoxed = isRow && containerMode === 'boxed';
     const fullRowNarrow = isRow && containerMode === 'full' && rowWidthPct < 100;
-    const needsHorizontalCenter = isRow && (isBoxed || fullRowNarrow);
+    const needsHorizontalCenter = isRow && !isRootLandmarkRow && (isBoxed || fullRowNarrow);
     const nextMargin = needsHorizontalCenter
       ? `${parsePxValue(nextForm.marginTop)}px auto ${parsePxValue(nextForm.marginBottom)}px auto`
       : `${parsePxValue(nextForm.marginTop)}px ${parsePxValue(nextForm.marginRight)}px ${parsePxValue(nextForm.marginBottom)}px ${parsePxValue(nextForm.marginLeft)}px`;
 
-    const rowLayoutMaxWidth =
-      !isRow
-        ? {}
+    const rowLayoutMaxWidth = !isRow
+      ? {}
+      : isRootLandmarkRow
+        ? { maxWidth: '100%' }
         : containerMode === 'boxed'
           ? { maxWidth: `${containerPx}px` }
           : { maxWidth: `${rowWidthPct}%` };
@@ -1729,6 +1917,65 @@ export default function BuilderInspector({
     };
 
     await updateStyle(stylePatch, baseJsonOverride);
+
+    if (
+      onUpdateNode &&
+      (key === 'containerWidthMode' || key === 'containerWidthPx' || key === 'sectionWidthMode')
+    ) {
+      const prevMeta =
+        selectedNode.props?.meta &&
+        typeof selectedNode.props.meta === 'object' &&
+        !Array.isArray(selectedNode.props.meta)
+          ? selectedNode.props.meta
+          : {};
+      if (isRootLandmarkRow) {
+        const contentMode = containerMode === 'boxed' ? 'boxed' : 'full';
+        const contentMetaKey = isHeaderRowNode(selectedNode) ? 'headerContentWidth' : 'footerContentWidth';
+        const maxMetaKey = isHeaderRowNode(selectedNode) ? 'headerContentMaxWidthPx' : 'footerContentMaxWidthPx';
+        await onUpdateNode({
+          nodeId: selectedNode.id,
+          payload: {
+            props: {
+              ...selectedNode.props,
+              meta: {
+                ...prevMeta,
+                rootStripLayout: 'full',
+                [contentMetaKey]: contentMode,
+                [maxMetaKey]: containerPx,
+              },
+            },
+          },
+        });
+      } else if (
+        isRow &&
+        Array.isArray(pageTree) &&
+        pageTree.length > 0 &&
+        isRootPageRow(pageTree, selectedNode) &&
+        !isHeaderRowNode(selectedNode) &&
+        !isFooterRowNode(selectedNode)
+      ) {
+        const sectionWidthMode =
+          key === 'sectionWidthMode' && String(nextForm.sectionWidthMode || '').trim()
+            ? String(nextForm.sectionWidthMode).trim()
+            : containerMode === 'boxed'
+              ? 'boxed'
+              : 'fullWidthContentBoxed';
+        await onUpdateNode({
+          nodeId: selectedNode.id,
+          payload: {
+            props: {
+              ...selectedNode.props,
+              meta: {
+                ...prevMeta,
+                rootStripLayout: containerMode === 'boxed' ? 'boxed' : 'full',
+                sectionWidthMode,
+                sectionContentMaxWidthPx: containerPx,
+              },
+            },
+          },
+        });
+      }
+    }
   };
 
   const handleApplyFlexPreset = async (layout) => {
@@ -1931,6 +2178,21 @@ export default function BuilderInspector({
           />
         ) : null}
         <InspectorTabs activeTab={activeTab} onChange={setActiveTab} />
+        {variant === 'panel' && onInsertDivider ? (
+          <LineToolsPanel
+            onInsertHorizontal={() => onInsertDivider('horizontal', 'inside')}
+            onInsertVertical={() => onInsertDivider('vertical', 'inside')}
+            disabled={!canInsertDivider || editingDisabledBySectionLock}
+            busy={isCreatingNode}
+            hint={
+              !canInsertDivider
+                ? 'Add a page section first.'
+                : editingDisabledBySectionLock
+                  ? 'Unlock this section to add lines.'
+                  : 'Adds a line inside the selected stack.'
+            }
+          />
+        ) : null}
       </div>
       <div
         style={
@@ -1970,6 +2232,7 @@ export default function BuilderInspector({
           pageTree={pageTree}
           stripLayoutTargetRow={sectionStripLayoutRow}
           onPatchRootStripLayout={patchRootStripLayout}
+          onPatchHeaderLayoutMode={patchHeaderLayoutMode}
         />
       ) : null}
       {activeTab === 'style' ? (

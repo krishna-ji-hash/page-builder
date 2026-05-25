@@ -199,7 +199,11 @@ function BoxModelVisual({
           className={`bld-boxmodel__link ${linked ? 'is-on' : ''}`}
           onClick={() => setLinked((p) => !p)}
           disabled={disabled}
-          title={linked ? 'Linked' : 'Unlinked'}
+          title={
+            linked
+              ? 'Linked: editing one side updates all four — click to edit each side separately'
+              : 'Unlinked: each side is independent — click to tie all sides to the same value'
+          }
         >
           {linked ? 'Linked' : 'Unlinked'}
         </button>
@@ -273,8 +277,9 @@ export default function SpacingControls({
 }) {
   const [padBox, setPadBox] = useState({ top: '', right: '', bottom: '', left: '' });
   const [marBox, setMarBox] = useState({ top: '', right: '', bottom: '', left: '' });
-  const [padLinked, setPadLinked] = useState(true);
-  const [marLinked, setMarLinked] = useState(true);
+  /** Default off: changing T/R/B/L only updates that side unless user turns Linked on. */
+  const [padLinked, setPadLinked] = useState(false);
+  const [marLinked, setMarLinked] = useState(false);
 
   useEffect(() => {
     setPadBox({
@@ -290,6 +295,7 @@ export default function SpacingControls({
       left: formSide(form, 'margin', 'left'),
     });
   }, [
+    selectedNodeId,
     form.paddingTop,
     form.paddingRight,
     form.paddingBottom,
@@ -335,7 +341,8 @@ export default function SpacingControls({
   return (
     <div className="bld-control-stack">
       <p className="bld-field-note" style={{ marginTop: 0 }}>
-        Tip: drag inside a value field to nudge. Shift = faster. Hover shows guides on canvas. Changes commit on blur.
+        Tip: drag inside a value field to nudge. Shift = faster. Hover shows guides on canvas. Changes commit on blur. Turn{' '}
+        <strong>Linked</strong> on only if you want one value to apply to all four sides.
       </p>
       <BoxModelVisual
         title="Margin"

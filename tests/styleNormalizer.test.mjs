@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeStyle, normalizeResponsiveStyle } from '../lib/styleNormalizer.js';
+import { getDeviceStyle } from '../lib/styleToCss.js';
 
 test('normalizeStyle migrates legacy spacing.gap into layout.gap', () => {
   const out = normalizeStyle({
@@ -42,4 +43,14 @@ test('normalizeStyle preserves typography whiteSpace', () => {
     typography: { fontSize: '16px', whiteSpace: 'pre-wrap' },
   });
   assert.equal(out.typography.whiteSpace, 'pre-wrap');
+});
+
+test('normalizeResponsiveStyle keeps header rows horizontal on mobile', () => {
+  const out = normalizeResponsiveStyle(
+    { desktop: { layout: { display: 'flex', flexDirection: 'row' } } },
+    { nodeType: 'row', rowMeta: { isHeader: true, role: 'header' } }
+  );
+  const mobile = getDeviceStyle(out, 'mobile');
+  assert.equal(mobile.layout.flexDirection, 'row');
+  assert.equal(mobile.layout.flexWrap, 'nowrap');
 });

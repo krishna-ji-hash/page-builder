@@ -8,6 +8,27 @@ body {
   overflow-x: hidden;
 }
 
+/* Logo / marquee carousels extend horizontally — avoid clipping at the viewport root. */
+html:has(.live-carousel--ticker),
+html:has(.live-carousel--marquee),
+html:has(.live-carousel--logo),
+body:has(.live-carousel--ticker),
+body:has(.live-carousel--marquee),
+body:has(.live-carousel--logo) {
+  overflow-x: clip;
+}
+
+@supports not (overflow: clip) {
+  html:has(.live-carousel--ticker),
+  html:has(.live-carousel--marquee),
+  html:has(.live-carousel--logo),
+  body:has(.live-carousel--ticker),
+  body:has(.live-carousel--marquee),
+  body:has(.live-carousel--logo) {
+    overflow-x: visible;
+  }
+}
+
 /* `overflow-x: hidden` on scrolling ancestors disables position:sticky. Scoped relaxation when sticky header is on. */
 html:has(.live-site[data-sticky-header='true']),
 body:has(.live-site[data-sticky-header='true']) {

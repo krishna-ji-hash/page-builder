@@ -156,6 +156,8 @@ export default function RichTextEditor({
   disabled,
   className = '',
   style,
+  neutralizeBodyColorsPreview = false,
+  neutralizeBodyColorsPersist = false,
 }) {
   const editableRef = useRef(null);
   const snapshotRef = useRef('');
@@ -164,7 +166,10 @@ export default function RichTextEditor({
   const dockRafRef = useRef(0);
   const [toolbarPlacement, setToolbarPlacement] = useState(null);
 
-  const safePreview = sanitizeRichHtml(html || '<p></p>');
+  const sanitizeOptsPreview = { neutralizeHardcodedBodyTextColors: Boolean(neutralizeBodyColorsPreview) };
+  const sanitizeOptsPersist = { neutralizeHardcodedBodyTextColors: Boolean(neutralizeBodyColorsPersist) };
+
+  const safePreview = sanitizeRichHtml(html || '<p></p>', sanitizeOptsPreview);
 
   const updateDockedToolbar = useCallback(() => {
     if (typeof window === 'undefined') return;
@@ -209,7 +214,7 @@ export default function RichTextEditor({
     }
     if (!wasEditingRef.current) {
       wasEditingRef.current = true;
-      const initial = sanitizeRichHtml(html || '<p></p>');
+      const initial = sanitizeRichHtml(html || '<p></p>', sanitizeOptsPreview);
       snapshotRef.current = initial;
       lastCommittedRef.current = initial;
       requestAnimationFrame(() => {
@@ -242,7 +247,7 @@ export default function RichTextEditor({
       if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) {
         ev.preventDefault();
         if (el) {
-          const sanitized = sanitizeRichHtml(el.innerHTML);
+          const sanitized = sanitizeRichHtml(el.innerHTML, sanitizeOptsPersist);
           lastCommittedRef.current = sanitized;
           onCommit?.(sanitized);
         }
@@ -268,7 +273,7 @@ export default function RichTextEditor({
 
   const handleBlur = () => {
     if (!editableRef.current) return;
-    const sanitized = sanitizeRichHtml(editableRef.current.innerHTML);
+    const sanitized = sanitizeRichHtml(editableRef.current.innerHTML, sanitizeOptsPersist);
     if (sanitized === lastCommittedRef.current) return;
     lastCommittedRef.current = sanitized;
     onCommit?.(sanitized);

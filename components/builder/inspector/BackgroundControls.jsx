@@ -9,6 +9,28 @@ function bgImageCssUrl(url) {
   return `url("${safe}")`;
 }
 
+/** True when the stored value should paint as fully transparent in CSS. */
+function isTransparentBackground(color) {
+  if (color == null || color === '') return false;
+  const s = String(color).trim().toLowerCase().replace(/\s/g, '');
+  if (s === 'transparent') return true;
+  if (s === 'rgba(0,0,0,0)' || s === 'hsla(0,0%,0%,0)') return true;
+  const m = /^#([0-9a-f]{8})$/i.exec(s);
+  if (m && m[1].slice(6, 8).toLowerCase() === '00') return true;
+  return false;
+}
+
+/** `#rrggbb` only — native color input rejects `transparent`. */
+function hex6ForColorInput(color) {
+  const s = String(color || '').trim();
+  if (/^#[0-9a-f]{6}$/i.test(s)) return s;
+  if (/^#[0-9a-f]{3}$/i.test(s)) {
+    const h = s.slice(1);
+    return `#${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}`;
+  }
+  return '#94a3b8';
+}
+
 export default function BackgroundControls({ form, onUpdate, projectId, selectedNode = null }) {
   const [open, setOpen] = useState(false);
   const [showUrlAdvanced, setShowUrlAdvanced] = useState(false);
@@ -22,6 +44,7 @@ export default function BackgroundControls({ form, onUpdate, projectId, selected
   const bgSize = String(form.bgSize || 'cover');
   const bgPosition = String(form.bgPosition || 'center center');
   const bgRepeat = String(form.bgRepeat || 'no-repeat');
+  const bgTransparent = isTransparentBackground(form.bgColor);
 
   const handleFilePick = (event) => {
     const file = event.target.files?.[0];
@@ -65,12 +88,29 @@ export default function BackgroundControls({ form, onUpdate, projectId, selected
       ) : null}
       <div className="bld-field">
         <label className="bld-label">Background Color</label>
-        <input
-          type="color"
-          className="bld-input"
-          value={form.bgColor || '#ffffff'}
-          onChange={(e) => onUpdate('bgColor', e.target.value)}
-        />
+        <div className="bld-field-grid" style={{ gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'center' }}>
+          <input
+            type="color"
+            className="bld-input"
+            aria-label="Solid background color"
+            value={hex6ForColorInput(form.bgColor)}
+            onChange={(e) => onUpdate('bgColor', e.target.value)}
+          />
+          <button
+            type="button"
+            className="bld-chip"
+            aria-pressed={bgTransparent}
+            onClick={() => onUpdate('bgColor', 'transparent')}
+            title="No fill — parent or page background shows through"
+          >
+            Transparent
+          </button>
+        </div>
+        {bgTransparent ? (
+          <p className="bld-field-note" style={{ marginTop: 6, marginBottom: 0 }}>
+            Background is transparent. Use the color swatch to pick a solid fill again.
+          </p>
+        ) : null}
       </div>
 
       <div className="bld-field">
@@ -167,11 +207,16 @@ export default function BackgroundControls({ form, onUpdate, projectId, selected
             <div
               className="bld-media-inlinePreview"
               style={{
-                backgroundColor: form.bgColor || '#f1f5f9',
-                backgroundImage: bgImageCssUrl(bgImageUrl),
-                backgroundSize: bgSize,
-                backgroundPosition: bgPosition,
-                backgroundRepeat: bgRepeat,
+                backgroundColor: bgTransparent ? 'transparent' : form.bgColor || '#f1f5f9',
+                backgroundImage: [
+                  bgTransparent ? 'repeating-conic-gradient(#e2e8f0 0% 25%, #f8fafc 0% 50%)' : null,
+                  bgImageCssUrl(bgImageUrl),
+                ]
+                  .filter(Boolean)
+                  .join(', '),
+                backgroundSize: bgTransparent ? `12px 12px, ${bgSize}` : bgSize,
+                backgroundPosition: bgTransparent ? `0 0, ${bgPosition}` : bgPosition,
+                backgroundRepeat: bgTransparent ? `repeat, ${bgRepeat}` : bgRepeat,
               }}
               aria-label="Background image preview"
             />

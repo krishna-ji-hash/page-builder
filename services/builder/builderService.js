@@ -19,6 +19,42 @@ function parseSnapshot(value) {
   return JSON.parse(value);
 }
 
+/** Deep-merge responsive `style_json` so save/publish never drops sibling keys (e.g. partial `desktop.layout`). */
+function mergeResponsiveStyleJsonDeep(existing, patch) {
+  if (patch == null || typeof patch !== 'object') return existing;
+  const base = existing && typeof existing === 'object' ? existing : {};
+  const out = { ...base };
+  const sliceKeys = ['layout', 'spacing', 'size', 'colors', 'typography', 'background', 'effects', 'border', 'menu'];
+  for (const key of Object.keys(patch)) {
+    const pv = patch[key];
+    if (pv == null || typeof pv !== 'object' || Array.isArray(pv)) {
+      out[key] = pv;
+      continue;
+    }
+    const bl = base[key] && typeof base[key] === 'object' ? base[key] : {};
+    const merged = { ...bl, ...pv };
+    for (const sk of sliceKeys) {
+      if (pv[sk] != null && typeof pv[sk] === 'object' && !Array.isArray(pv[sk])) {
+        merged[sk] = { ...(bl[sk] || {}), ...pv[sk] };
+      }
+    }
+    out[key] = merged;
+  }
+  return out;
+}
+
+/** Root row duplicate label: "Section" → "Section Copy" → "Section Copy 2" (avoids "Copy Copy"). */
+function nextRootDuplicateDisplayName(prevName) {
+  const raw = String(prevName || 'Section').trim() || 'Section';
+  const base = raw.replace(/(?:\s+Copy)+\s*(?:\d+)?$/i, '').trim() || 'Section';
+  const numMatch = raw.match(/\s+Copy\s+(\d+)\s*$/i);
+  const hasCopy = /\bCopy\b/i.test(raw);
+  if (!hasCopy) return `${base} Copy`;
+  if (numMatch) return `${base} Copy ${Number(numMatch[1]) + 1}`;
+  const copyTokens = raw.match(/\s+Copy/gi) || [];
+  return `${base} Copy ${copyTokens.length + 1}`;
+}
+
 function enforceStructuralLayout(style = {}, nodeType) {
   const next = { ...(style || {}) };
   if (!['row', 'column', 'stack'].includes(nodeType)) return next;
@@ -125,6 +161,7 @@ function normalizeNodeProps(props = {}, nodeType = null) {
   next.style_json = normalizeResponsiveStyle(next.style_json || {}, {
     nodeType,
     siteTheme: DEFAULT_SITE_THEME,
+    rowMeta: next.meta && typeof next.meta === 'object' ? next.meta : null,
   });
   if (nodeType) {
     next.style_json = enforceStructuralLayout(next.style_json, nodeType);
@@ -994,7 +1031,7 @@ export async function duplicateNode(nodeId) {
           source.version_id,
           parentCloneId,
           nodeRow.node_type,
-          isRoot ? `${nodeRow.display_name} Copy` : nodeRow.display_name,
+          isRoot ? nextRootDuplicateDisplayName(nodeRow.display_name) : nodeRow.display_name,
           nodeRow.props_json,
           isRoot ? insertionIndex : nodeRow.position_index,
           nodeRow.data_json,
@@ -1071,7 +1108,10 @@ async function persistClientTreeOntoDraft(connection, draftVersionId, clientRoot
 
     const existingProps = normalizeNodeProps(parseSnapshot(existing.props_json) || {}, existing.node_type);
     const merged = mergeNodePropsJsonPatch(existingProps, raw.props || {});
-    if (raw.style_json !== undefined) merged.style_json = raw.style_json;
+    merged.style_json = mergeResponsiveStyleJsonDeep(existingProps.style_json, merged.style_json);
+    if (raw.style_json !== undefined) {
+      merged.style_json = mergeResponsiveStyleJsonDeep(merged.style_json, raw.style_json);
+    }
     if (raw.meta !== undefined && raw.meta && typeof raw.meta === 'object') {
       merged.meta = { ...(merged.meta || {}), ...raw.meta };
     }

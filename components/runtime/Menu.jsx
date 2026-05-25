@@ -1,8 +1,64 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { menuNavClassName } from '@/lib/menuNav';
 import { isActiveMenuTo, normalizeMenuItems } from '@/lib/menuItems';
+import {
+  menuDrawerStyleVars,
+  menuHamburgerAlignToJustify,
+  normalizeMenuDrawerActionsLayout,
+  normalizeMenuHamburgerAlign,
+  resolveMenuMobileBreakpointPx,
+} from '@/lib/menuMobile';
+
+/** Viewport + builder artboard width — CSS media queries alone miss narrow canvas on wide monitors. */
+function useMobileNavActive(enabled, breakpointPx) {
+  const [active, setActive] = useState(false);
+
+  useEffect(() => {
+    if (!enabled || typeof window === 'undefined') {
+      setActive(false);
+      return undefined;
+    }
+
+    const bp = Math.max(320, Math.min(1200, Number(breakpointPx) || 768));
+    const mq = window.matchMedia(`(max-width: ${bp}px)`);
+
+    const sync = () => {
+      let next = mq.matches;
+      const page =
+        document.querySelector('.bld-canvas--mobile .bld-canvas__page') ||
+        document.querySelector('.bld-canvas--tablet .bld-canvas__page');
+      if (!next && page?.closest('.bld-canvas--mobile, .bld-canvas--tablet')) {
+        next = true;
+      } else if (!next && page) {
+        const w = page.getBoundingClientRect().width;
+        if (w > 0 && w <= bp) next = true;
+      }
+      setActive(next);
+    };
+
+    sync();
+    mq.addEventListener('change', sync);
+
+    const page =
+      document.querySelector('.bld-canvas--mobile .bld-canvas__page') ||
+      document.querySelector('.bld-canvas--tablet .bld-canvas__page');
+    let ro;
+    if (page && typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(sync);
+      ro.observe(page);
+    }
+
+    return () => {
+      mq.removeEventListener('change', sync);
+      ro?.disconnect();
+    };
+  }, [enabled, breakpointPx]);
+
+  return active;
+}
 
 function clamp(n, min, max) {
   const x = Number(n);
@@ -183,8 +239,29 @@ function DesktopDropdown({ item, currentPath, onNavigate, preferMega }) {
   );
 }
 
-function MobileDrawer({ open, onClose, items, currentPath, title }) {
+function findHeaderActionsStack() {
+  if (typeof document === 'undefined') return null;
+  const header =
+    document.querySelector('.live-doc > [data-site-header="true"]') ||
+    document.querySelector('.live-doc > header.live-node.bld-row');
+  if (!header) return null;
+  return header.querySelector(
+    ':scope > .live-node.bld-column > .live-node.bld-stack:has(> button), :scope > .live-node.bld-column > .live-node.bld-stack:has(.live-action-button-wrap)'
+  );
+}
+
+function MobileDrawer({
+  open,
+  onClose,
+  items,
+  currentPath,
+  title,
+  showHeaderActions = false,
+  drawerActionsLayout = 'row',
+  drawerStyle,
+}) {
   const rootRef = useRef(null);
+  const actionsHostRef = useRef(null);
   useBodyScrollLock(open);
 
   useEffect(() => {
@@ -207,6 +284,33 @@ function MobileDrawer({ open, onClose, items, currentPath, title }) {
   useEffect(() => {
     if (!open) setExpanded({});
   }, [open]);
+
+  useEffect(() => {
+    const host = actionsHostRef.current;
+    if (!host) return undefined;
+    host.innerHTML = '';
+    if (!open || !showHeaderActions) return undefined;
+
+    const stack = findHeaderActionsStack();
+    if (!stack) return undefined;
+
+    const nodes = stack.querySelectorAll(
+      ':scope > button, :scope > a[href], :scope > .live-action-button-wrap'
+    );
+    nodes.forEach((node) => {
+      const cell = document.createElement('div');
+      cell.className = 'menu-m__action-cell';
+      const clone = node.cloneNode(true);
+      const closeOnActivate = () => onClose?.();
+      clone.addEventListener('click', closeOnActivate);
+      cell.appendChild(clone);
+      host.appendChild(cell);
+    });
+
+    return () => {
+      host.innerHTML = '';
+    };
+  }, [open, showHeaderActions, onClose]);
 
   const renderNode = (node, depth) => {
     const hasKids = Array.isArray(node.children) && node.children.length > 0;
@@ -243,16 +347,22 @@ function MobileDrawer({ open, onClose, items, currentPath, title }) {
   };
 
   return (
-    <div className={`menu-m ${open ? 'is-open' : ''}`.trim()} aria-hidden={open ? 'false' : 'true'}>
+    <div
+      className={`menu-m ${open ? 'is-open' : ''}`.trim()}
+      aria-hidden={open ? 'false' : 'true'}
+      data-drawer-actions-layout={drawerActionsLayout}
+      style={drawerStyle}
+    >
       <div className="menu-m__backdrop" onMouseDown={() => onClose?.()} />
       <aside ref={rootRef} className="menu-m__drawer" role="dialog" aria-modal="true" aria-label={title || 'Menu'}>
         <div className="menu-m__top">
           <div className="menu-m__title">{title || 'Menu'}</div>
           <button type="button" className="menu-m__close" onClick={() => onClose?.()} aria-label="Close menu">
-            ✕
+            <span className="menu-m__close-icon" aria-hidden />
           </button>
         </div>
         <div className="menu-m__list">{items.map((it) => renderNode(it, 1))}</div>
+        <div ref={actionsHostRef} className="menu-m__actions" aria-label="Header actions" />
       </aside>
     </div>
   );
@@ -279,6 +389,26 @@ export default function Menu({
   const hamburgerLabel = typeof mobile?.hamburgerLabel === 'string' ? mobile.hamburgerLabel : 'Open menu';
   const title = typeof mobile?.title === 'string' ? mobile.title : '';
   const preferMega = Boolean(mega?.enabled);
+  const breakpointPx = resolveMenuMobileBreakpointPx(mobile);
+  const hamburgerAlign = normalizeMenuHamburgerAlign(mobile?.hamburgerAlign, 'right');
+  const drawerActionsLayout = normalizeMenuDrawerActionsLayout(mobile?.drawerActionsLayout, 'row');
+  const showDrawerActions = mobile?.showDrawerActions !== false;
+  const drawerStyle = useMemo(() => menuDrawerStyleVars(mobile), [mobile?.drawerDensity]);
+  const mobileNavActive = useMobileNavActive(showMobile, breakpointPx);
+  const navRef = useRef(null);
+  const [portalReady, setPortalReady] = useState(false);
+  useEffect(() => {
+    setPortalReady(true);
+  }, []);
+
+  const navStyle = useMemo(() => {
+    if (!showMobile) return style;
+    return {
+      ...(style || {}),
+      '--menu-hamburger-justify': menuHamburgerAlignToJustify(hamburgerAlign),
+      '--menu-mobile-breakpoint': `${breakpointPx}px`,
+    };
+  }, [style, showMobile, hamburgerAlign, breakpointPx]);
 
   // Optional hide/reveal + scroll shadow (only adds classes; sticky positioning is still controlled by header row)
   const [scrolled, setScrolled] = useState(false);
@@ -313,26 +443,31 @@ export default function Menu({
 
   return (
     <nav
+      ref={navRef}
       className={[
         navClass,
         'menu-adv',
         showMobile ? 'menu-adv--mobile' : '',
+        showMobile && mobileNavActive ? 'menu-adv--show-hamburger' : '',
+        mobileOpen ? 'menu-adv--drawer-open' : '',
         scrolled ? 'menu-adv--scrolled' : '',
         hidden ? 'menu-adv--hidden' : '',
       ]
         .filter(Boolean)
         .join(' ')
         .trim()}
-      style={style}
+      style={navStyle}
+      data-mobile-nav={showMobile ? 'true' : undefined}
+      data-hamburger-align={showMobile ? hamburgerAlign : undefined}
       aria-label={ariaLabel || 'Main navigation'}
     >
       {showMobile ? (
         <button
           type="button"
           className="menu__hamburger"
-          aria-label={hamburgerLabel}
+          aria-label={mobileOpen ? 'Close menu' : hamburgerLabel}
           aria-expanded={mobileOpen ? 'true' : 'false'}
-          onClick={() => setMobileOpen(true)}
+          onClick={() => setMobileOpen((open) => !open)}
         >
           <span className="menu__hamburger-lines" aria-hidden />
         </button>
@@ -354,15 +489,21 @@ export default function Menu({
         )}
       </div>
 
-      {showMobile ? (
-        <MobileDrawer
-          open={mobileOpen}
-          onClose={() => setMobileOpen(false)}
-          items={safeItems}
-          currentPath={currentPath || ''}
-          title={title}
-        />
-      ) : null}
+      {showMobile && portalReady && typeof document !== 'undefined'
+        ? createPortal(
+            <MobileDrawer
+              open={mobileOpen}
+              onClose={() => setMobileOpen(false)}
+              items={safeItems}
+              currentPath={currentPath || ''}
+              title={title}
+              showHeaderActions={mobileNavActive && showDrawerActions}
+              drawerActionsLayout={drawerActionsLayout}
+              drawerStyle={drawerStyle}
+            />,
+            document.body
+          )
+        : null}
     </nav>
   );
 }

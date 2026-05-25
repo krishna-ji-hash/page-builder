@@ -12,8 +12,11 @@ import BackgroundControls from './BackgroundControls';
 import ResponsiveVisibilityControls from './ResponsiveVisibilityControls';
 import EffectsControls from './EffectsControls';
 import InspectorTipChips from '@/components/builder/inspector/InspectorTipChips';
-import { isHeaderRowNode } from '@/lib/rowLayoutMeta';
+import { isFooterRowNode, isHeaderRowNode } from '@/lib/rowLayoutMeta';
 import { isRootPageRow } from '@/lib/liveDocSectionSpacing';
+import { resolveHeaderLayoutMode } from '@/lib/headerLayoutMode';
+import { resolveRootStripLayout, resolveSectionWidthMode } from '@/lib/livePageCssVars';
+import { SECTION_WIDTH_MODES } from '@/lib/liveContentContainer';
 
 function Section({ title, defaultOpen = true, children }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -49,6 +52,8 @@ export default function StylePanel({
   /** Nearest section row for strip width (may differ from `selectedNode` when a child widget is selected). */
   stripLayoutTargetRow = null,
   onPatchRootStripLayout = null,
+  /** Header row: spread (full width) | boxed (content column). */
+  onPatchHeaderLayoutMode = null,
 }) {
   if (!selectedNode) {
     return (
@@ -66,8 +71,38 @@ export default function StylePanel({
     Array.isArray(pageTree) &&
     pageTree.length > 0 &&
     isRootPageRow(pageTree, stripRow);
-  const rootStripValue = String(stripRow?.props?.meta?.rootStripLayout || '').toLowerCase().trim();
-  const stripSelectValue = rootStripValue === 'full' ? 'full' : 'contained';
+  const stripRowIsHeader = stripRow ? isHeaderRowNode(stripRow) : false;
+  const stripRowIsFooter = stripRow ? isFooterRowNode(stripRow) : false;
+  const stripRowIsLandmark = stripRowIsHeader || stripRowIsFooter;
+  const stripMeta = stripRow?.props?.meta || {};
+  const resolvedStrip = stripRow
+    ? resolveRootStripLayout(stripMeta, {
+        isLiveDocRootRow: Boolean(isRootStripRow),
+        isHeaderRow: stripRowIsHeader,
+        isFooterRow: stripRowIsFooter,
+        isRootContentRow: Boolean(isRootStripRow && !stripRowIsLandmark),
+      })
+    : '';
+  const sectionWidthMode = stripRow
+    ? resolveSectionWidthMode(stripMeta, {
+        isLiveDocRootRow: Boolean(isRootStripRow),
+        isHeaderRow: stripRowIsHeader,
+        isFooterRow: stripRowIsFooter,
+        isRootContentRow: Boolean(isRootStripRow && !stripRowIsLandmark),
+      })
+    : '';
+  const stripSelectValue =
+    sectionWidthMode === SECTION_WIDTH_MODES.BOXED
+      ? 'contained'
+      : sectionWidthMode === SECTION_WIDTH_MODES.FULL_WIDTH
+        ? 'fullBleed'
+        : sectionWidthMode === SECTION_WIDTH_MODES.FULL_WIDTH_CONTENT_BOXED
+          ? 'full'
+          : resolvedStrip === 'full'
+            ? 'full'
+            : 'contained';
+  const headerLayoutMode =
+    stripRow && stripRowIsHeader ? resolveHeaderLayoutMode(stripRow.props?.meta || {}) : 'boxed';
   const stripSelectionIsRow = selectedNode?.nodeType === 'row' && stripRow && selectedNode.id === stripRow.id;
 
   return (
@@ -83,10 +118,21 @@ export default function StylePanel({
             </p>
           ) : null}
           <p className="bld-field-note" style={{ marginTop: 0 }}>
-            {isRootStripRow ? (
+            {isRootStripRow && stripRowIsHeader ? (
               <>
-                <strong>Top-level strip</strong> (header, hero, footer, etc.): full width uses the whole screen on the
-                live site; contained follows the page content column.
+                <strong>Top-level strip</strong> (header): <strong>Full width (screen)</strong> spans the viewport;
+                <strong> Contained</strong> keeps logo / menu / buttons in the page content column.
+              </>
+            ) : isRootStripRow && stripRowIsFooter ? (
+              <>
+                <strong>Footer</strong> background spans the full screen. Use <strong>Layout → Content width</strong> to
+                narrow the inner content.
+              </>
+            ) : isRootStripRow ? (
+              <>
+                <strong>Top-level strip</strong> (hero, sections): <strong>Full width background</strong> keeps the
+                background edge-to-edge with content in a centered column (default). <strong>Edge to edge</strong>{' '}
+                stretches content across the viewport. <strong>Contained</strong> caps the whole section.
               </>
             ) : (
               <>
@@ -99,21 +145,49 @@ export default function StylePanel({
             <label className="bld-label" htmlFor="root-strip-layout">
               Width
             </label>
-            <select
-              id="root-strip-layout"
-              className="bld-input"
-              value={stripSelectValue}
-              onChange={(e) => onPatchRootStripLayout(e.target.value)}
-            >
-              <option value="contained">Contained</option>
-              <option value="full">{isRootStripRow ? 'Full width (screen)' : 'Full width (parent)'}</option>
-            </select>
+            {isRootStripRow && stripRowIsHeader && typeof onPatchHeaderLayoutMode === 'function' ? (
+              <select
+                id="root-strip-layout"
+                className="bld-input"
+                value={headerLayoutMode === 'spread' ? 'full' : 'contained'}
+                onChange={(e) =>
+                  onPatchHeaderLayoutMode(e.target.value === 'full' ? 'spread' : 'boxed')
+                }
+              >
+                <option value="contained">Contained</option>
+                <option value="full">Full width (screen)</option>
+              </select>
+            ) : isRootStripRow && stripRowIsFooter ? (
+              <select id="root-strip-layout" className="bld-input" value="full" disabled aria-readonly>
+                <option value="full">Full width (screen)</option>
+              </select>
+            ) : (
+              <select
+                id="root-strip-layout"
+                className="bld-input"
+                value={stripSelectValue}
+                onChange={(e) => onPatchRootStripLayout(e.target.value)}
+              >
+                {isRootStripRow ? (
+                  <>
+                    <option value="full">Full width background (boxed content)</option>
+                    <option value="fullBleed">Full width (edge to edge)</option>
+                    <option value="contained">Contained</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="contained">Contained</option>
+                    <option value="full">Full width (parent)</option>
+                  </>
+                )}
+              </select>
+            )}
             <InspectorTipChips
               size="xs"
               style={{ marginTop: 4 }}
               chips={
                 isRootStripRow
-                  ? ['Header / hero → Full width', 'Body strips → Often contained', 'Global header: same control']
+                  ? ['Header / hero → Full width (screen)', 'Body strips → Often contained', 'Global header: same control']
                   : ['Full width = column edge to edge', 'Contained = theme max width (capped by parent)']
               }
             />

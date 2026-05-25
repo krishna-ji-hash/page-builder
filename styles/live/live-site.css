@@ -1,3 +1,5 @@
+@import '../shared/site-header-bar.css';
+
 .live-site {
   min-height: 100vh;
   width: 100%;
@@ -8,6 +10,7 @@
   line-height: var(--line-height-base, 1.5);
   color: var(--color-text, #0f172a);
   background: var(--color-background, #f8fafc);
+  /* Rows with light paint under dark site preset set `--live-section-fg` / `--live-section-muted` for descendant typography (see `lib/liveSectionContrastVars.js`). */
   box-sizing: border-box;
 
   /* Motion tokens (shared across runtime templates) */
@@ -23,7 +26,15 @@
    * Builder canvas is physically narrower (sidebars); live was full viewport so rows looked “stretched”.
    * Cap the content column so published / preview match the artboard; override with --live-content-max-width.
    */
-  --live-content-max-width: 1200px;
+  --live-content-max-width: 1280px;
+  --live-section-content-max-width: var(--live-content-max-width);
+  --live-content-padding-x: clamp(16px, 3vw, 40px);
+}
+
+.live-site:has(.live-carousel--ticker),
+.live-site:has(.live-carousel--marquee),
+.live-site:has(.live-carousel--logo) {
+  overflow-x: visible;
 }
 
 .live-site__main {
@@ -53,18 +64,21 @@
 }
 
 .live-doc {
-  max-width: min(100%, var(--live-content-max-width));
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
   margin: 0 auto;
-  /* Horizontal padding only on content landmarks so header/footer can span edge-to-edge */
   padding: 0;
-  width: 100%;
   box-sizing: border-box;
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
-  /* Stack rhythm: parent `gap` + per-row margin deltas (!important) beat row `margin` shorthand from style_json. */
   gap: var(--live-section-gap, 12px);
+}
+
+/* Theme → Page width (body): optional whole-page content column cap */
+.live-site[data-live-body-layout='container'] .live-doc {
+  max-width: min(100%, var(--live-content-max-width, 1280px));
 }
 
 /* Full-bleed strips use negative horizontal margins; hidden overflow clips logo/start columns. */
@@ -72,9 +86,24 @@
   overflow-x: visible;
 }
 
-/* Theme → Page width (body): full viewport vs contained .live-doc */
-.live-site[data-live-body-layout="full"] .live-doc {
-  max-width: none;
+/* Logo / ticker carousels animate horizontally — do not clip like builder mirror (overflow-x: visible). */
+.live-doc:has(.live-carousel--ticker),
+.live-doc:has(.live-carousel--marquee),
+.live-doc:has(.live-carousel--logo) {
+  overflow-x: visible;
+}
+
+.live-doc
+  :where(.live-node.bld-row, .live-node.bld-column, .live-node.bld-stack):has(
+    :is(.live-carousel--ticker, .live-carousel--marquee, .live-carousel--logo)
+  ) {
+  overflow: visible;
+  overflow-x: visible;
+}
+
+/* Theme → Page width (body): full viewport — per-section boxing still applies via section attrs */
+.live-site[data-live-body-layout='full'] .live-doc {
+  max-width: 100%;
   width: 100%;
   margin-left: 0;
   margin-right: 0;
@@ -109,13 +138,56 @@
   margin-top: calc(var(--live-row-gap-before) - var(--live-section-gap, 12px)) !important;
 }
 
-.live-doc > section.live-node,
-.live-doc > main.live-node {
-  padding-left: clamp(10px, 3vw, 22px);
-  padding-right: clamp(10px, 3vw, 22px);
-  /* Theme bottom pad must win over row `padding` shorthand from style_json */
+.live-doc > section.live-node:not([data-live-section-content='boxed']):not([data-live-root-strip='full']),
+.live-doc > main.live-node:not([data-live-section-content='boxed']):not([data-live-root-strip='full']) {
+  padding-left: var(--live-content-padding-x, clamp(16px, 3vw, 40px));
+  padding-right: var(--live-content-padding-x, clamp(16px, 3vw, 40px));
+  /* Theme bottom pad when the row has no padding in style_json (rows with padding use `data-live-row-padding-defined`). */
   padding-bottom: var(--live-root-row-pad-bottom, var(--live-section-pad-bottom, 12px)) !important;
   box-sizing: border-box;
+}
+
+.live-doc > section.live-node[data-live-row-padding-defined],
+.live-doc > main.live-node[data-live-row-padding-defined] {
+  padding-bottom: unset !important;
+}
+
+/*
+ * Content bands (root section/main + hero rows nested inside a landmark header):
+ * contain paint, size to tallest column, top-align columns (no CTA dead gap under image column).
+ */
+.live-doc
+  > :where(section.live-node.bld-row, main.live-node.bld-row):not([data-site-header='true']):not(
+    [data-site-footer='true']
+  ):not(:has(.live-carousel--ticker)):not(:has(.live-carousel--marquee)):not(:has(.live-carousel--logo)),
+.live-doc > :is(header.live-node, [data-site-header='true']) > .live-node.bld-row:not(:has(.live-carousel--ticker)):not(
+  :has(.live-carousel--marquee)
+):not(:has(.live-carousel--logo)),
+.live-doc
+  .live-node.bld-row[data-live-content-band='true']:not(:has(.live-carousel--ticker)):not(
+    :has(.live-carousel--marquee)
+  ):not(:has(.live-carousel--logo)) {
+  align-items: flex-start !important;
+  align-content: flex-start;
+  min-height: min-content;
+  height: auto;
+  overflow: clip;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.live-doc
+  > :where(section.live-node.bld-row, main.live-node.bld-row):not([data-site-header='true']):not(
+    [data-site-footer='true']
+  )
+  > .live-node.bld-column,
+.live-doc > :is(header.live-node, [data-site-header='true']) > .live-node.bld-row > .live-node.bld-column,
+.live-doc .live-node.bld-row[data-live-content-band='true'] > .live-node.bld-column {
+  align-self: flex-start !important;
+  min-height: min-content;
+  height: auto;
+  max-width: 100%;
 }
 
 /* Sticky header (per-page toggle via data attr)
@@ -177,6 +249,10 @@
   max-width: 100%;
   height: auto;
   display: block;
+}
+
+.live-doc figcaption {
+  color: var(--color-text, #0f172a);
 }
 
 .live-doc button {
@@ -301,8 +377,10 @@
 
 /* Logo strip: natural image height, light row (logos / sponsors) */
 .live-carousel--logo {
-  background: #ffffff;
+  background: #ffffff !important;
   box-shadow: 0 6px 24px rgba(15, 23, 42, 0.08);
+  min-height: 88px;
+  box-sizing: border-box;
 }
 .live-carousel--logo.live-carousel--slide-intrinsic .live-carousel__slide,
 .live-carousel--logo .live-carousel__slide {
@@ -355,11 +433,13 @@
 
 /* Dual-row logo ticker: top row → left, bottom row → right, infinite loop */
 .live-carousel--ticker {
-  background: #f4f6f9;
+  background: #f4f6f9 !important;
   padding: 14px 0;
   border-radius: 16px;
   overflow: hidden;
   box-shadow: 0 8px 28px rgba(15, 23, 42, 0.07);
+  min-height: 102px;
+  box-sizing: border-box;
 }
 .live-carousel--ticker .live-carousel__ticker {
   display: flex;
@@ -383,7 +463,6 @@
   gap: var(--carousel-gap, 12px);
   will-change: transform;
   backface-visibility: hidden;
-  transform: translateZ(0);
 }
 .live-carousel--ticker .live-carousel__ticker-track--ltr {
   animation: live-carousel-ticker-ltr var(--ticker-duration, 32s) linear infinite;
@@ -443,9 +522,20 @@
 /* Single-row smooth marquee: same ticker track, one row only */
 .live-carousel--marquee {
   padding: 12px 0;
+  background: #f4f6f9 !important;
+  min-height: 102px;
+  box-sizing: border-box;
 }
 .live-carousel--marquee .live-carousel__ticker--single {
   gap: 0;
+}
+
+.live-node.bld-stack > .live-carousel--ticker,
+.live-node.bld-stack > .live-carousel--marquee,
+.live-node.bld-stack > .live-carousel--logo {
+  flex-shrink: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
 /* Contain mode: show the whole image (no crop) by letting it size naturally. */
@@ -733,11 +823,17 @@
   overflow-x: clip;
 }
 
-/* Root sections should never create horizontal page scroll (allow internal overflow where needed). */
-.live-doc > :where(header.live-node, footer.live-node, main.live-node, section.live-node, [data-site-footer='true']) {
+/* Root sections: cap width; clip horizontal bleed only on header/footer (clip on content sections forced overflow-y:auto and clipped hero images). */
+.live-doc > :where(header.live-node, footer.live-node, [data-site-footer='true']) {
   max-width: 100%;
   min-width: 0;
   overflow-x: clip;
+}
+
+.live-doc > :where(main.live-node, section.live-node) {
+  max-width: 100%;
+  min-width: 0;
+  overflow: visible;
 }
 
 /* If footer is unstyled, prevent it from visually "floating" on top of prior section backgrounds. */
@@ -765,13 +861,60 @@
   min-width: 0;
 }
 
+/*
+ * Landmark header that also contains a nested hero row (e.g. “Header” → “Hero Landing”):
+ * nav columns on the first line, hero band full width on the next — not the 3-col nav grid
+ * (that grid breaks nested heroes on live; builder artboard is often <769px so the bug was hidden).
+ */
+.live-doc > :is(header.live-node.bld-row, [data-site-header='true'].bld-row):has(> .live-node.bld-row) {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  height: auto !important;
+  min-height: min-content !important;
+  overflow: visible;
+  grid-template-columns: unset !important;
+}
+
+.live-doc > :is(header.live-node, [data-site-header='true']):has(> .live-node.bld-row) > .live-node.bld-row {
+  flex: 1 1 100% !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  order: 99;
+  grid-column: unset !important;
+  justify-self: stretch !important;
+}
+
 /* Header parity with builder:
-   For 3-col headers (logo | nav | actions), keep nav centered at any browser zoom. */
-@media (min-width: 769px) {
-  .live-doc > :is(header.live-node.bld-row, [data-site-header='true'].bld-row) {
+   For 3-col headers (logo | nav | actions) only — direct columns, no nested section rows. */
+@media (min-width: 1025px) {
+  .live-doc
+    > :is(header.live-node.bld-row, [data-site-header='true'].bld-row):not([data-header-layout='centered']):not(
+      :has(> .live-node.bld-row)
+    ) {
     display: grid !important;
     grid-template-columns: auto 1fr auto;
     align-items: center;
+  }
+
+  .live-doc > :is(header.live-node.bld-row, [data-site-header='true'].bld-row)[data-header-layout='centered'] {
+    display: flex !important;
+    flex-wrap: wrap;
+    justify-content: center !important;
+    align-items: center;
+    gap: clamp(12px, 2vw, 22px);
+    grid-template-columns: unset !important;
+  }
+
+  .live-doc
+    > :is(header.live-node.bld-row, [data-site-header='true'].bld-row)[data-header-layout='centered']
+    > .live-node.bld-column {
+    flex: 0 0 auto !important;
+    width: auto !important;
+    max-width: 100% !important;
+    justify-self: auto !important;
   }
 
   .live-doc > :is(header.live-node.bld-row, [data-site-header='true'].bld-row) > .live-node.bld-column:first-child {
@@ -841,7 +984,9 @@
 }
 
 /* Style inspector: per top-level strip — Full (viewport) or Boxed (max-width column). No page-body gate. */
-.live-doc > [data-live-root-strip='full'] {
+.live-doc > [data-live-root-strip='full'],
+.live-doc > :is(header.live-node, [data-site-header='true']):not([data-live-root-strip='boxed']),
+.live-doc > :is(footer.live-node, [data-site-footer='true']):not([data-live-root-strip='boxed']) {
   width: 100vw !important;
   max-width: none !important;
   margin-left: calc(50% - 50vw) !important;
@@ -856,12 +1001,59 @@
   overflow-x: visible !important;
 }
 
+/*
+ * Full-bleed header/footer background + centered inner bar (logo | nav | actions).
+ * `--live-header-content-max-width` may be set inline from section meta / Layout → Content width.
+ */
+/* Spread / full-content headers: edge padding only (no centered column inset). */
+.live-doc > :is(header.live-node, [data-site-header='true'])[data-live-header-content='full']:not([data-header-layout='centered']) {
+  padding-left: clamp(12px, 3vw, 28px) !important;
+  padding-right: clamp(12px, 3vw, 28px) !important;
+  box-sizing: border-box;
+}
+
+.live-doc > :is(header.live-node, [data-site-header='true'])[data-live-header-content='boxed'],
+.live-doc > :is(footer.live-node, [data-site-footer='true'])[data-live-footer-content='boxed'] {
+  --live-landmark-content-inset-x: calc(
+    (100vw - min(100vw, var(--live-header-content-max-width, var(--live-content-max-width, 1280px)))) / 2
+  );
+  padding-left: max(clamp(10px, 3vw, 24px), var(--live-landmark-content-inset-x)) !important;
+  padding-right: max(clamp(10px, 3vw, 24px), var(--live-landmark-content-inset-x)) !important;
+  box-sizing: border-box;
+}                                                                                                                                        
+
 .live-doc > [data-live-root-strip='boxed'] {
-  max-width: min(100%, var(--live-content-max-width, 1200px)) !important;
+  max-width: min(100%, var(--live-content-max-width, 1280px)) !important;
   width: 100%;
   margin-left: auto !important;
   margin-right: auto !important;
   box-sizing: border-box;
+  padding-left: var(--live-content-padding-x, clamp(16px, 3vw, 40px));
+  padding-right: var(--live-content-padding-x, clamp(16px, 3vw, 40px));
+}
+
+/*
+ * Full-bleed section background + centered inner column (default for hero / content strips).
+ * Matches header `data-live-header-content='boxed'` inset math on the live site (100vw).
+ */
+.live-doc > :where(section.live-node, main.live-node).bld-row[data-live-section-content='boxed'],
+.live-doc > [data-live-section-content='boxed'].live-node.bld-row {
+  --live-section-content-inset-x: calc(
+    (100vw - min(100vw, var(--live-section-content-max-width, var(--live-content-max-width, 1280px)))) / 2
+  );
+  padding-left: max(var(--live-content-padding-x, clamp(16px, 3vw, 40px)), var(--live-section-content-inset-x)) !important;
+  padding-right: max(var(--live-content-padding-x, clamp(16px, 3vw, 40px)), var(--live-section-content-inset-x)) !important;
+  box-sizing: border-box;
+}
+
+.live-doc > [data-live-section-content='boxed'].live-node.bld-row > .live-node.bld-column {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.live-doc > [data-live-section-content='boxed'].live-node.bld-row figure.live-node,
+.live-doc > [data-live-section-content='boxed'].live-node.bld-row figure.live-node img {
+  max-width: 100%;
 }
 
 /* Nested section rows: same meta key; no viewport breakout — width is relative to parent column/stack. */
@@ -875,7 +1067,7 @@
 }
 
 .live-doc .live-node.bld-row[data-live-nested-strip='boxed'] {
-  max-width: min(100%, var(--live-content-max-width, 1200px)) !important;
+  max-width: min(100%, var(--live-content-max-width, 1280px)) !important;
   width: 100%;
   margin-left: auto !important;
   margin-right: auto !important;
@@ -912,11 +1104,7 @@
   min-width: 0;
 }
 
-/* Responsive menu: desktop links vs mobile hamburger */
-.live-site .menu__mobile {
-  display: none;
-}
-
+/* Responsive menu: desktop links vs mobile hamburger (Menu.jsx + shared/menu.css) */
 .live-site .menu__desktop {
   display: flex;
   align-items: center;
@@ -1010,7 +1198,11 @@
     align-items: stretch !important;
   }
 
-  .live-doc > :where(section.live-node.bld-row, main.live-node.bld-row, .live-node.bld-row) > .live-node.bld-column {
+  .live-doc
+    > :where(section.live-node.bld-row, main.live-node.bld-row, .live-node.bld-row):not([data-site-header='true']):not(
+      [data-site-footer='true']
+    )
+    > .live-node.bld-column {
     width: 100% !important;
     max-width: 100% !important;
   }
@@ -1021,205 +1213,6 @@
     min-width: 0;
   }
 
-  /* Header: keep it readable on small screens (logo + hamburger, then actions). */
-  .live-doc > header.live-node.bld-row {
-    flex-wrap: nowrap;
-    row-gap: 0;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  /* Logo + nav stay on one line */
-  .live-doc > header.live-node.bld-row > .live-node.bld-column {
-    width: auto;
-    min-width: 0;
-  }
-
-  .live-doc > header.live-node.bld-row > .live-node.bld-column:first-child {
-    flex: 0 0 auto;
-  }
-
-  .live-doc > header.live-node.bld-row > .live-node.bld-column:has(nav.menu) {
-    flex: 1 1 auto;
-  }
-
-  /* Nav column: keep hamburger aligned to the right. */
-  .live-doc > header.live-node.bld-row > .live-node.bld-column:has(nav.menu) {
-    display: flex !important;
-    justify-content: flex-end !important;
-    align-items: center;
-  }
-
-  /* Actions column: center buttons and allow wrap. */
-  .live-doc > header.live-node.bld-row > .live-node.bld-column:has(.live-node.bld-stack > button),
-  .live-doc > header.live-node.bld-row > .live-node.bld-column:has(.live-node.bld-stack > a) {
-    display: flex;
-    justify-content: center;
-  }
-
-  .live-doc > header.live-node .live-node.bld-stack {
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 10px;
-  }
-
-  .live-doc > header.live-node .live-node.bld-stack > button,
-  .live-doc > header.live-node .live-node.bld-stack > a {
-    flex: 0 0 auto;
-    max-width: 100%;
-  }
-
-  /* First view (collapsed): show only logo + hamburger, hide header action buttons. */
-  .live-doc > header.live-node.bld-row
-    > .live-node.bld-column:has(.live-node.bld-stack .live-action-button-wrap),
-  .live-doc > header.live-node.bld-row
-    > .live-node.bld-column:has(.live-node.bld-stack > button),
-  .live-doc > header.live-node.bld-row
-    > .live-node.bld-column:has(.live-node.bld-stack > a) {
-    display: none !important;
-  }
-
-  /* Keep logo from pushing hamburger offscreen */
-  .live-doc > header.live-node img {
-    max-width: 180px;
-    height: auto;
-  }
-
-  /* When hamburger is open: show header action buttons INSIDE the drawer (bottom).
-     Use site-level :has so it works regardless of column order. */
-  .live-site:has(details.menu__mobile[open])
-    .live-doc > header.live-node.bld-row
-    > .live-node.bld-column:has(.live-node.bld-stack .live-action-button-wrap),
-  .live-site:has(details.menu__mobile[open])
-    .live-doc > header.live-node.bld-row
-    > .live-node.bld-column:has(.live-node.bld-stack > button),
-  .live-site:has(details.menu__mobile[open])
-    .live-doc > header.live-node.bld-row
-    > .live-node.bld-column:has(.live-node.bld-stack > a) {
-    display: block !important;
-    position: fixed !important;
-    left: 18px;
-    right: 18px;
-    bottom: 18px;
-    z-index: 20001;
-    pointer-events: auto;
-  }
-
-  .live-site:has(details.menu__mobile[open])
-    .live-doc > header.live-node.bld-row
-    > .live-node.bld-column:has(.live-node.bld-stack .live-action-button-wrap)
-    .live-node.bld-stack,
-  .live-site:has(details.menu__mobile[open])
-    .live-doc > header.live-node.bld-row
-    > .live-node.bld-column:has(.live-node.bld-stack > button)
-    .live-node.bld-stack,
-  .live-site:has(details.menu__mobile[open])
-    .live-doc > header.live-node.bld-row
-    > .live-node.bld-column:has(.live-node.bld-stack > a)
-    .live-node.bld-stack {
-    display: grid;
-    gap: 10px;
-    justify-items: stretch;
-  }
-
-  .live-site:has(details.menu__mobile[open])
-    .live-doc > header.live-node.bld-row
-    > .live-node.bld-column:has(.live-node.bld-stack .live-action-button-wrap)
-    .live-node.bld-stack > .live-action-button-wrap,
-  .live-site:has(details.menu__mobile[open])
-    .live-doc > header.live-node.bld-row
-    > .live-node.bld-column:has(.live-node.bld-stack > button)
-    .live-node.bld-stack > button,
-  .live-site:has(details.menu__mobile[open])
-    .live-doc > header.live-node.bld-row
-    > .live-node.bld-column:has(.live-node.bld-stack > a)
-    .live-node.bld-stack > a {
-    width: 100%;
-    text-align: center;
-  }
-
-  .live-site:has(details.menu__mobile[open])
-    .live-doc > header.live-node.bld-row
-    > .live-node.bld-column:has(.live-node.bld-stack .live-action-button-wrap)
-    .live-action-button-wrap > button {
-    width: 100%;
-  }
-
-  .live-site .menu__desktop {
-    display: none;
-  }
-  .live-site .menu__mobile {
-    display: block;
-  }
-  .live-site nav.menu {
-    overflow: visible;
-  }
-  .live-site .menu__panel .menu-item {
-    display: block;
-    width: 100%;
-  }
-
-  /* Mobile menu drawer */
-  .live-site nav.menu {
-    position: relative;
-  }
-
-  .live-site .menu__mobile[open] .menu__panel {
-    position: fixed;
-    inset: 0;
-    margin: 0;
-    border-radius: 0;
-    padding: 72px 18px 120px;
-    background: var(--color-background, #fff);
-    box-shadow: none;
-    z-index: 20000;
-    align-content: start;
-  }
-
-  .live-site .menu__mobile[open] .menu__panel::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background: var(--color-background, #fff);
-    z-index: -1;
-  }
-
-  .live-site .menu__mobile[open] .menu-item {
-    padding: 14px 12px;
-    border-radius: 10px;
-    border: 1px solid color-mix(in srgb, var(--bld-border, #e2e8f0) 65%, transparent);
-    background: color-mix(in srgb, var(--color-background, #fff) 98%, #fff 2%);
-  }
-
-  /* Make hamburger become a close button when open */
-  .live-site .menu__mobile[open] > .menu__hamburger {
-    position: fixed;
-    top: 18px;
-    right: 18px;
-    z-index: 20001;
-    border: none;
-    background: transparent;
-    padding: 10px;
-    border-radius: 10px;
-  }
-
-  .live-site .menu__mobile[open] .menu__hamburger-lines {
-    background: transparent;
-    width: 18px;
-  }
-
-  .live-site .menu__mobile[open] .menu__hamburger-lines::before,
-  .live-site .menu__mobile[open] .menu__hamburger-lines::after {
-    top: 0;
-  }
-
-  .live-site .menu__mobile[open] .menu__hamburger-lines::before {
-    transform: rotate(45deg);
-  }
-
-  .live-site .menu__mobile[open] .menu__hamburger-lines::after {
-    transform: rotate(-45deg);
-  }
 }
 
 @media (max-width: 1024px) {
@@ -1229,9 +1222,45 @@
     row-gap: 16px;
   }
 
-  .live-doc > :where(section.live-node.bld-row, main.live-node.bld-row, .live-node.bld-row) > .live-node.bld-column {
+  .live-doc
+    > :where(section.live-node.bld-row, main.live-node.bld-row, .live-node.bld-row):not([data-site-header='true']):not(
+      [data-site-footer='true']
+    )
+    > .live-node.bld-column {
     flex: 1 1 320px;
     min-width: 0;
+  }
+
+  /* Compact header bar: styles/shared/site-header-bar.css (viewport + .site-header-* classes) */
+  .live-doc:not([data-bld-device]) > :is(header.live-node, [data-site-header='true']) {
+    overflow-x: visible !important;
+  }
+
+  .live-doc:not([data-bld-device]) > :is(header.live-node, [data-site-header='true']) img {
+    max-width: min(180px, 48vw);
+    height: auto;
+  }
+
+  .live-site nav.menu[data-mobile-nav='true'] .menu__hamburger,
+  .live-site .menu-adv--mobile.menu-adv--show-hamburger .menu__hamburger {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    color: var(--menu-color, var(--node-text, #1e3a5f));
+  }
+
+  .live-site nav.menu[data-mobile-nav='true'],
+  .live-site nav.menu.menu-adv--mobile {
+    overflow: visible;
+    position: relative;
+    justify-content: flex-end;
+    width: auto;
+    margin-left: auto;
+  }
+
+  .live-site nav.menu[data-mobile-nav='true'] .menu__desktop,
+  .live-site .menu-adv--mobile.menu-adv--show-hamburger .menu__desktop {
+    display: none !important;
   }
 }
 
@@ -1717,4 +1746,26 @@
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* Divider / line widget (horizontal & vertical) */
+.live-divider,
+.bld-demo-divider {
+  display: block;
+  box-sizing: border-box;
+  border: none;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.live-divider[aria-orientation='vertical'] {
+  min-height: 24px;
+  align-self: stretch;
+}
+
+.live-divider[aria-orientation='horizontal'] {
+  width: 100%;
+  max-width: 100%;
 }

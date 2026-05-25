@@ -59,6 +59,18 @@ function defaultMetaByTemplateId(id) {
       category: 'headers',
       icon: 'HDR',
     },
+    headerspread: {
+      title: 'Header',
+      description: 'Full width (screen) — logo left, menu center, buttons right.',
+      category: 'headers',
+      icon: '↔',
+    },
+    headerboxed: {
+      title: 'Header',
+      description: 'Contained — logo, menu, and buttons in the content column.',
+      category: 'headers',
+      icon: '▣',
+    },
     hero: {
       title: 'Hero',
       description: 'Headline, supporting text, and primary action.',
@@ -104,6 +116,8 @@ function getMarketplaceTemplates() {
   const builtIns = [
     { id: 'starter', type: 'starter' },
     { id: 'header', type: 'section' },
+    { id: 'headerSpread', type: 'section' },
+    { id: 'headerBoxed', type: 'section' },
     { id: 'hero', type: 'section' },
     { id: 'trustLogos', type: 'section' },
     { id: 'features', type: 'section' },
@@ -190,8 +204,8 @@ export default function TemplateMarketplace({
       await onInsertStarterTemplate?.({});
       return;
     }
-    if (t.id === 'header') {
-      await onInsertHeaderTemplate?.();
+    if (t.id === 'header' || t.id === 'headerSpread' || t.id === 'headerBoxed') {
+      await onInsertSectionTemplate?.(t.id === 'header' ? 'headerBoxed' : t.id);
       return;
     }
     await onInsertSectionTemplate?.(t.id);

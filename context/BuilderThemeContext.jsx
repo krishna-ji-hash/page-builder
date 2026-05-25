@@ -46,7 +46,10 @@ function writeSiteThemeCache(projectId, theme) {
  * @property {() => Promise<void>} [onRevisionConflict] — e.g. reload builder state after 409
  */
 
-export function BuilderThemeProvider({ children, persistence = null }) {
+/**
+ * @param {{ current: (() => Promise<void>) | null }} [persistFlushRef] — optional ref assigned to flush debounced site-theme PATCH (e.g. before publish)
+ */
+export function BuilderThemeProvider({ children, persistence = null, persistFlushRef = null }) {
   const [theme, setTheme] = useState('dark');
   const [siteTheme, setSiteThemeState] = useState(() => DEFAULT_SITE_THEME);
   const [siteThemePersist, setSiteThemePersist] = useState({ status: 'idle', error: '' });
@@ -54,6 +57,13 @@ export function BuilderThemeProvider({ children, persistence = null }) {
   const lastSavedJsonRef = useRef('');
   const persistenceRef = useRef(persistence);
   persistenceRef.current = persistence;
+  const themeRef = useRef(theme);
+  themeRef.current = theme;
+  const siteThemeRef = useRef(siteTheme);
+  siteThemeRef.current = siteTheme;
+  const persistDebounceTimerRef = useRef(null);
+  const persistDebounceAbortRef = useRef(null);
+  const persistInFlightRef = useRef(null);
 
   useEffect(() => {
     const saved = window.localStorage.getItem(STORAGE_UI);
@@ -68,6 +78,92 @@ export function BuilderThemeProvider({ children, persistence = null }) {
 
   const projectId = persistence?.projectId;
   const currentPageSlug = persistence?.pageSlug;
+
+  const runPersistSiteTheme = useCallback(async (payload, signal) => {
+    const prev = persistInFlightRef.current;
+    if (prev) {
+      try {
+        await prev;
+      } catch {
+        // previous failure should not block the next persist attempt
+      }
+    }
+    const pid = persistenceRef.current?.projectId;
+    if (!pid) return;
+    const payloadJson = JSON.stringify(payload);
+    if (payloadJson === lastSavedJsonRef.current) {
+      setSiteThemePersist({ status: 'idle', error: '' });
+      return;
+    }
+    const job = (async () => {
+      try {
+        const response = await fetch(`/api/projects/${pid}/site-theme`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            siteTheme: payload,
+            ifRevision: payload.revision,
+          }),
+          signal,
+        });
+        const data = await response.json().catch(() => ({}));
+        if (response.status === 409) {
+          try {
+            await persistenceRef.current?.onRevisionConflict?.();
+            setSiteThemePersist({ status: 'idle', error: '' });
+          } catch (reloadErr) {
+            const msg = reloadErr instanceof Error ? reloadErr.message : String(reloadErr);
+            setSiteThemePersist({ status: 'error', error: msg });
+            persistenceRef.current?.onPersistError?.(msg);
+          }
+          return;
+        }
+        if (!response.ok) {
+          const err = data?.error || `Save failed (${response.status})`;
+          throw new Error(err);
+        }
+        const normalized = normalizeSiteTheme(data?.siteTheme ?? payload);
+        lastSavedJsonRef.current = JSON.stringify(normalized);
+        writeSiteThemeCache(pid, normalized);
+        persistenceRef.current?.onSiteThemeSaved?.(normalized);
+        setSiteThemePersist({ status: 'saved', error: '' });
+      } catch (e) {
+        if (e?.name === 'AbortError') return;
+        const message = e instanceof Error ? e.message : String(e);
+        setSiteThemePersist({ status: 'error', error: message });
+        persistenceRef.current?.onPersistError?.(message);
+      }
+    })();
+    persistInFlightRef.current = job;
+    try {
+      await job;
+    } finally {
+      if (persistInFlightRef.current === job) {
+        persistInFlightRef.current = null;
+      }
+    }
+  }, []);
+
+  const flushPendingSiteThemeSave = useCallback(async () => {
+    if (persistDebounceTimerRef.current != null) {
+      clearTimeout(persistDebounceTimerRef.current);
+      persistDebounceTimerRef.current = null;
+    }
+    if (persistDebounceAbortRef.current) {
+      persistDebounceAbortRef.current.abort();
+      persistDebounceAbortRef.current = null;
+    }
+    const payload = siteThemeRef.current;
+    await runPersistSiteTheme(payload, undefined);
+  }, [runPersistSiteTheme]);
+
+  useLayoutEffect(() => {
+    if (!persistFlushRef) return undefined;
+    persistFlushRef.current = flushPendingSiteThemeSave;
+    return () => {
+      persistFlushRef.current = null;
+    };
+  }, [persistFlushRef, flushPendingSiteThemeSave]);
 
   useLayoutEffect(() => {
     if (!projectId) return;
@@ -89,58 +185,37 @@ export function BuilderThemeProvider({ children, persistence = null }) {
     const json = JSON.stringify(siteTheme);
     if (json === lastSavedJsonRef.current) return;
 
+    if (persistDebounceTimerRef.current != null) {
+      clearTimeout(persistDebounceTimerRef.current);
+      persistDebounceTimerRef.current = null;
+    }
+    if (persistDebounceAbortRef.current) {
+      persistDebounceAbortRef.current.abort();
+      persistDebounceAbortRef.current = null;
+    }
+
     const controller = new AbortController();
-    const timer = setTimeout(async () => {
-      const payload = siteTheme;
-      const payloadJson = JSON.stringify(payload);
-      if (payloadJson === lastSavedJsonRef.current) {
-        setSiteThemePersist({ status: 'idle', error: '' });
-        return;
-      }
-      try {
-        const response = await fetch(`/api/projects/${projectId}/site-theme`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            siteTheme: payload,
-            ifRevision: payload.revision,
-          }),
-          signal: controller.signal,
-        });
-        const data = await response.json().catch(() => ({}));
-        if (response.status === 409) {
-          try {
-            await persistenceRef.current?.onRevisionConflict?.();
-            setSiteThemePersist({ status: 'idle', error: '' });
-          } catch (reloadErr) {
-            const msg = reloadErr instanceof Error ? reloadErr.message : String(reloadErr);
-            setSiteThemePersist({ status: 'error', error: msg });
-            persistenceRef.current?.onPersistError?.(msg);
-          }
-          return;
+    persistDebounceAbortRef.current = controller;
+    persistDebounceTimerRef.current = setTimeout(() => {
+      persistDebounceTimerRef.current = null;
+      void runPersistSiteTheme(siteTheme, controller.signal).finally(() => {
+        if (persistDebounceAbortRef.current === controller) {
+          persistDebounceAbortRef.current = null;
         }
-        if (!response.ok) {
-          const err = data?.error || `Save failed (${response.status})`;
-          throw new Error(err);
-        }
-        const normalized = normalizeSiteTheme(data?.siteTheme ?? payload);
-        lastSavedJsonRef.current = JSON.stringify(normalized);
-        writeSiteThemeCache(projectId, normalized);
-        persistenceRef.current?.onSiteThemeSaved?.(normalized);
-        setSiteThemePersist({ status: 'saved', error: '' });
-      } catch (e) {
-        if (e?.name === 'AbortError') return;
-        const message = e instanceof Error ? e.message : String(e);
-        setSiteThemePersist({ status: 'error', error: message });
-        persistenceRef.current?.onPersistError?.(message);
-      }
+      });
     }, 550);
 
     return () => {
-      clearTimeout(timer);
+      if (persistDebounceTimerRef.current != null) {
+        clearTimeout(persistDebounceTimerRef.current);
+        persistDebounceTimerRef.current = null;
+      }
       controller.abort();
+      if (persistDebounceAbortRef.current === controller) {
+        persistDebounceAbortRef.current = null;
+      }
     };
-  }, [siteTheme, projectId]);
+  }, [siteTheme, projectId, runPersistSiteTheme]);
 
   const setSiteTheme = useCallback((next) => {
     setSiteThemeState((prev) => {
@@ -162,6 +237,14 @@ export function BuilderThemeProvider({ children, persistence = null }) {
       );
     });
   }, []);
+
+  /** Builder chrome + published site tokens: live reads `projectConfig.siteTheme`, not local UI storage. */
+  const toggleTheme = useCallback(() => {
+    const current = themeRef.current;
+    const next = current === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    applySitePreset(next === 'dark' ? 'dark' : 'light');
+  }, [applySitePreset]);
 
   const tokens = useMemo(
     () => ({
@@ -214,9 +297,9 @@ export function BuilderThemeProvider({ children, persistence = null }) {
       setTokens,
       siteThemePersist,
       currentPageSlug,
-      toggleTheme: () => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark')),
+      toggleTheme,
     }),
-    [theme, siteTheme, setSiteTheme, applySitePreset, tokens, setTokens, siteThemePersist, currentPageSlug]
+    [theme, siteTheme, setSiteTheme, applySitePreset, toggleTheme, tokens, setTokens, siteThemePersist, currentPageSlug]
   );
 
   return (

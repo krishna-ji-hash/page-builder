@@ -17,7 +17,11 @@
   font-family: var(--font-family-body, system-ui, -apple-system, 'Segoe UI', sans-serif);
   line-height: var(--line-height-base, 1.5);
   color: var(--color-text, #0f172a);
-  background: transparent;
+  /*
+   * Must match `styles/live/live-site.css` — not the builder artboard.
+   * Transparent here made dark-text sections invisible in Dark UI (they sat on --bld-artboard).
+   */
+  background: var(--color-background, #f8fafc);
 }
 
 .bld-builder-root .bld-canvas__live-mirror .live-doc {
@@ -35,12 +39,19 @@
   overflow-x: visible !important;
 }
 
+/* When the site header edit strip is open, give the floated chrome room above the first row. */
+.bld-builder-root .bld-canvas__live-mirror .live-doc:has(> [data-site-header='true'] > .bld-node__chrome--overlay.bld-node__chrome--row) {
+  padding-top: 120px;
+}
+
 /*
  * Live site full-bleed uses `100vw` + negative margins (viewport-relative). The builder artboard is a
  * narrow column in the app — that math shifts the header row sideways so logo / CTA columns sit off-screen.
  * In the mirror only, keep full strips artboard-wide so the header grid matches what you see on publish.
  */
-.bld-builder-root .bld-canvas__live-mirror .live-doc > [data-live-root-strip='full'] {
+.bld-builder-root .bld-canvas__live-mirror .live-doc > [data-live-root-strip='full'],
+.bld-builder-root .bld-canvas__live-mirror .live-doc > :is(header.live-node, [data-site-header='true']):not([data-live-root-strip='boxed']),
+.bld-builder-root .bld-canvas__live-mirror .live-doc > :is(footer.live-node, [data-site-footer='true']):not([data-live-root-strip='boxed']) {
   width: 100% !important;
   max-width: none !important;
   margin-left: 0 !important;
@@ -48,6 +59,32 @@
   position: relative !important;
   left: auto !important;
   right: auto !important;
+}
+
+.bld-builder-root .bld-canvas__live-mirror .live-doc > :is(header.live-node, [data-site-header='true'])[data-live-header-content='boxed'],
+.bld-builder-root .bld-canvas__live-mirror .live-doc > :is(header.live-node, [data-site-header='true'])[data-live-header-content='full']:not([data-header-layout='centered']) {
+  padding-left: clamp(8px, 2vw, 24px) !important;
+  padding-right: clamp(8px, 2vw, 24px) !important;
+  box-sizing: border-box;
+}
+
+.bld-builder-root .bld-canvas__live-mirror .live-doc > :is(footer.live-node, [data-site-footer='true'])[data-live-footer-content='boxed'] {
+  --live-landmark-content-inset-x: calc(
+    (100% - min(100%, var(--live-header-content-max-width, var(--live-content-max-width, 1280px)))) / 2
+  );
+  padding-left: max(clamp(8px, 2vw, 24px), var(--live-landmark-content-inset-x)) !important;
+  padding-right: max(clamp(8px, 2vw, 24px), var(--live-landmark-content-inset-x)) !important;
+  box-sizing: border-box;
+}
+
+/* Section inner column: artboard-relative inset (not 100vw) so builder matches publish proportions. */
+.bld-builder-root .bld-canvas__live-mirror .live-doc > [data-live-section-content='boxed'].live-node.bld-row {
+  --live-section-content-inset-x: calc(
+    (100% - min(100%, var(--live-section-content-max-width, var(--live-content-max-width, 1280px)))) / 2
+  );
+  padding-left: max(var(--live-content-padding-x, clamp(16px, 3vw, 40px)), var(--live-section-content-inset-x)) !important;
+  padding-right: max(var(--live-content-padding-x, clamp(16px, 3vw, 40px)), var(--live-section-content-inset-x)) !important;
+  box-sizing: border-box;
 }
 
 /* Reset builder demo chrome inside live mirror (inline node styles still win). */
@@ -61,4 +98,68 @@
   color: inherit;
   border-radius: unset;
   padding: unset;
+}
+
+/*
+ * `builder-canvas.css` paints row/column/stack with semi-transparent `--bld-surface` “layout depth”
+ * for the editor. Inside the live mirror that sits on `var(--color-background)` and tints sections
+ * dark in Dark UI while text stays theme-dark → unreadable. Published pages never use these tints.
+ */
+.bld-builder-root .bld-canvas__live-mirror .live-node.bld-row,
+.bld-builder-root .bld-canvas__live-mirror .live-node.bld-row:hover,
+.bld-builder-root .bld-canvas__live-mirror .live-node.bld-row.bld-selected,
+.bld-builder-root .bld-canvas__live-mirror .live-node.bld-column,
+.bld-builder-root .bld-canvas__live-mirror .live-node.bld-column:hover,
+.bld-builder-root .bld-canvas__live-mirror .live-node.bld-column.bld-selected,
+.bld-builder-root .bld-canvas__live-mirror .live-node.bld-stack,
+.bld-builder-root .bld-canvas__live-mirror .live-node.bld-stack:hover,
+.bld-builder-root .bld-canvas__live-mirror .live-node.bld-stack.bld-selected {
+  background: transparent;
+  background-image: none;
+}
+
+/* Gutter around the mirror: same as page background so gaps are not `--bld-artboard` in Dark UI. */
+.bld-builder-root .bld-canvas__page:has(> .live-site.bld-canvas__live-mirror) {
+  background-color: var(--color-background, #f8fafc);
+}
+
+/* Rich text preview: explicit fallback so bare `<p>` / unstyled HTML matches live body color. */
+.bld-builder-root .bld-canvas__live-mirror .bld-rich-text--canvas:not(.bld-rich-text--editing) {
+  color: var(--color-text, #0f172a);
+}
+
+.bld-builder-root .bld-canvas__live-mirror figcaption {
+  color: var(--color-text, #0f172a);
+}
+
+/* Match published live: content bands + header/nested hero (parity with live-site.css). */
+.bld-builder-root .bld-canvas__live-mirror .live-doc > :where(section.live-node.bld-row, main.live-node.bld-row):not([data-site-header='true']):not([data-site-footer='true']),
+.bld-builder-root .bld-canvas__live-mirror .live-doc > :is(header.live-node, [data-site-header='true']) > .live-node.bld-row {
+  align-items: flex-start !important;
+  min-height: min-content;
+  overflow: clip;
+}
+
+.bld-builder-root .bld-canvas__live-mirror .live-doc > :where(section.live-node.bld-row, main.live-node.bld-row):not([data-site-header='true']):not([data-site-footer='true']) > .live-node.bld-column,
+.bld-builder-root .bld-canvas__live-mirror .live-doc > :is(header.live-node, [data-site-header='true']) > .live-node.bld-row > .live-node.bld-column {
+  align-self: flex-start !important;
+  min-height: min-content;
+  height: auto;
+}
+
+.bld-builder-root .bld-canvas__live-mirror .live-doc > :is(header.live-node.bld-row, [data-site-header='true'].bld-row):has(> .live-node.bld-row) {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  height: auto !important;
+  overflow: visible;
+  grid-template-columns: unset !important;
+}
+
+/* Header bar: styles/shared/site-header-bar.css */
+
+.bld-builder-root .bld-canvas__live-mirror .live-doc > :is(header.live-node, [data-site-header='true']):has(> .live-node.bld-row) > .live-node.bld-row {
+  flex: 1 1 100% !important;
+  width: 100% !important;
+  order: 99;
 }
