@@ -8,6 +8,7 @@ import { expandCms } from '@/lib/cms/cmsExpand';
 import { getGlobalComponentsByIds } from '@/services/builder/globalComponentsService';
 import * as cmsService from '@/services/builder/cmsService';
 import { resolveMaybeAsyncParams } from '@/lib/routeParams';
+import LiveDoc from '@/components/live/LiveDoc';
 import { getBuilderState } from '@/services/builder/builderService';
 import '@/styles/live/live-site.css';
 import '@/styles/shared/menu.css';
@@ -104,7 +105,7 @@ export default async function DraftPreviewPage({ params }) {
         fontFamily: siteTheme.typography.fontFamily,
       }}
     >
-      <div className="live-doc">
+      <LiveDoc>
         <RuntimeProvider>
           {renderTree(renderNodes, {
             currentPath,
@@ -116,7 +117,7 @@ export default async function DraftPreviewPage({ params }) {
             projectSlug: state.page.projectSlug,
           })}
         </RuntimeProvider>
-      </div>
+      </LiveDoc>
     </div>
   );
 }

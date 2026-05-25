@@ -9,6 +9,7 @@ import { applyBindingsToTree, applyBindingsToString } from '@/lib/cms/cmsBinding
 import { getPageVarsBucket, livePageCssVarOverrides, resolveBodyLayout, resolveContentMaxWidthPx } from '@/lib/livePageCssVars';
 import { resolveSeoMetadata } from '@/lib/seo/seoEngine';
 import JsonLd from '@/components/seo/JsonLd';
+import LiveDoc from '@/components/live/LiveDoc';
 import '@/styles/live/live-site.css';
 import '@/styles/shared/menu.css';
 import '@/styles/shared/button.css';
@@ -97,7 +98,7 @@ export default async function BlogPostRoute({ params }) {
       }}
     >
       <JsonLd data={schemaJsonLd} />
-      <div className="live-doc">
+      <LiveDoc>
         <RuntimeProvider>
           {renderTree(boundNodes, {
             currentPath,
@@ -109,7 +110,7 @@ export default async function BlogPostRoute({ params }) {
             projectSlug,
           })}
         </RuntimeProvider>
-      </div>
+      </LiveDoc>
     </div>
   );
 }

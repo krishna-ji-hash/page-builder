@@ -1,0 +1,37 @@
+/**
+ * Global builder canvas ↔ published site parity.
+ * Canvas uses live-site + liveRenderer; these rules prevent legacy demo chrome from overriding node styles.
+ */
+
+.bld-builder-root .bld-canvas__live-mirror .bld-demo-heading,
+.bld-builder-root .bld-canvas__live-mirror .bld-demo-text,
+.bld-builder-root .bld-canvas__live-mirror .bld-demo-button {
+  margin: 0;
+  font-size: unset;
+  font-weight: unset;
+  line-height: inherit;
+  letter-spacing: unset;
+  text-align: inherit;
+  color: inherit;
+  font-family: inherit;
+  border-radius: unset;
+  padding: unset;
+}
+
+.bld-builder-root .bld-canvas__live-mirror .live-leaf-wrap {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.bld-builder-root .bld-canvas__live-mirror .bld-live-leaf-edit-host {
+  cursor: default;
+}
+
+.bld-builder-root .bld-canvas__live-mirror .bld-demo-faq-accordion,
+.bld-builder-root .bld-canvas__live-mirror .bld-demo-feature-tabs,
+.bld-builder-root .bld-canvas__live-mirror .bld-demo-carousel {
+  width: 100%;
+  min-width: 0;
+  overflow: visible;
+}

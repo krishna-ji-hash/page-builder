@@ -22,6 +22,7 @@ import {
   resolveHeaderLayoutMode,
 } from '@/lib/headerLayoutMode';
 import { repairHeaderRowsInTree } from '@/lib/headerCompactLayout';
+import { getBlankSectionLayout, getBlankSectionLayoutForColumnCount } from '@/lib/blankSectionLayouts';
 import { materializeSectionTemplate, SECTION_TEMPLATES } from '@/lib/sectionTemplates';
 import { getFullPageTemplateById } from '@/lib/fullPageTemplates';
 import { flattenTemplateToBulkNodes } from '@/lib/sectionTemplates';
@@ -50,6 +51,7 @@ import '@/styles/shared/menu.css';
 import '@/styles/shared/button.css';
 import '@/styles/live/live-site.css';
 import '@/styles/builder/builder-live-mirror.css';
+import '@/styles/builder/builder-live-parity.css';
 
 function cloneTreeSnapshot(snapshot) {
   try {
@@ -1898,9 +1900,12 @@ export default function BuilderShell({ pageId }) {
     }
   };
 
-  const handleCreateSection = async ({ columnCount, insertIndex = null }) => {
+  const handleCreateSection = async ({ columnCount, layoutId, insertIndex = null }) => {
     if (isCreatingNode) return;
-    const nextColumnCount = Number(columnCount);
+    const layout =
+      (layoutId && getBlankSectionLayout(layoutId)) ||
+      (columnCount != null ? getBlankSectionLayoutForColumnCount(columnCount) : null);
+    const nextColumnCount = layout?.columns ?? Number(columnCount);
     if (!Number.isInteger(nextColumnCount) || nextColumnCount < 1) return;
     const beforeTree = tree;
     pushHistorySnapshot(beforeTree);
@@ -1911,17 +1916,20 @@ export default function BuilderShell({ pageId }) {
         nodeType: 'row',
         parentNodeId: null,
         displayName: 'Section',
+        ...(layout?.rowStyle_json ? { style_json: layout.rowStyle_json } : {}),
         ...(Number.isInteger(insertIndex) ? { positionIndex: insertIndex } : {}),
       });
       if (!row?.id) throw new Error('Failed to create section');
 
       for (let i = 0; i < nextColumnCount; i += 1) {
+        const colStyle = layout?.columnStyle_json?.(i, nextColumnCount);
         // eslint-disable-next-line no-await-in-loop
         const column = await createNodeRequest({
           nodeType: 'column',
           parentNodeId: row.id,
           displayName: `Column ${i + 1}`,
           positionIndex: i,
+          ...(colStyle ? { style_json: colStyle } : {}),
         });
         if (!column?.id) throw new Error('Failed to create section column');
         // eslint-disable-next-line no-await-in-loop
@@ -4556,6 +4564,7 @@ export default function BuilderShell({ pageId }) {
               device={device}
               onDeviceChange={setDevice}
               selectedNode={selectedNode}
+              onSelectNode={setSelectedNodeId}
               onUpdateNode={handleNodeUpdate}
               projectPages={projectPages}
               projectId={page?.projectId}

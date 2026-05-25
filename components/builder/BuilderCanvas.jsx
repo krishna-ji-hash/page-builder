@@ -20,6 +20,12 @@ import { withResolvedLayoutGap } from '@/lib/layoutGapUtils';
 import { mergeDeviceStyleWithTypeDefaults, mergeMenuDeviceStyle } from '@/lib/nodeLayoutDefaults';
 import { SECTION_TEMPLATES } from '@/lib/sectionTemplates';
 import { mergeImageFigureStyleForShadow } from '@/lib/boxShadowLayout';
+import {
+  buildBuilderLiveRenderOptions,
+  canRenderBuilderLeafViaLive,
+  wrapBuilderLeafForInlineEdit,
+} from '@/lib/builderLiveParity';
+import { renderNode } from '@/lib/liveRenderer';
 import { sanitizeLiveFlowPositionCss, sanitizeLiveRootContentRowCss } from '@/lib/sanitizeLiveLayout';
 import { imageFitMode, mergeImageFigureStyleForContain } from '@/lib/imageFigureStyle';
 import { getRichTextAnimationStyle } from '@/lib/richTextAnimation';
@@ -41,10 +47,12 @@ import {
   rowSectionStripDataAttrs,
   sectionContentDataAttrs,
 } from '@/lib/livePageCssVars';
-import { getDeviceStyle, styleToCss } from '@/lib/styleToCss';
+import { getDeviceStyle, sanitizeInlineMarginCss, styleToCss } from '@/lib/styleToCss';
 import { useBuilderTheme } from '@/context/BuilderThemeContext';
 import { mergeNodeStyleWithSiteTheme, normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesignTheme';
 import Carousel from '@/components/runtime/Carousel';
+import { patchFeatureTabs, resolveFeatureTabsProps } from '@/lib/featureTabsDefaults';
+import { appendFaqItem, patchFaqItems, resolveFaqAccordionProps } from '@/lib/faqAccordionDefaults';
 import Menu from '@/components/runtime/Menu';
 import { applyBindingsToString } from '@/lib/cms/cmsBindings';
 import { isProbablyInlineHtml, sanitizeInlineLeafHtml } from '@/lib/inlineTextHtml';
@@ -365,9 +373,65 @@ function renderNodeContent(
     cmsBindingContext,
     neutralizeBodyColorsPreview = false,
     neutralizeBodyColorsPersist = false,
+    onTabsActiveChange = null,
+    onFeatureTabsPatch = null,
+    onFeatureTabsImageFile = null,
+    onFaqOpenChange = null,
+    onFaqAccordionPatch = null,
+    onFaqAccordionAddItem = null,
+    siteTheme = null,
+    insideSiteHeaderRow = false,
   }
 ) {
   const bind = (s) => (cmsBindingContext ? applyBindingsToString(String(s || ''), cmsBindingContext) : s);
+
+  const builderCanvasHooks =
+    onTabsActiveChange || onFaqOpenChange || sectionEditLocked
+      ? {
+          sectionEditLocked,
+          ...(onTabsActiveChange
+            ? {
+                tabs: {
+                  onActiveTabChange: onTabsActiveChange,
+                  onPatchTab: onFeatureTabsPatch,
+                  onTabImageFile: onFeatureTabsImageFile,
+                },
+              }
+            : {}),
+          ...(onFaqOpenChange
+            ? {
+                accordion: {
+                  onOpenItemChange: onFaqOpenChange,
+                  onPatchItem: onFaqAccordionPatch,
+                  onAddItem: onFaqAccordionAddItem,
+                },
+              }
+            : {}),
+        }
+      : null;
+
+  const liveRenderOptions = buildBuilderLiveRenderOptions({
+    device: device || 'desktop',
+    siteTheme,
+    insideSiteHeaderRow,
+    builderCanvas: builderCanvasHooks,
+  });
+
+  const renderViaLive = () => {
+    if (
+      !canRenderBuilderLeafViaLive(node.nodeType, {
+        inlineEditing: isInlineEditing,
+        richTextEditing: isRichTextEditing,
+        cmsBindingContext: Boolean(cmsBindingContext),
+      })
+    ) {
+      return null;
+    }
+    const preview = renderNode(node, String(node.id ?? 'leaf'), liveRenderOptions);
+    if (preview == null) return null;
+    return wrapBuilderLeafForInlineEdit(node, preview, onInlineEditStart);
+  };
+
   if (node.nodeType === 'heading') {
     const anim = getRichTextAnimationStyle(node.props?.animation || {});
     const HeadingTag = normalizeHeadingTag(node.props?.tag);
@@ -387,29 +451,33 @@ function renderNodeContent(
         />
       );
     }
-    const defaultLabel = 'Heading';
-    if (!cmsBindingContext && isProbablyInlineHtml(rawText)) {
-      const safe = sanitizeInlineLeafHtml(rawText, {
-        neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPreview,
-      });
+    if (cmsBindingContext) {
+      const defaultLabel = 'Heading';
+      if (isProbablyInlineHtml(rawText)) {
+        const safe = sanitizeInlineLeafHtml(rawText, {
+          neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPreview,
+        });
+        return (
+          <HeadingTag
+            className={`bld-demo-heading ${anim.className || ''}`.trim()}
+            style={{ ...(widgetCss || {}), ...(anim.style || {}) }}
+            onDoubleClick={(event) => onInlineEditStart(node, event)}
+            dangerouslySetInnerHTML={{ __html: safe || defaultLabel }}
+          />
+        );
+      }
       return (
         <HeadingTag
           className={`bld-demo-heading ${anim.className || ''}`.trim()}
           style={{ ...(widgetCss || {}), ...(anim.style || {}) }}
           onDoubleClick={(event) => onInlineEditStart(node, event)}
-          dangerouslySetInnerHTML={{ __html: safe || defaultLabel }}
-        />
+        >
+          {bind(rawText || defaultLabel)}
+        </HeadingTag>
       );
     }
-    return (
-      <HeadingTag
-        className={`bld-demo-heading ${anim.className || ''}`.trim()}
-        style={{ ...(widgetCss || {}), ...(anim.style || {}) }}
-        onDoubleClick={(event) => onInlineEditStart(node, event)}
-      >
-        {cmsBindingContext ? bind(rawText || defaultLabel) : rawText || defaultLabel}
-      </HeadingTag>
-    );
+    const liveHeading = renderViaLive();
+    if (liveHeading) return liveHeading;
   }
   if (node.nodeType === 'text') {
     const anim = getRichTextAnimationStyle(node.props?.animation || {});
@@ -430,29 +498,33 @@ function renderNodeContent(
         />
       );
     }
-    const defaultLabel = 'Text block content';
-    if (!cmsBindingContext && isProbablyInlineHtml(rawText)) {
-      const safe = sanitizeInlineLeafHtml(rawText, {
-        neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPreview,
-      });
+    if (cmsBindingContext) {
+      const defaultLabel = 'Text block content';
+      if (isProbablyInlineHtml(rawText)) {
+        const safe = sanitizeInlineLeafHtml(rawText, {
+          neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPreview,
+        });
+        return (
+          <p
+            className={`bld-demo-text ${anim.className || ''}`.trim()}
+            style={{ ...(widgetCss || {}), ...(anim.style || {}) }}
+            onDoubleClick={(event) => onInlineEditStart(node, event)}
+            dangerouslySetInnerHTML={{ __html: safe || defaultLabel }}
+          />
+        );
+      }
       return (
         <p
           className={`bld-demo-text ${anim.className || ''}`.trim()}
           style={{ ...(widgetCss || {}), ...(anim.style || {}) }}
           onDoubleClick={(event) => onInlineEditStart(node, event)}
-          dangerouslySetInnerHTML={{ __html: safe || defaultLabel }}
-        />
+        >
+          {bind(rawText || defaultLabel)}
+        </p>
       );
     }
-    return (
-      <p
-        className={`bld-demo-text ${anim.className || ''}`.trim()}
-        style={{ ...(widgetCss || {}), ...(anim.style || {}) }}
-        onDoubleClick={(event) => onInlineEditStart(node, event)}
-      >
-        {cmsBindingContext ? bind(rawText || defaultLabel) : rawText || defaultLabel}
-      </p>
-    );
+    const liveText = renderViaLive();
+    if (liveText) return liveText;
   }
   if (node.nodeType === 'button') {
     const anim = getRichTextAnimationStyle(node.props?.animation || {});
@@ -468,200 +540,26 @@ function renderNodeContent(
         />
       );
     }
-    return (
-      <button
-        type="button"
-        className={`bld-demo-button ${anim.className || ''}`.trim()}
-        style={{ ...(widgetCss || {}), ...(anim.style || {}) }}
-        onDoubleClick={(event) => onInlineEditStart(node, event)}
-      >
-        {cmsBindingContext ? bind(node.props?.text || 'Button') : node.props?.text || 'Button'}
-      </button>
-    );
-  }
-  if (node.nodeType === 'menu') {
-    return (
-      <Menu
-        items={Array.isArray(node.props?.items) ? node.props.items : [{ label: 'Home', to: '/' }, { label: 'About', to: '/about' }]}
-        orientation={node.props?.orientation === 'column' ? 'column' : 'row'}
-        variant={node.props?.variant}
-        align={node.props?.align}
-        ariaLabel={node.props?.ariaLabel || 'Main navigation'}
-        currentPath="#"
-        mega={node.props?.mega || {}}
-        mobile={node.props?.mobile || {}}
-        sticky={node.props?.sticky || {}}
-        style={widgetCss || undefined}
-        className="live-node bld-demo-menu"
-      />
-    );
-  }
-  if (node.nodeType === 'divider') {
-    return <div className="bld-demo-divider live-divider bld-divider-leaf" aria-hidden />;
-  }
-  if (node.nodeType === 'image') {
-    const objectPosition = mapImageObjectPositionCss(node.props?.imageObjectPosition);
-    const imageStyle = {
-      objectFit: node.props?.imageFit || 'cover',
-      ...(objectPosition ? { objectPosition } : {}),
-      ...(Number(node.props?.imageHeightPx || 0) > 0
-        ? { height: `${Number(node.props?.imageHeightPx || 0)}px` }
-        : {}),
-    };
-    const src = cmsBindingContext ? bind(node.props?.src || '') : node.props?.src || '';
-    const alt = cmsBindingContext ? bind(node.props?.alt || '') : node.props?.alt || '';
-    const figureStyle = mergeImageFigureStyleForShadow(
-      imageFitMode(node.props?.imageFit) === 'contain'
-        ? mergeImageFigureStyleForContain(widgetCss || {})
-        : widgetCss || {},
-      widgetCss?.boxShadow
-    );
-    return (
-      <figure className="bld-demo-image-wrap" style={figureStyle}>
-        <img
-          src={src || node.props?.src || '/builder-placeholder.svg'}
-          alt={alt || node.props?.alt || ''}
-          className="bld-demo-image"
-          style={imageStyle || undefined}
-        />
-        {node.props?.caption ? <figcaption className="bld-demo-image-caption">{node.props.caption}</figcaption> : null}
-      </figure>
-    );
-  }
-  if (node.nodeType === 'table') {
-    const colCount = Array.isArray(node.props?.columns) ? node.props.columns.length : 0;
-    return (
-      <div className="bld-demo-table" style={widgetCss || undefined}>
-        <p className="bld-demo-table__label">Data table{colCount ? ` (${colCount} columns)` : ''}</p>
-      </div>
-    );
-  }
-  if (node.nodeType === 'form') {
-    return (
-      <div className="bld-demo-form" style={widgetCss || undefined}>
-        <p className="bld-demo-form__label">Form (configure fields in inspector)</p>
-      </div>
-    );
-  }
-  if (
-    node.nodeType === 'input' ||
-    node.nodeType === 'textarea' ||
-    node.nodeType === 'select' ||
-    node.nodeType === 'checkbox' ||
-    node.nodeType === 'radio' ||
-    node.nodeType === 'switch' ||
-    node.nodeType === 'date' ||
-    node.nodeType === 'submit'
-  ) {
-    const label = String(node.props?.label || node.displayName || node.nodeType || 'Field');
-    const name = String(node.props?.name || '').trim();
-    const placeholder = String(node.props?.placeholder || '');
-    const required = Boolean(node.props?.required);
-    const type = String(node.props?.type || node.nodeType || 'text');
-    const options = Array.isArray(node.props?.options) ? node.props.options : [];
-
-    return (
-      <div className="bld-demo-field" style={widgetCss || undefined}>
-        <div className="bld-demo-field__head">
-          <span className="bld-demo-field__label">
-            {label}
-            {required ? <span className="bld-demo-field__req"> *</span> : null}
-          </span>
-          <span className="bld-demo-field__meta">
-            {node.nodeType}
-            {name ? ` · ${name}` : ''}
-          </span>
-        </div>
-        {node.nodeType === 'textarea' ? (
-          <textarea className="bld-demo-field__control" placeholder={placeholder} disabled rows={Number(node.props?.rows || 4)} />
-        ) : node.nodeType === 'select' ? (
-          <select className="bld-demo-field__control" disabled defaultValue="">
-            <option value="">{placeholder || 'Select option'}</option>
-            {options.map((opt, i) => {
-              const v = typeof opt === 'string' ? opt : String(opt?.value || '');
-              const l = typeof opt === 'string' ? opt : String(opt?.label || v);
-              return (
-                <option key={`${v}-${i}`} value={v}>
-                  {l}
-                </option>
-              );
-            })}
-          </select>
-        ) : node.nodeType === 'checkbox' || node.nodeType === 'switch' ? (
-          <label className="bld-demo-field__toggle">
-            <input type="checkbox" disabled defaultChecked={Boolean(node.props?.checkedByDefault || node.props?.onByDefault)} />
-            <span>{label}</span>
-          </label>
-        ) : node.nodeType === 'radio' ? (
-          <div className="bld-demo-field__radio">
-            {(options.length ? options : [{ label: 'Option A', value: 'a' }, { label: 'Option B', value: 'b' }]).map((opt, i) => {
-              const v = typeof opt === 'string' ? opt : String(opt?.value || '');
-              const l = typeof opt === 'string' ? opt : String(opt?.label || v);
-              return (
-                <label key={`${v}-${i}`} className="bld-demo-field__toggle">
-                  <input type="radio" disabled name={`demo-${name || node.id}`} />
-                  <span>{l}</span>
-                </label>
-              );
-            })}
-          </div>
-        ) : node.nodeType === 'submit' ? (
-          <button type="button" className="bld-demo-field__submit" disabled>
-            {String(node.props?.text || 'Submit')}
-          </button>
-        ) : (
-          <input className="bld-demo-field__control" type={type === 'email' ? 'email' : type === 'number' ? 'number' : type === 'date' ? 'date' : 'text'} placeholder={placeholder} disabled />
-        )}
-      </div>
-    );
-  }
-  if (node.nodeType === 'carousel') {
-    const slides = Array.isArray(node.props?.slides) ? node.props.slides : [];
-    const carouselVariant =
-      typeof node.props?.variant === 'string' && node.props.variant
-        ? node.props.variant
-        : typeof node.props?.settings?.variant === 'string'
-          ? node.props.settings.variant
-          : undefined;
-    const carouselImageFit = node.props?.imageFit ?? node.props?.settings?.imageFit;
-    const carouselShowOverlay = node.props?.showOverlay ?? node.props?.settings?.showOverlay;
-    const carouselImageObjectPosition = node.props?.imageObjectPosition ?? node.props?.settings?.imageObjectPosition;
-    const carouselTickerDurationSec = node.props?.tickerDurationSec ?? node.props?.settings?.tickerDurationSec;
-    const carouselTransitionEasing = node.props?.transitionEasing ?? node.props?.settings?.transitionEasing;
-    const carouselScrollDirection = node.props?.scrollDirection ?? node.props?.settings?.scrollDirection;
-    const carouselPauseOnHover = node.props?.pauseOnHover ?? node.props?.settings?.pauseOnHover;
-    const carouselAutoplay = node.props?.autoplay ?? node.props?.settings?.autoplay;
-    const carouselLoop = node.props?.loop ?? node.props?.settings?.loop;
-    const carouselInterval =
-      node.props?.interval ?? node.props?.settings?.autoplayMs ?? node.props?.settings?.interval;
-    return (
-      <div className="bld-demo-carousel" style={widgetCss || undefined}>
-        <Carousel
-          slides={slides.length ? slides : [{ title: 'Slide', body: 'Carousel preview' }]}
-          settings={node.props?.settings}
-          device={device || 'desktop'}
-          variant={carouselVariant}
-          autoplay={carouselAutoplay}
-          loop={carouselLoop}
-          showArrows={node.props?.showArrows}
-          showDots={node.props?.showDots}
-          speed={node.props?.speed}
-          interval={carouselInterval}
-          slidesPerView={node.props?.slidesPerView}
-          gap={node.props?.gap}
-          imageFit={carouselImageFit}
-          showOverlay={carouselShowOverlay}
-          imageObjectPosition={carouselImageObjectPosition}
-          tickerDurationSec={carouselTickerDurationSec}
-          transitionEasing={carouselTransitionEasing}
-          scrollDirection={carouselScrollDirection}
-          pauseOnHover={carouselPauseOnHover}
-          style={{ width: '100%', maxWidth: '100%' }}
-        />
-      </div>
-    );
+    if (cmsBindingContext) {
+      return (
+        <button
+          type="button"
+          className={`bld-demo-button ${anim.className || ''}`.trim()}
+          style={{ ...(widgetCss || {}), ...(anim.style || {}) }}
+          onDoubleClick={(event) => onInlineEditStart(node, event)}
+        >
+          {bind(node.props?.text || 'Button')}
+        </button>
+      );
+    }
+    const liveButton = renderViaLive();
+    if (liveButton) return liveButton;
   }
   if (node.nodeType === 'rich_text') {
+    if (!isRichTextEditing) {
+      const liveRich = renderViaLive();
+      if (liveRich) return liveRich;
+    }
     const animRich = getRichTextAnimationStyle(node.props?.animation || {});
     const mergedRt = {
       ...(richBlockStyle || {}),
@@ -682,6 +580,40 @@ function renderNodeContent(
       />
     );
   }
+
+  const liveLeaf = renderViaLive();
+  if (liveLeaf) return liveLeaf;
+
+  if (node.nodeType === 'image') {
+    const objectPosition = mapImageObjectPositionCss(node.props?.imageObjectPosition);
+    const imageStyle = {
+      objectFit: node.props?.imageFit || 'cover',
+      ...(objectPosition ? { objectPosition } : {}),
+      ...(Number(node.props?.imageHeightPx || 0) > 0
+        ? { height: `${Number(node.props?.imageHeightPx || 0)}px` }
+        : {}),
+    };
+    const src = cmsBindingContext ? bind(node.props?.src || '') : node.props?.src || '';
+    const alt = cmsBindingContext ? bind(node.props?.alt || '') : node.props?.alt || '';
+    const figureStyle = mergeImageFigureStyleForShadow(
+      imageFitMode(node.props?.imageFit) === 'contain'
+        ? mergeImageFigureStyleForContain(widgetCss || {})
+        : widgetCss || {},
+      widgetCss?.boxShadow
+    );
+    return (
+      <figure className="bld-demo-image-wrap" style={figureStyle}>
+        <img
+          src={src || '/builder-placeholder.svg'}
+          alt={alt || ''}
+          className="bld-demo-image"
+          style={imageStyle || undefined}
+        />
+        {node.props?.caption ? <figcaption className="bld-demo-image-caption">{node.props.caption}</figcaption> : null}
+      </figure>
+    );
+  }
+
   return null;
 }
 
@@ -1014,6 +946,129 @@ function NodeRenderer({
     Array.isArray(tree) &&
     tree.length > 0 &&
     isNodeEditsDisabledBySectionLock(tree, node.id);
+  const handleTabsActiveChange = useCallback(
+    async (tabId) => {
+      if (sectionEditLocked || !onUpdateNode || node.nodeType !== 'tabs') return;
+      const nextId = String(tabId || '').trim();
+      if (!nextId) return;
+      await onUpdateNode({
+        nodeId: node.id,
+        payload: {
+          props: {
+            ...(node.props || {}),
+            activeTabId: nextId,
+          },
+        },
+      });
+    },
+    [node.id, node.nodeType, node.props, onUpdateNode, sectionEditLocked]
+  );
+  const tabsActiveChangeHandler = node.nodeType === 'tabs' ? handleTabsActiveChange : null;
+  const handleFeatureTabsPatch = useCallback(
+    async (tabId, patch) => {
+      if (sectionEditLocked || !onUpdateNode || node.nodeType !== 'tabs' || !patch) return;
+      const { tabs } = resolveFeatureTabsProps(node.props);
+      const index = tabs.findIndex((t) => t.id === tabId);
+      if (index < 0) return;
+      const nextTabs = patchFeatureTabs(tabs, index, patch);
+      await onUpdateNode({
+        nodeId: node.id,
+        payload: {
+          props: {
+            ...(node.props || {}),
+            tabs: nextTabs,
+          },
+        },
+      });
+    },
+    [node.id, node.nodeType, node.props, onUpdateNode, sectionEditLocked]
+  );
+  const handleFeatureTabsImageFile = useCallback(
+    async (tabId, file) => {
+      if (sectionEditLocked || !onUpdateNode || node.nodeType !== 'tabs' || !file?.type?.startsWith?.('image/')) return;
+      const { tabs } = resolveFeatureTabsProps(node.props);
+      const index = tabs.findIndex((t) => t.id === tabId);
+      if (index < 0) return;
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const src = typeof reader.result === 'string' ? reader.result : '';
+        if (!src) return;
+        const nextTabs = patchFeatureTabs(tabs, index, {
+          imageSrc: src,
+          image: src,
+          imageAlt: String(file.name || '').replace(/\.[^.]+$/, '') || tabs[index]?.label || '',
+        });
+        await onUpdateNode({
+          nodeId: node.id,
+          payload: {
+            props: {
+              ...(node.props || {}),
+              tabs: nextTabs,
+            },
+          },
+        });
+      };
+      reader.readAsDataURL(file);
+    },
+    [node.id, node.nodeType, node.props, onUpdateNode, sectionEditLocked]
+  );
+  const featureTabsPatchHandler = node.nodeType === 'tabs' ? handleFeatureTabsPatch : null;
+  const featureTabsImageHandler = node.nodeType === 'tabs' ? handleFeatureTabsImageFile : null;
+  const handleFaqOpenChange = useCallback(
+    async (itemId) => {
+      if (sectionEditLocked || !onUpdateNode || node.nodeType !== 'accordion') return;
+      const nextId = String(itemId || '').trim();
+      if (String(node.props?.openItemId || '') === nextId) return;
+      await onUpdateNode({
+        nodeId: node.id,
+        payload: {
+          props: {
+            ...(node.props || {}),
+            openItemId: nextId,
+          },
+        },
+      });
+    },
+    [node.id, node.nodeType, node.props, onUpdateNode, sectionEditLocked]
+  );
+  const faqOpenChangeHandler = node.nodeType === 'accordion' ? handleFaqOpenChange : null;
+  const handleFaqAccordionPatch = useCallback(
+    async (itemId, patch) => {
+      if (sectionEditLocked || !onUpdateNode || node.nodeType !== 'accordion' || !patch) return;
+      const { items } = resolveFaqAccordionProps(node.props);
+      const index = items.findIndex((it) => it.id === itemId);
+      if (index < 0) return;
+      const next = patchFaqItems(items, index, patch);
+      await onUpdateNode({
+        nodeId: node.id,
+        payload: {
+          props: {
+            ...(node.props || {}),
+            items: next,
+          },
+        },
+      });
+    },
+    [node.id, node.nodeType, node.props, onUpdateNode, sectionEditLocked]
+  );
+  const faqAccordionPatchHandler = node.nodeType === 'accordion' ? handleFaqAccordionPatch : null;
+  const handleFaqAccordionAddItem = useCallback(async () => {
+    if (sectionEditLocked || !onUpdateNode || node.nodeType !== 'accordion') return;
+    const { items } = resolveFaqAccordionProps(node.props);
+    const next = appendFaqItem(items);
+    const newItem = next[next.length - 1];
+    await onUpdateNode({
+      nodeId: node.id,
+      payload: {
+        props: {
+          ...(node.props || {}),
+          items: next,
+          openItemId: newItem?.id || '',
+        },
+      },
+    });
+  }, [node.id, node.nodeType, node.props, onUpdateNode, sectionEditLocked]);
+  const faqAccordionAddItemHandler = node.nodeType === 'accordion' ? handleFaqAccordionAddItem : null;
   const headingTag = normalizeHeadingTag(node.props?.tag);
   const wpToolbarHeadingId = useId();
   const wpToolbarHeadingSizeId = useId();
@@ -1315,6 +1370,7 @@ function NodeRenderer({
     if (isRootContentRow) {
       nodeCssLiveLayout = sanitizeLiveRootContentRowCss(nodeCssLiveLayout);
     }
+    nodeCssLiveLayout = sanitizeInlineMarginCss(nodeCssLiveLayout);
     /* Shadow reserve margin only on published live — avoids a large empty gap under images in the canvas. */
   }
   const externalPreviewRaw = previewCssByNodeId?.[node.id] || null;
@@ -1325,7 +1381,9 @@ function NodeRenderer({
     externalPreviewRaw
       ? ensureHeaderActionsVisibleCss(externalPreviewRaw)
       : externalPreviewRaw;
-  const inlineStyle = interactionPreviewStyle || externalPreview || nodeCssLiveLayout || undefined;
+  const inlineStyle = sanitizeInlineMarginCss(
+    interactionPreviewStyle || externalPreview || nodeCssLiveLayout || undefined
+  );
   const isImageLeaf = node.nodeType === 'image';
   const imageCssSplit = isImageLeaf ? splitImageNodeCss(inlineStyle) : null;
   const imageShellAlignLive = resolveImageShellAlignFromProps(node.props || {}, imageParentFlexDirection);
@@ -1333,11 +1391,7 @@ function NodeRenderer({
     imageAlignAxes.horizontal || imageAlignAxes.vertical || node.props?.imageBlockAlign;
   const imageShellStyle = (() => {
     if (!isImageLeaf || (!imageCssSplit?.shell && !hasImageAlign)) return undefined;
-    const shellBase = { ...(imageCssSplit?.shell || {}) };
-    if (hasImageAlign) {
-      delete shellBase.margin;
-    }
-    return { ...shellBase, ...imageShellAlignLive };
+    return sanitizeInlineMarginCss({ ...(imageCssSplit?.shell || {}), ...imageShellAlignLive });
   })();
   const imageFigureStyle = imageCssSplit?.figure;
   const isRow = node.nodeType === 'row';
@@ -1676,7 +1730,7 @@ function NodeRenderer({
       }
     }
     const interactiveSelector =
-      'button,input,textarea,select,a,[role="button"],[contenteditable="true"],[contenteditable=""],.bld-transform-handle,.bld-node-controls,.bld-canvas-toolbar,.bld-canvas-toolbar__dropdown';
+      'button,input,textarea,select,a,[role="button"],[role="tab"],.live-feature-tabs__tab,.live-feature-tabs__image-btn,.live-faq-accordion__chevron-btn,.live-faq-accordion__add-btn,.live-faq-accordion__editable,.bld-demo-feature-tabs .live-feature-tabs__copy--editable,[data-bld-feature-tab-field],[contenteditable="true"],[contenteditable=""],.bld-transform-handle,.bld-node-controls,.bld-canvas-toolbar,.bld-canvas-toolbar__dropdown';
     if (target.closest(interactiveSelector)) return;
     startMoveWithMouse(event);
   };
@@ -2218,6 +2272,21 @@ function NodeRenderer({
           ? headingFontSizeRaw
           : headingFontSizeRaw || '__default__';
 
+  const quickToggleTextWrap = async () => {
+    if (node.nodeType !== 'heading' && node.nodeType !== 'text') return;
+    const defaultWs = node.nodeType === 'text' ? 'pre-wrap' : 'normal';
+    const cur = String(deviceStyle?.typography?.whiteSpace || '').trim() || defaultWs;
+    const next = cur === 'nowrap' ? defaultWs : 'nowrap';
+    await commitStylePatch({ typography: { whiteSpace: next } });
+  };
+
+  const textWrapIsNowrap = (() => {
+    if (node.nodeType !== 'heading' && node.nodeType !== 'text') return false;
+    const defaultWs = node.nodeType === 'text' ? 'pre-wrap' : 'normal';
+    const cur = String(deviceStyle?.typography?.whiteSpace || '').trim() || defaultWs;
+    return cur === 'nowrap';
+  })();
+
   const inlineRichToolbarControls = supportsInlineTextEdit ? (
     <div className="bld-wp-toolbar" role="toolbar" aria-label="Text formatting">
       {node.nodeType === 'heading' ? (
@@ -2333,6 +2402,21 @@ function NodeRenderer({
           </button>
         ))}
       </div>
+      {node.nodeType === 'heading' || node.nodeType === 'text' ? (
+        <>
+          <span className="bld-wp-toolbar__sep" aria-hidden />
+          <button
+            type="button"
+            className={`bld-wp-toolbar__icon-btn bld-wp-toolbar__icon-btn--text ${textWrapIsNowrap ? 'is-pressed' : ''}`}
+            title="Single line — text does not wrap (white-space: nowrap)"
+            aria-pressed={textWrapIsNowrap}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => void quickToggleTextWrap()}
+          >
+            No wrap
+          </button>
+        </>
+      ) : null}
     </div>
   ) : null;
 
@@ -2522,6 +2606,21 @@ function NodeRenderer({
     });
   };
 
+  const quickToggleFlexWrap = async () => {
+    const cur = String(deviceStyle?.layout?.flexWrap || 'nowrap').trim() || 'nowrap';
+    const next = cur === 'nowrap' ? 'wrap' : 'nowrap';
+    await applyQuickFlexPatch({
+      layout: {
+        flexDirection: deviceStyle?.layout?.flexDirection || 'row',
+        flexWrap: next,
+        justifyContent: deviceStyle?.layout?.justifyContent || 'flex-start',
+        alignItems: deviceStyle?.layout?.alignItems || 'stretch',
+      },
+    });
+  };
+
+  const flexWrapIsNowrap = String(deviceStyle?.layout?.flexWrap || 'nowrap').trim() !== 'wrap';
+
   /** Main axis from merged style (row = horizontal children, column = vertical). */
   const flexDirForFlip = String(deviceStyle?.layout?.flexDirection || 'row').trim();
   const isColumnMainAxis = flexDirForFlip === 'column' || flexDirForFlip === 'column-reverse';
@@ -2630,6 +2729,16 @@ function NodeRenderer({
         </button>
         <button type="button" className="bld-quick-layout-controls__btn" onClick={quickSpaceBetween} disabled={isSavingNode}>
           Space Between
+        </button>
+        <button
+          type="button"
+          className={`bld-quick-layout-controls__btn ${flexWrapIsNowrap ? 'is-active' : ''}`}
+          onClick={() => void quickToggleFlexWrap()}
+          disabled={isSavingNode}
+          title="Keep children on one row (flex-wrap: nowrap). Off = allow wrapping to next line."
+          aria-pressed={flexWrapIsNowrap}
+        >
+          No wrap
         </button>
         <button type="button" className="bld-quick-layout-controls__btn" onClick={() => quickGapDelta(4)} disabled={isSavingNode}>
           Gap +
@@ -2948,6 +3057,9 @@ function NodeRenderer({
           {...landmarkContentAttrs}
           {...sectionContentAttrs}
           {...rowPaddingDefinedAttrs}
+          {...(node.props?.meta?.sectionTemplate
+            ? { 'data-section-template': String(node.props.meta.sectionTemplate) }
+            : {})}
           {...(node.props?.meta?.isHeader ||
           node.props?.meta?.role === 'header' ||
           isSiteHeaderRowForCompact(node)
@@ -3173,7 +3285,13 @@ function NodeRenderer({
           onClick={handleSelect}
           onMouseDown={maybeStartDirectMove}
           onKeyDown={handleKeyDown}
-          role={isDividerLeaf ? 'separator' : 'button'}
+          role={
+            isDividerLeaf
+              ? 'separator'
+              : node.nodeType === 'tabs' || node.nodeType === 'accordion' || node.nodeType === 'carousel'
+                ? 'group'
+                : 'button'
+          }
           aria-orientation={
             isDividerLeaf
               ? node.props?.orientation === 'vertical'
@@ -3314,6 +3432,14 @@ function NodeRenderer({
                   cmsBindingContext: childCmsContext?.item ? { item: childCmsContext.item, sys: childCmsContext.sys || {} } : null,
                   neutralizeBodyColorsPreview,
                   neutralizeBodyColorsPersist,
+                  onTabsActiveChange: tabsActiveChangeHandler,
+                  onFeatureTabsPatch: featureTabsPatchHandler,
+                  onFeatureTabsImageFile: featureTabsImageHandler,
+                  onFaqOpenChange: faqOpenChangeHandler,
+                  onFaqAccordionPatch: faqAccordionPatchHandler,
+                  onFaqAccordionAddItem: faqAccordionAddItemHandler,
+                  siteTheme,
+                  insideSiteHeaderRow,
                 })}
               </div>
             ) : (
@@ -3337,6 +3463,14 @@ function NodeRenderer({
                 cmsBindingContext: childCmsContext?.item ? { item: childCmsContext.item, sys: childCmsContext.sys || {} } : null,
                 neutralizeBodyColorsPreview,
                 neutralizeBodyColorsPersist,
+                onTabsActiveChange: tabsActiveChangeHandler,
+                onFeatureTabsPatch: featureTabsPatchHandler,
+                onFeatureTabsImageFile: featureTabsImageHandler,
+                onFaqOpenChange: faqOpenChangeHandler,
+                onFaqAccordionPatch: faqAccordionPatchHandler,
+                onFaqAccordionAddItem: faqAccordionAddItemHandler,
+                siteTheme,
+                insideSiteHeaderRow,
               })
             )}
             {null}
@@ -3698,6 +3832,8 @@ function breadcrumbDisplayLabel(n) {
   if (n.nodeType === 'row') return n.displayName || 'Section';
   if (n.nodeType === 'column') return n.displayName || 'Column';
   if (n.nodeType === 'stack') return n.displayName || 'Stack';
+  if (n.nodeType === 'tabs') return 'Feature tabs';
+  if (n.nodeType === 'accordion') return 'FAQ accordion';
   return n.displayName || n.nodeType || 'Block';
 }
 
@@ -4143,11 +4279,19 @@ export default function BuilderCanvas({
     setIsWidgetPickerOpen(true);
   };
 
-  const handleSelectSectionStructure = async (columnCount) => {
+  const handleSelectSectionStructure = async (layoutId) => {
     if (!onCreateSection) return;
-    const nextColumns = Number(columnCount);
-    if (!Number.isInteger(nextColumns) || nextColumns < 1) return;
-    await onCreateSection({ columnCount: nextColumns, insertIndex: sectionInsertIndex });
+    const key = String(layoutId || '').trim();
+    if (!key) return;
+    const asNum = Number(key);
+    if (/^col-\d+$/.test(key) || (Number.isInteger(asNum) && asNum >= 1)) {
+      await onCreateSection({
+        layoutId: /^col-\d+$/.test(key) ? key : `col-${asNum}`,
+        insertIndex: sectionInsertIndex,
+      });
+    } else {
+      await onCreateSection({ layoutId: key, insertIndex: sectionInsertIndex });
+    }
     setIsAddSectionOpen(false);
     setSectionInsertIndex(null);
   };
@@ -4233,8 +4377,10 @@ export default function BuilderCanvas({
       if (meta.isFooter || meta.role === 'footer') return 'Footer';
       return 'Main';
     }
-    if (index === 0) return 'Header';
-    if (index === total - 1) return 'Footer';
+    const row = tree?.[index];
+    const meta = row?.props?.meta || {};
+    if (meta.isHeader || meta.role === 'header') return 'Header';
+    if (meta.isFooter || meta.role === 'footer') return 'Footer';
     return 'Section';
   };
 

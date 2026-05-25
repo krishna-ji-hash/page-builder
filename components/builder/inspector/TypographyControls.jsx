@@ -3,9 +3,9 @@
 const FONT_FAMILIES = ['Inter', 'Roboto', 'Poppins', 'Montserrat', 'Arial', 'Georgia'];
 const FONT_WEIGHTS = ['400', '500', '600', '700'];
 const WHITE_SPACE_OPTIONS = [
-  { value: 'pre-wrap', label: 'pre-wrap — line breaks (Enter / new lines)' },
-  { value: 'normal', label: 'normal — flowing paragraph' },
-  { value: 'nowrap', label: 'nowrap — no wrap' },
+  { value: 'nowrap', label: 'No wrap — single line' },
+  { value: 'normal', label: 'Wrap — normal (headings)' },
+  { value: 'pre-wrap', label: 'Wrap — keep line breaks (text blocks)' },
 ];
 
 export default function TypographyControls({ form, onUpdate, selectedNodeType = '' }) {
@@ -80,7 +80,7 @@ export default function TypographyControls({ form, onUpdate, selectedNodeType = 
       </div>
       {showWhitespace ? (
         <div className="bld-field">
-          <label className="bld-label">White space / line breaks</label>
+          <label className="bld-label">Text wrapping</label>
           <select
             className="bld-input"
             value={form.whiteSpace || (selectedNodeType === 'text' ? 'pre-wrap' : 'normal')}

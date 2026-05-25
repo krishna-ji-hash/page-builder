@@ -133,14 +133,15 @@
 }
 
 /* Match published live: content bands + header/nested hero (parity with live-site.css). */
-.bld-builder-root .bld-canvas__live-mirror .live-doc > :where(section.live-node.bld-row, main.live-node.bld-row):not([data-site-header='true']):not([data-site-footer='true']),
+.bld-builder-root .bld-canvas__live-mirror .live-doc > :where(section.live-node.bld-row, main.live-node.bld-row):not([data-site-header='true']):not([data-site-footer='true']):not([data-section-template]),
 .bld-builder-root .bld-canvas__live-mirror .live-doc > :is(header.live-node, [data-site-header='true']) > .live-node.bld-row {
   align-items: flex-start !important;
   min-height: min-content;
-  overflow: clip;
+  overflow-x: clip;
+  overflow-y: visible;
 }
 
-.bld-builder-root .bld-canvas__live-mirror .live-doc > :where(section.live-node.bld-row, main.live-node.bld-row):not([data-site-header='true']):not([data-site-footer='true']) > .live-node.bld-column,
+.bld-builder-root .bld-canvas__live-mirror .live-doc > :where(section.live-node.bld-row, main.live-node.bld-row):not([data-site-header='true']):not([data-site-footer='true']):not([data-section-template]) > .live-node.bld-column,
 .bld-builder-root .bld-canvas__live-mirror .live-doc > :is(header.live-node, [data-site-header='true']) > .live-node.bld-row > .live-node.bld-column {
   align-self: flex-start !important;
   min-height: min-content;
@@ -154,6 +155,81 @@
   height: auto !important;
   overflow: visible;
   grid-template-columns: unset !important;
+}
+
+/* Feature tabs: full image height + section padding visible in builder mirror */
+.bld-builder-root .bld-canvas__live-mirror .live-doc > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='featureTabs'] {
+  align-items: stretch !important;
+  overflow-y: visible !important;
+}
+
+.bld-builder-root
+  .bld-canvas__live-mirror
+  .live-doc
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='featureTabs']
+  > .live-node.bld-column,
+.bld-builder-root
+  .bld-canvas__live-mirror
+  .live-doc
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='featureTabs']
+  > .live-node.bld-column
+  > .live-node.bld-stack {
+  align-self: stretch !important;
+  overflow: visible !important;
+  min-height: min-content;
+}
+
+.bld-builder-root .bld-canvas__live-mirror .live-doc > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='faq'] {
+  align-items: stretch !important;
+  overflow-y: visible !important;
+}
+
+.bld-builder-root
+  .bld-canvas__live-mirror
+  .live-doc
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='faq']
+  > .live-node.bld-column,
+.bld-builder-root
+  .bld-canvas__live-mirror
+  .live-doc
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='faq']
+  > .live-node.bld-column
+  > .live-node.bld-stack {
+  align-self: stretch !important;
+  overflow: visible !important;
+  min-height: min-content;
+}
+
+.bld-builder-root .bld-canvas__live-mirror .live-doc > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='resourcesBlogs'] {
+  align-items: stretch !important;
+  overflow-y: visible !important;
+}
+
+.bld-builder-root
+  .bld-canvas__live-mirror
+  .live-doc
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='resourcesBlogs']
+  > .live-node.bld-column,
+.bld-builder-root
+  .bld-canvas__live-mirror
+  .live-doc
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='resourcesBlogs']
+  > .live-node.bld-column
+  > .live-node.bld-stack {
+  align-self: stretch !important;
+  overflow: visible !important;
+  min-height: min-content;
+}
+
+.bld-builder-root .bld-canvas__live-mirror .bld-demo-faq-accordion,
+.bld-builder-root .bld-canvas__live-mirror .live-faq-accordion {
+  font-family: var(
+    --font-family-body,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif
+  );
 }
 
 /* Header bar: styles/shared/site-header-bar.css */

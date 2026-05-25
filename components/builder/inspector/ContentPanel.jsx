@@ -11,6 +11,8 @@ import MediaLibraryModal from '@/components/builder/media/MediaLibraryModal';
 import MenuTreeEditor from '@/components/builder/inspector/MenuTreeEditor';
 import CmsBindingsPanel from '@/components/builder/inspector/CmsBindingsPanel';
 import InspectorTipChips from '@/components/builder/inspector/InspectorTipChips';
+import FeatureTabsControls from '@/components/builder/inspector/FeatureTabsControls';
+import FaqAccordionControls from '@/components/builder/inspector/FaqAccordionControls';
 
 export default function ContentPanel({ selectedNode, form, onChange, jsonErrors = {}, projectPages = [], projectId }) {
   const [mediaOpen, setMediaOpen] = useState(false);
@@ -45,6 +47,17 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
           image: item.publicUrl,
           imageAlt: item.altText || '',
           imageTitle: item.title || '',
+        },
+      });
+    } else if (typeof mediaPickTarget === 'object' && mediaPickTarget?.type === 'featureTab') {
+      const idx = Number(mediaPickTarget.index);
+      if (!Number.isInteger(idx) || idx < 0) return;
+      onChange('featureTabsPatch', {
+        index: idx,
+        patch: {
+          imageSrc: item.publicUrl,
+          image: item.publicUrl,
+          imageAlt: item.altText || '',
         },
       });
     }
@@ -134,6 +147,8 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
   const isForm = selectedNode.nodeType === 'form';
   const isRichText = selectedNode.nodeType === 'rich_text';
   const isCarousel = selectedNode.nodeType === 'carousel';
+  const isTabs = selectedNode.nodeType === 'tabs';
+  const isAccordion = selectedNode.nodeType === 'accordion';
   const isDivider = selectedNode.nodeType === 'divider';
   const carouselVariantKey =
     isCarousel && ['image', 'hero', 'card', 'logo', 'ticker', 'marquee'].includes(form.carouselVariant)
@@ -1188,6 +1203,22 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
             </div>
           </details>
         </>
+      ) : null}
+      {isTabs ? (
+        <FeatureTabsControls
+          selectedNode={selectedNode}
+          form={form}
+          onChange={onChange}
+          jsonErrors={jsonErrors}
+        />
+      ) : null}
+      {isAccordion ? (
+        <FaqAccordionControls
+          selectedNode={selectedNode}
+          form={form}
+          onChange={onChange}
+          jsonErrors={jsonErrors}
+        />
       ) : null}
       {isTable ? (
         <>

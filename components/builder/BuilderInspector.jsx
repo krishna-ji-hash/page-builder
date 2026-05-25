@@ -14,6 +14,8 @@ import {
 } from '@/lib/menuMobile';
 import { normalizeMenuItems } from '@/lib/menuItems';
 import { mergeDeviceStyleWithTypeDefaults, mergeMenuDeviceStyle } from '@/lib/nodeLayoutDefaults';
+import { normalizeFeatureTabs, patchFeatureTabs } from '@/lib/featureTabsDefaults';
+import { appendFaqItem, normalizeFaqItems, patchFaqItems, removeFaqItemAt } from '@/lib/faqAccordionDefaults';
 import { finalizeLeafDeviceStyle } from '@/lib/leafStylePipeline';
 import { mergeNodeStyleWithSiteTheme, themeSpacingPx } from '@/lib/siteDesignTheme';
 import { GAP_SCALE_IDS, inferGapScaleFromPx, withResolvedLayoutGap } from '@/lib/layoutGapUtils';
@@ -36,7 +38,7 @@ import OverflowSuggestions from './inspector/OverflowSuggestions';
 import { getGlobalLinkMeta, isLinkedGlobalPlaceholder } from '@/lib/globalComponentLinkMeta';
 import { isRootPageRow } from '@/lib/liveDocSectionSpacing';
 import { resolveSectionWidthMode, SECTION_WIDTH_MODES } from '@/lib/liveContentContainer';
-import { findAncestorRowNode, findNodeInTree } from '@/lib/builderTree';
+import { findAncestorRowNode, findDescendantNodeByType, findNodeInTree } from '@/lib/builderTree';
 import {
   dividerOrientationFromProps,
   dividerSizePatchForOrientation,
@@ -48,6 +50,8 @@ function inspectorRoleLabel(node) {
   if (node.nodeType === 'row') return 'Section';
   if (node.nodeType === 'column') return 'Column';
   if (node.nodeType === 'stack') return 'Stack';
+  if (node.nodeType === 'tabs') return 'Feature tabs';
+  if (node.nodeType === 'accordion') return 'FAQ accordion';
   return 'Widget';
 }
 
@@ -269,11 +273,28 @@ export default function BuilderInspector({
   onInsertDivider,
   canInsertDivider = true,
   isCreatingNode = false,
+  onSelectNode,
 }) {
   const [internalTab, setInternalTab] = useState('content');
   const activeTab = activeTabProp || internalTab;
   const setActiveTab = onActiveTabChange || setInternalTab;
   const { siteTheme } = useBuilderTheme();
+
+  useEffect(() => {
+    if (selectedNode?.nodeType === 'tabs' || selectedNode?.nodeType === 'accordion') {
+      setActiveTab('content');
+    }
+  }, [selectedNode?.id, selectedNode?.nodeType, setActiveTab]);
+
+  const nestedFeatureTabsNode = useMemo(() => {
+    if (!selectedNode || selectedNode.nodeType === 'tabs') return null;
+    return findDescendantNodeByType(selectedNode, 'tabs');
+  }, [selectedNode]);
+
+  const nestedFaqAccordionNode = useMemo(() => {
+    if (!selectedNode || selectedNode.nodeType === 'accordion') return null;
+    return findDescendantNodeByType(selectedNode, 'accordion');
+  }, [selectedNode]);
 
   /** Row that owns strip width for the current selection (selected row, or nearest ancestor row). */
   const sectionStripLayoutRow = useMemo(() => {
@@ -376,6 +397,8 @@ export default function BuilderInspector({
     actionJson: '',
     menuItemsJson: '',
     carouselSlidesJson: '',
+    featureTabsJson: '',
+    faqAccordionJson: '',
   });
   const [form, setForm] = useState({
     text: '',
@@ -475,6 +498,12 @@ export default function BuilderInspector({
     animationDuration: 0.6,
     animationDelay: 0,
     carouselSlidesJson: '[]',
+    featureTabsJson: '[]',
+    featureTabsActiveId: '',
+    featureTabsImageFit: 'cover',
+    featureTabsImageHeightPx: '360',
+    featureTabsTabAlign: 'center',
+    faqAccordionJson: '[]',
     carouselVariant: 'image',
     carouselAutoplay: false,
     carouselLoop: true,
@@ -713,6 +742,20 @@ export default function BuilderInspector({
       animationDuration: Number(selectedNode.props?.animation?.duration ?? 0.6),
       animationDelay: Number(selectedNode.props?.animation?.delay ?? 0),
       carouselSlidesJson: JSON.stringify(Array.isArray(selectedNode.props?.slides) ? selectedNode.props.slides : [], null, 2),
+      featureTabsJson: JSON.stringify(
+        Array.isArray(selectedNode.props?.tabs) ? selectedNode.props.tabs : [],
+        null,
+        2
+      ),
+      featureTabsActiveId: String(selectedNode.props?.activeTabId || ''),
+      featureTabsImageFit: String(selectedNode.props?.imageFit || 'cover'),
+      featureTabsImageHeightPx: String(Number(selectedNode.props?.imageHeightPx) || 360),
+      featureTabsTabAlign: String(selectedNode.props?.tabAlign || 'center'),
+      faqAccordionJson: JSON.stringify(
+        Array.isArray(selectedNode.props?.items) ? selectedNode.props.items : [],
+        null,
+        2
+      ),
       carouselVariant: pickPending(
         'carouselVariant',
         shouldUsePendingVariant ? pendingVariant.value : nodeCarouselVariant
@@ -1290,6 +1333,99 @@ export default function BuilderInspector({
       } catch {
         setJsonErrors((prev) => ({ ...prev, carouselSlidesJson: 'Invalid JSON format.' }));
       }
+    }
+    if (key === 'featureTabsJson' && selectedNode.nodeType === 'tabs') {
+      try {
+        const parsed = JSON.parse(value || '[]');
+        if (!Array.isArray(parsed)) {
+          setJsonErrors((prev) => ({ ...prev, featureTabsJson: 'Tabs JSON must be an array.' }));
+          return;
+        }
+        const normalized = normalizeFeatureTabs(parsed);
+        setJsonErrors((prev) => ({ ...prev, featureTabsJson: '' }));
+        await updateProps({ tabs: normalized });
+      } catch {
+        setJsonErrors((prev) => ({ ...prev, featureTabsJson: 'Invalid JSON format.' }));
+      }
+    }
+    if (key === 'featureTabsActiveId' && selectedNode.nodeType === 'tabs') {
+      const id = String(value || '').trim();
+      await updateProps({ activeTabId: id });
+      return;
+    }
+    if (selectedNode.nodeType === 'tabs') {
+      if (key === 'featureTabsTabAlign') {
+        const raw = String(value || 'center').trim().toLowerCase();
+        const tabAlign = raw === 'left' || raw === 'stretch' ? raw : 'center';
+        await updateProps({ tabAlign });
+        return;
+      }
+      if (key === 'featureTabsImageFit') {
+        const fit = String(value || 'cover').trim().toLowerCase();
+        const imageFit = fit === 'contain' || fit === 'fill' ? fit : 'cover';
+        await updateProps({ imageFit });
+        return;
+      }
+      if (key === 'featureTabsImageHeightPx') {
+        const n = Math.max(120, Math.min(800, Math.floor(Number(value) || 360)));
+        await updateProps({ imageHeightPx: n });
+        return;
+      }
+      if (key === 'featureTabsPatch') {
+        const payload = value && typeof value === 'object' ? value : null;
+        const idx = Number(payload?.index);
+        const patch = payload?.patch && typeof payload.patch === 'object' ? payload.patch : null;
+        const current = Array.isArray(selectedNode.props?.tabs) ? selectedNode.props.tabs : [];
+        if (!Number.isInteger(idx) || idx < 0 || idx >= current.length || !patch) return;
+        const next = patchFeatureTabs(current, idx, patch);
+        await updateProps({ tabs: next });
+        setForm((prevForm) => ({ ...prevForm, featureTabsJson: JSON.stringify(next, null, 2) }));
+        return;
+      }
+    }
+    if (key === 'faqAccordionJson' && selectedNode.nodeType === 'accordion') {
+      try {
+        const parsed = JSON.parse(value || '[]');
+        if (!Array.isArray(parsed)) {
+          setJsonErrors((prev) => ({ ...prev, faqAccordionJson: 'Items JSON must be an array.' }));
+          return;
+        }
+        const normalized = normalizeFaqItems(parsed);
+        setJsonErrors((prev) => ({ ...prev, faqAccordionJson: '' }));
+        await updateProps({ items: normalized });
+      } catch {
+        setJsonErrors((prev) => ({ ...prev, faqAccordionJson: 'Invalid JSON format.' }));
+      }
+      return;
+    }
+    if (selectedNode.nodeType === 'accordion' && key === 'faqAccordionPatch') {
+      const payload = value && typeof value === 'object' ? value : null;
+      const idx = Number(payload?.index);
+      const patch = payload?.patch && typeof payload.patch === 'object' ? payload.patch : null;
+      const current = Array.isArray(selectedNode.props?.items) ? selectedNode.props.items : [];
+      if (!Number.isInteger(idx) || idx < 0 || idx >= current.length || !patch) return;
+      const next = patchFaqItems(current, idx, patch);
+      await updateProps({ items: next });
+      setForm((prevForm) => ({ ...prevForm, faqAccordionJson: JSON.stringify(next, null, 2) }));
+      return;
+    }
+    if (selectedNode.nodeType === 'accordion' && key === 'faqAccordionAddItem') {
+      const current = Array.isArray(selectedNode.props?.items) ? selectedNode.props.items : [];
+      const next = appendFaqItem(current);
+      const newItem = next[next.length - 1];
+      await updateProps({ items: next, openItemId: newItem?.id || '' });
+      setForm((prevForm) => ({ ...prevForm, faqAccordionJson: JSON.stringify(next, null, 2) }));
+      return;
+    }
+    if (selectedNode.nodeType === 'accordion' && key === 'faqAccordionRemoveItem') {
+      const idx = Number(value);
+      const current = Array.isArray(selectedNode.props?.items) ? selectedNode.props.items : [];
+      const next = removeFaqItemAt(current, idx);
+      const openId = String(selectedNode.props?.openItemId || '');
+      const stillOpen = next.some((it) => it.id === openId);
+      await updateProps({ items: next, openItemId: stillOpen ? openId : '' });
+      setForm((prevForm) => ({ ...prevForm, faqAccordionJson: JSON.stringify(next, null, 2) }));
+      return;
     }
     if (selectedNode.nodeType === 'carousel') {
       if (key === 'carouselVariant') {
@@ -2178,6 +2314,41 @@ export default function BuilderInspector({
           />
         ) : null}
         <InspectorTabs activeTab={activeTab} onChange={setActiveTab} />
+        {nestedFeatureTabsNode && typeof onSelectNode === 'function' ? (
+          <div className="bld-panel" style={{ paddingTop: 10, paddingBottom: 10 }}>
+            <p className="bld-field-note" style={{ margin: '0 0 10px' }}>
+              Click <strong>Edit Feature tabs</strong>, then edit text and images on the canvas. Sidebar controls
+              alignment and size — not on {inspectorRoleLabel(selectedNode)}.
+            </p>
+            <button
+              type="button"
+              className="bld-btn bld-btn--primary"
+              onClick={() => {
+                onSelectNode(nestedFeatureTabsNode.id);
+                setActiveTab('content');
+              }}
+            >
+              Edit Feature tabs
+            </button>
+          </div>
+        ) : null}
+        {nestedFaqAccordionNode && typeof onSelectNode === 'function' ? (
+          <div className="bld-panel" style={{ paddingTop: 10, paddingBottom: 10 }}>
+            <p className="bld-field-note" style={{ margin: '0 0 10px' }}>
+              Edit FAQ on the canvas — select <strong>FAQ accordion</strong> (not {inspectorRoleLabel(selectedNode)}).
+            </p>
+            <button
+              type="button"
+              className="bld-btn bld-btn--primary"
+              onClick={() => {
+                onSelectNode(nestedFaqAccordionNode.id);
+                setActiveTab('content');
+              }}
+            >
+              Edit FAQ accordion
+            </button>
+          </div>
+        ) : null}
         {variant === 'panel' && onInsertDivider ? (
           <LineToolsPanel
             onInsertHorizontal={() => onInsertDivider('horizontal', 'inside')}

@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { coerceCssGap, getDeviceStyle, layoutFlexShorthandToParts, styleToCss } from '../lib/styleToCss.js';
+import {
+  coerceCssGap,
+  getDeviceStyle,
+  layoutFlexShorthandToParts,
+  resolveMarginCssLonghand,
+  sanitizeInlineMarginCss,
+  styleToCss,
+} from '../lib/styleToCss.js';
 
 test('coerceCssGap handles numbers and strings', () => {
   assert.equal(coerceCssGap(24), '24px');
@@ -47,6 +54,35 @@ test('styleToCss exposes --node-* vars and flex gap from layout.gap', () => {
 test('layoutFlexShorthandToParts maps flex grow/shrink/basis', () => {
   assert.deepEqual(layoutFlexShorthandToParts({ flex: '0 0 auto' }), { flexGrow: '0', flexShrink: '0', flexBasis: 'auto' });
   assert.deepEqual(layoutFlexShorthandToParts({ flex: '1' }), { flexGrow: '1' });
+});
+
+test('styleToCss emits margin longhands only when layout overrides spacing', () => {
+  const css = styleToCss({
+    spacing: { margin: { top: 8, right: 4, bottom: 8, left: 4 } },
+    layout: { marginBottom: '24px' },
+  });
+  assert.equal(css.margin, undefined);
+  assert.equal(css.marginTop, '8px');
+  assert.equal(css.marginRight, '4px');
+  assert.equal(css.marginBottom, '24px');
+  assert.equal(css.marginLeft, '4px');
+});
+
+test('sanitizeInlineMarginCss drops shorthand when longhands exist', () => {
+  const out = sanitizeInlineMarginCss({
+    margin: '0px',
+    marginBottom: '12px',
+  });
+  assert.equal(out.margin, undefined);
+  assert.equal(out.marginBottom, '12px');
+});
+
+test('resolveMarginCssLonghand preserves auto', () => {
+  const m = resolveMarginCssLonghand({
+    layout: { marginLeft: 'auto', marginRight: 'auto' },
+  });
+  assert.equal(m.marginLeft, 'auto');
+  assert.equal(m.marginRight, 'auto');
 });
 
 test('styleToCss applies layout.flex shorthand and whiteSpace', () => {

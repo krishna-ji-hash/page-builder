@@ -105,9 +105,18 @@ export default function StylePanel({
     stripRow && stripRowIsHeader ? resolveHeaderLayoutMode(stripRow.props?.meta || {}) : 'boxed';
   const stripSelectionIsRow = selectedNode?.nodeType === 'row' && stripRow && selectedNode.id === stripRow.id;
 
+  const isFeatureTabs = selectedNode?.nodeType === 'tabs';
+
   return (
     <div className="bld-panel">
       <div className="bld-panel__head">Style</div>
+      {isFeatureTabs ? (
+        <p className="bld-field-note" style={{ marginTop: 0, marginBottom: 12 }}>
+          <strong>Block size & position:</strong> use <strong>Size</strong> (width, max width), <strong>Spacing</strong>{' '}
+          (margin/padding), <strong>Layout</strong> (align in column), and <strong>Background</strong> below. Tab text,
+          images, and alignment are under the <strong>Content</strong> tab.
+        </p>
+      ) : null}
       {stripRow && typeof onPatchRootStripLayout === 'function' ? (
         <Section title="Section width (this strip)" defaultOpen>
           {!stripSelectionIsRow ? (

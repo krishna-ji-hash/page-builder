@@ -1,0 +1,352 @@
+/* Feature tabs widget — Shipmozo “What makes us different” section */
+
+.live-feature-tabs {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.live-feature-tabs__nav-wrap {
+  width: 100%;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.12);
+  margin-bottom: 36px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.live-feature-tabs__nav {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 0;
+  min-width: min-content;
+  width: 100%;
+  justify-content: flex-start;
+}
+
+/* Tab bar alignment (widget prop: tabAlign) */
+.live-feature-tabs--align-center .live-feature-tabs__nav-wrap {
+  display: flex;
+  justify-content: center;
+}
+
+.live-feature-tabs--align-center .live-feature-tabs__nav {
+  width: auto;
+  max-width: 100%;
+  justify-content: center;
+}
+
+.live-feature-tabs--align-left .live-feature-tabs__nav-wrap {
+  display: block;
+}
+
+.live-feature-tabs--align-left .live-feature-tabs__nav {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.live-feature-tabs--align-stretch .live-feature-tabs__nav {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.live-feature-tabs--align-stretch .live-feature-tabs__tab {
+  flex: 1 1 0;
+  text-align: center;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.live-feature-tabs__tab {
+  flex: 0 0 auto;
+  appearance: none;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #64748b;
+  padding: 14px 22px 16px;
+  margin: 0;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  white-space: nowrap;
+  transition:
+    color var(--motion-fast, 140ms) var(--ease-out, ease),
+    border-color var(--motion-fast, 140ms) var(--ease-out, ease);
+}
+
+.live-feature-tabs__tab:hover {
+  color: #0f172a;
+}
+
+.live-feature-tabs__tab.is-active {
+  color: #0f172a;
+  font-weight: 800;
+  border-bottom-color: #2563eb;
+}
+
+.live-feature-tabs__panel {
+  width: 100%;
+  min-width: 0;
+  padding-bottom: 8px;
+  animation: live-feature-tabs-fade 0.22s var(--ease-out, ease);
+}
+
+@keyframes live-feature-tabs-fade {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.live-feature-tabs__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  align-items: start;
+  gap: clamp(28px, 4vw, 48px);
+  width: 100%;
+}
+
+.live-feature-tabs__copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 4px 0;
+}
+
+.live-feature-tabs__heading {
+  margin: 0;
+  font-size: clamp(22px, 2.4vw, 30px);
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+}
+
+.live-feature-tabs__paragraph {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.72;
+  color: #475569;
+  max-width: 52ch;
+}
+
+.live-feature-tabs__bullets {
+  margin: 2px 0 0;
+  padding: 0 0 0 1.2em;
+  list-style: disc;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.live-feature-tabs__bullets li {
+  font-size: 15px;
+  line-height: 1.55;
+  color: #334155;
+}
+
+.live-feature-tabs__bullets li::marker {
+  color: #94a3b8;
+}
+
+.live-feature-tabs__visual {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  width: 100%;
+  overflow: visible;
+}
+
+.live-feature-tabs__figure {
+  margin: 0;
+  width: 100%;
+  max-width: 100%;
+  border-radius: 18px;
+  overflow: visible;
+  background: linear-gradient(160deg, #e8f2fc 0%, #cfe4f8 55%, #b8d4f0 100%);
+  box-shadow:
+    0 18px 48px rgba(15, 23, 42, 0.1),
+    0 0 0 1px rgba(15, 23, 42, 0.06);
+  min-height: 0;
+  height: auto;
+}
+
+.live-feature-tabs__figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  border-radius: inherit;
+  object-position: center;
+  vertical-align: top;
+}
+
+@media (max-width: 960px) {
+  .live-feature-tabs__grid {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+
+  .live-feature-tabs__copy {
+    order: 1;
+  }
+
+  .live-feature-tabs__visual {
+    order: 2;
+  }
+
+  .live-feature-tabs__paragraph {
+    max-width: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .live-feature-tabs__tab {
+    font-size: 14px;
+    padding: 12px 14px 14px;
+  }
+
+  .live-feature-tabs__nav-wrap {
+    margin-bottom: 24px;
+  }
+
+  .live-feature-tabs__figure {
+    border-radius: 14px;
+    min-height: 220px;
+  }
+}
+
+/* Builder — inline canvas editing */
+.live-feature-tabs--builder .live-feature-tabs__builder-hint {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #475569;
+  background: #f1f5f9;
+  border-radius: 8px;
+  border: 1px dashed #cbd5e1;
+}
+
+.live-feature-tabs__editable {
+  outline: none;
+  cursor: text;
+  border-radius: 4px;
+}
+
+.live-feature-tabs__editable:focus {
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.live-feature-tabs__copy--editable .live-feature-tabs__editable:empty::before {
+  content: 'Click to type…';
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+.live-feature-tabs__tab-label.live-feature-tabs__editable:empty::before {
+  content: 'Tab name';
+  color: #94a3b8;
+}
+
+.live-feature-tabs__figure--editable {
+  position: relative;
+}
+
+.live-feature-tabs__figure--editable .live-feature-tabs__image-input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.live-feature-tabs__image-btn {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 2;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(15, 23, 42, 0.82);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.live-feature-tabs__figure--editable:hover .live-feature-tabs__image-btn,
+.live-feature-tabs__figure--editable:focus-within .live-feature-tabs__image-btn {
+  opacity: 1;
+}
+
+/* Builder canvas — do not clip tab images or section padding inside column/stack */
+.bld-canvas__page [data-section-template='featureTabs'].live-node.bld-row,
+.bld-canvas__page [data-section-template='featureTabs'] .live-node.bld-column,
+.bld-canvas__page [data-section-template='featureTabs'] .live-node.bld-stack {
+  overflow-x: clip;
+  overflow-y: visible !important;
+  min-height: min-content;
+  align-items: stretch !important;
+  align-content: flex-start;
+}
+
+.bld-canvas__page [data-section-template='featureTabs'] .live-node.bld-column {
+  align-self: stretch !important;
+}
+
+.bld-canvas__page .bld-node__shell:has(.bld-demo-feature-tabs) {
+  overflow: visible !important;
+  min-height: min-content;
+}
+
+/* Builder canvas */
+.bld-demo-feature-tabs {
+  width: 100%;
+  min-width: 0;
+  position: relative;
+  z-index: 2;
+  overflow: visible;
+  padding-bottom: 4px;
+}
+
+.bld-demo-feature-tabs,
+.bld-demo-feature-tabs .live-feature-tabs--builder,
+.bld-demo-feature-tabs .live-feature-tabs__tab,
+.bld-demo-feature-tabs .live-feature-tabs__tab-label {
+  pointer-events: auto;
+}
+
+.live-feature-tabs__tab-label {
+  display: inline-block;
+  pointer-events: none;
+}
+
+.live-feature-tabs--builder .live-feature-tabs__tab-label.live-feature-tabs__editable {
+  pointer-events: auto;
+}
+
+.bld-canvas__page .bld-node__shell:has(.bld-demo-feature-tabs) > .bld-node__chrome--overlay {
+  pointer-events: none;
+}

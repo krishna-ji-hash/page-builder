@@ -28,6 +28,7 @@ const ELEMENT_CARDS = [
   { id: 'form', label: 'Form', icon: 'FRM', supported: true },
   { id: 'table', label: 'Table', icon: 'TBL', supported: true },
   { id: 'carousel', label: 'Carousel', icon: 'CAR', supported: true },
+  { id: 'tabs', label: 'Feature tabs', icon: 'TAB', supported: true },
 ];
 
 const validParentTypes = new Set(['row', 'column', 'stack']);
@@ -606,6 +607,30 @@ export default function BuilderSidebar({
                 <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('heroLanding')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">HL</span>
                   <span className="bld-block-card__label">Hero Landing</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('platformHero')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">1P</span>
+                  <span className="bld-block-card__label">Platform Hero</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('whyChooseCourier')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">WC</span>
+                  <span className="bld-block-card__label">Why Choose</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('courierFeatureBands')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">3B</span>
+                  <span className="bld-block-card__label">Feature Bands</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('howItWorks')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">3S</span>
+                  <span className="bld-block-card__label">How It Works</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('featureTabs')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">TAB</span>
+                  <span className="bld-block-card__label">Feature Tabs</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('resourcesBlogs')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">BLG</span>
+                  <span className="bld-block-card__label">Resources Blogs</span>
                 </button>
                 <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('trustLogos')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">SP</span>

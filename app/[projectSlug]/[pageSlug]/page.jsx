@@ -7,6 +7,7 @@ import { buildRenderNodesWithGlobals } from '@/lib/globalSectionMerge';
 import { isPublicSlug, resolveMaybeAsyncParams } from '@/lib/routeParams';
 import { resolveSeoMetadata } from '@/lib/seo/seoEngine';
 import JsonLd from '@/components/seo/JsonLd';
+import LiveDoc from '@/components/live/LiveDoc';
 import '@/styles/live/live-site.css';
 import '@/styles/shared/menu.css';
 import '@/styles/shared/button.css';
@@ -114,7 +115,7 @@ export default async function PublicSitePage({ params, searchParams }) {
       }}
     >
       <JsonLd data={schemaJsonLd} />
-      <div className="live-doc">
+      <LiveDoc>
         <RuntimeProvider>
           {renderTree(renderNodes, {
             currentPath,
@@ -126,7 +127,7 @@ export default async function PublicSitePage({ params, searchParams }) {
             projectSlug,
           })}
         </RuntimeProvider>
-      </div>
+      </LiveDoc>
     </div>
   );
 }

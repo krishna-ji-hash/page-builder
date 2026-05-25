@@ -1,13 +1,43 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { BLANK_SECTION_LAYOUTS } from '@/lib/blankSectionLayouts';
 
-const STRUCTURES = [1, 2, 3, 4];
 const PRESETS = [
   {
     id: 'hero',
     title: 'Hero section',
     description: 'Headline, supporting text, and primary button in one column.',
+  },
+  {
+    id: 'platformHero',
+    title: 'Platform Hero',
+    description: 'Bento layout: dark pitch card, image, and two feature tiles.',
+  },
+  {
+    id: 'whyChooseCourier',
+    title: 'Why Choose Courier',
+    description: 'Headline, subtitle, and 2×2 feature grid with icon boxes.',
+  },
+  {
+    id: 'courierFeatureBands',
+    title: 'Feature Bands (×3)',
+    description: 'Three alternating image + text rows — AI courier, volumetric, KAM.',
+  },
+  {
+    id: 'howItWorks',
+    title: 'How It Works',
+    description: '3 step cards with illustrations and a centered “Start Shipping” CTA.',
+  },
+  {
+    id: 'featureTabs',
+    title: 'Feature Tabs',
+    description: 'Tabbed differentiators — delivery, AI courier, enterprise, support.',
+  },
+  {
+    id: 'resourcesBlogs',
+    title: 'Resources Blogs',
+    description: 'Title + “View All” and three blue blog cards with image, category, date, and headline.',
   },
   {
     id: 'features',
@@ -119,35 +149,40 @@ export default function AddSectionModal({
             ))}
           </div>
         ) : (
-          <div className="bld-structure-grid">
-            {STRUCTURES.map((count) => (
-              <div key={count} className="bld-structure-grid__cell">
+          <div className="bld-structure-grid bld-structure-grid--layouts">
+            {BLANK_SECTION_LAYOUTS.map((layout) => (
+              <div key={layout.id} className="bld-structure-grid__cell">
                 <button
                   type="button"
                   className="bld-structure-grid__item"
-                  onClick={() => onSelect(count)}
+                  onClick={() => onSelect(layout.id)}
                   disabled={isBusy}
-                  title={`${count} column${count > 1 ? 's' : ''}`}
+                  title={layout.description ? `${layout.label} — ${layout.description}` : layout.label}
                 >
-                  <span className={`bld-structure-grid__preview bld-structure-grid__preview--${count}`}>
-                    {Array.from({ length: count }).map((_, idx) => (
+                  <span
+                    className={`bld-structure-grid__preview bld-structure-grid__preview--${layout.previewClass}`}
+                  >
+                    {Array.from({ length: layout.previewSlots }).map((_, idx) => (
                       <span key={idx} />
                     ))}
                   </span>
-                  <span className="bld-structure-grid__label">
-                    {count} column{count > 1 ? 's' : ''}
-                  </span>
+                  <span className="bld-structure-grid__label">{layout.label}</span>
+                  {layout.description ? (
+                    <span className="bld-structure-grid__label bld-structure-grid__label--hint">
+                      {layout.description}
+                    </span>
+                  ) : null}
                 </button>
                 <div className="bld-structure-grid__hover-preview bld-structure-grid__hover-preview--layout" aria-hidden>
                   <span
-                    className={`bld-structure-grid__hover-preview__wire bld-structure-grid__hover-preview__wire--${count}`}
+                    className={`bld-structure-grid__hover-preview__wire bld-structure-grid__hover-preview__wire--${layout.previewClass}`}
                   >
-                    {Array.from({ length: count }).map((_, idx) => (
+                    {Array.from({ length: layout.previewSlots }).map((_, idx) => (
                       <span key={idx} />
                     ))}
                   </span>
                   <span className="bld-structure-grid__hover-preview__caption">
-                    {count} column layout preview
+                    {layout.description || layout.label}
                   </span>
                 </div>
               </div>

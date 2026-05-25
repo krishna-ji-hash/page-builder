@@ -15,6 +15,7 @@ import '@/styles/shared/menu.css';
 import '@/styles/shared/button.css';
 import '@/styles/live/live-site.css';
 import '@/styles/builder/builder-live-mirror.css';
+import '@/styles/builder/builder-live-parity.css';
 
 function clone(snapshot) {
   try {
