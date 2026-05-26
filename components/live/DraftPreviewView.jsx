@@ -6,15 +6,11 @@ import { expandLinkedGlobalComponents } from '@/lib/globalComponentExpand';
 import { expandCms } from '@/lib/cms/cmsExpand';
 import { getGlobalComponentsByIds } from '@/services/builder/globalComponentsService';
 import * as cmsService from '@/services/builder/cmsService';
-import { resolveMaybeAsyncParams } from '@/lib/routeParams';
 import LiveDoc from '@/components/live/LiveDoc';
 import { getBuilderState } from '@/services/builder/builderService';
 import '@/styles/live/live-site.css';
 import '@/styles/shared/menu.css';
 import '@/styles/shared/button.css';
-
-export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs';
 
 function cloneGlobalNode(node, prefix) {
   return {
@@ -30,14 +26,13 @@ function cloneGlobalNode(node, prefix) {
   };
 }
 
-export default async function DraftPreviewPage({ params }) {
-  const resolved = await resolveMaybeAsyncParams(params);
-  const pageId = Number(resolved.pageId);
-  if (!Number.isInteger(pageId) || pageId <= 0) {
-    return <div style={{ padding: 40 }}>Invalid preview page id.</div>;
+export default async function DraftPreviewView({ pageId }) {
+  const pid = Number(pageId);
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return <div style={{ padding: 40 }}>Invalid preview URL.</div>;
   }
 
-  const state = await getBuilderState(pageId);
+  const state = await getBuilderState(pid);
   if (!state?.page) {
     return <div style={{ padding: 40 }}>Page not found.</div>;
   }
@@ -52,7 +47,6 @@ export default async function DraftPreviewPage({ params }) {
     ? cloneGlobalNode(state.page.projectConfig.globalSections.footer, 'global-footer')
     : null;
   let renderBase = state.tree;
-  // Expand linked global components before renderTree (render pipeline unchanged).
   const ids = [];
   const walk = (nodes) => {
     for (const n of nodes || []) {
@@ -69,7 +63,6 @@ export default async function DraftPreviewPage({ params }) {
     renderBase = expandLinkedGlobalComponents(renderBase, (id) => map.get(id) || null);
   }
 
-  // Expand CMS repeaters/bindings before renderTree (render pipeline unchanged).
   renderBase = await expandCms(renderBase, { projectId: state.page.projectId, cmsService });
 
   const renderNodes = buildRenderNodesWithGlobals(renderBase, globalHeader, globalFooter, cloneGlobalNode);
@@ -121,4 +114,3 @@ export default async function DraftPreviewPage({ params }) {
     </div>
   );
 }
-

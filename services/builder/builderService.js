@@ -114,6 +114,16 @@ function isBuilderRowLockedFromPropsJson(propsJson, nodeType = 'row') {
   return isSectionLockedFlagValue(props?.meta?.sectionLocked);
 }
 
+/** Copied sections (reusable / global detach / templates) must not inherit lock — children insert in same txn. */
+function stripSectionLockForBulkInsert(payload) {
+  if (!payload || payload.nodeType !== 'row') return payload;
+  const props = payload.props && typeof payload.props === 'object' ? { ...payload.props } : {};
+  const meta = props.meta && typeof props.meta === 'object' ? { ...props.meta } : null;
+  if (!meta || !isSectionLockedFlagValue(meta.sectionLocked)) return payload;
+  delete meta.sectionLocked;
+  return { ...payload, props: { ...props, meta } };
+}
+
 /** Walk DB parent chain; throw if any ancestor section row is locked. */
 async function assertDbNodeNotUnderLockedSectionRow(connection, dbRow) {
   let walkParent = dbRow.parent_node_id;
@@ -772,7 +782,7 @@ export async function createNodesBulk(pageId, orderedNodes) {
         }
         parentNodeId = mapped;
       }
-      const payload = { ...rest, parentNodeId };
+      let payload = stripSectionLockForBulkInsert({ ...rest, parentNodeId });
       if (!payload.nodeType) {
         throw new Error('Bulk create: nodeType is required');
       }
@@ -1442,6 +1452,71 @@ export async function createPageForProject(
   });
 }
 
+export async function updateProjectMeta(projectId, { name, slug }) {
+  const pid = Number(projectId);
+  if (!Number.isInteger(pid) || pid <= 0) throw new Error('Invalid projectId');
+
+  return withTransaction(async (connection) => {
+    const [existingRows] = await connection.query(
+      `SELECT id, name, title, slug, type
+       FROM projects
+       WHERE id = ?
+       LIMIT 1`,
+      [pid]
+    );
+    if (!existingRows.length) return null;
+    const existing = existingRows[0];
+
+    const nextName =
+      name !== undefined ? String(name).trim() : String(existing.name || existing.title || '').trim();
+    const nextSlug = slug !== undefined ? assertValidSlug(slug, 'slug') : existing.slug;
+    assertValidTitle(nextName, 'name');
+
+    if (nextSlug !== existing.slug) {
+      const [dupRows] = await connection.query(
+        `SELECT id FROM projects WHERE slug = ? AND id <> ? LIMIT 1`,
+        [nextSlug, pid]
+      );
+      if (dupRows.length) throw new Error('Project slug already exists');
+    }
+
+    await connection.query(
+      `UPDATE projects
+       SET name = ?, title = ?, slug = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [nextName, nextName, nextSlug, pid]
+    );
+
+    const [rows] = await connection.query(
+      `SELECT
+         pr.id,
+         COALESCE(NULLIF(pr.name, ''), 'Untitled Project') AS name,
+         pr.slug,
+         pr.type,
+         pr.config_json,
+         pr.created_at,
+         pr.updated_at,
+         COUNT(p.id) AS pages_count
+       FROM projects pr
+       LEFT JOIN pages p ON p.project_id = pr.id
+       WHERE pr.id = ?
+       GROUP BY pr.id`,
+      [pid]
+    );
+    const row = rows[0];
+    return {
+      id: row.id,
+      name: row.name,
+      slug: row.slug,
+      type: row.type || 'website',
+      configJson: parseJsonColumn(row.config_json),
+      pageCount: Number(row.pages_count || 0),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  });
+}
+
 export async function updatePageMeta(pageId, { title, slug }) {
   const id = Number(pageId);
   if (!Number.isInteger(id) || id <= 0) throw new Error('Invalid pageId');
@@ -1479,6 +1554,11 @@ export async function updatePageMeta(pageId, { title, slug }) {
       [nextTitle, nextSlug, id]
     );
 
+    const [projectRows] = await connection.query(
+      `SELECT slug FROM projects WHERE id = ? LIMIT 1`,
+      [existing.project_id]
+    );
+
     const [rows] = await connection.query(
       `SELECT id, project_id, title, slug, status, published_version_id, created_at, updated_at
        FROM pages
@@ -1487,14 +1567,18 @@ export async function updatePageMeta(pageId, { title, slug }) {
     );
     const row = rows[0];
     return {
-      id: row.id,
-      projectId: row.project_id,
-      title: row.title,
-      slug: row.slug,
-      status: row.status || 'draft',
-      publishedVersionId: row.published_version_id,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
+      page: {
+        id: row.id,
+        projectId: row.project_id,
+        title: row.title,
+        slug: row.slug,
+        status: row.status || 'draft',
+        publishedVersionId: row.published_version_id,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      },
+      projectSlug: projectRows[0]?.slug || null,
+      previousSlug: existing.slug !== nextSlug ? existing.slug : null,
     };
   });
 }
@@ -1596,6 +1680,20 @@ export async function getPageRoutingInfo(pageId) {
   );
   if (!rows.length) return null;
   return rows[0];
+}
+
+export async function getPageIdByProjectAndPageSlug(projectSlug, pageSlug, connection) {
+  const db = connection || getDbPool();
+  const [rows] = await db.query(
+    `SELECT p.id
+     FROM pages p
+     INNER JOIN projects pr ON pr.id = p.project_id
+     WHERE pr.slug = ? AND p.slug = ?
+     LIMIT 1`,
+    [projectSlug, pageSlug]
+  );
+  const id = rows[0]?.id;
+  return Number.isInteger(id) && id > 0 ? id : null;
 }
 
 export async function publishPage(pageId) {

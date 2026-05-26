@@ -1198,6 +1198,8 @@ function NodeRenderer({
       gridTemplateColumns: 'minmax(0, max-content) auto',
       gridTemplateRows: 'auto',
       alignItems: 'center',
+      gap: undefined,
+      rowGap: undefined,
       columnGap: '10px',
       width: '100%',
       flexDirection: undefined,
@@ -1212,6 +1214,8 @@ function NodeRenderer({
       gridTemplateColumns: 'minmax(0, max-content) auto',
       gridTemplateRows: 'auto',
       alignItems: 'center',
+      gap: undefined,
+      rowGap: undefined,
       columnGap: '10px',
       width: '100%',
     };

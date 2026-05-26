@@ -5,6 +5,7 @@ import {
   getDeviceStyle,
   layoutFlexShorthandToParts,
   resolveMarginCssLonghand,
+  sanitizeGapShorthandConflict,
   sanitizeInlineMarginCss,
   styleToCss,
 } from '../lib/styleToCss.js';
@@ -75,6 +76,22 @@ test('sanitizeInlineMarginCss drops shorthand when longhands exist', () => {
   });
   assert.equal(out.margin, undefined);
   assert.equal(out.marginBottom, '12px');
+});
+
+test('sanitizeGapShorthandConflict drops gap when columnGap or rowGap is set', () => {
+  const out = sanitizeGapShorthandConflict({
+    display: 'grid',
+    gap: '16px',
+    columnGap: '10px',
+  });
+  assert.equal(out.gap, undefined);
+  assert.equal(out.columnGap, '10px');
+});
+
+test('sanitizeInlineMarginCss also sanitizes gap vs columnGap', () => {
+  const out = sanitizeInlineMarginCss({ gap: '24px', columnGap: '8px' });
+  assert.equal(out.gap, undefined);
+  assert.equal(out.columnGap, '8px');
 });
 
 test('resolveMarginCssLonghand preserves auto', () => {

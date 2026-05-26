@@ -791,9 +791,7 @@ export default function BuilderSidebar({
                   {reusableBlocks.map((b) => (
                     <div key={b.id} className="bld-reusable-card">
                       <div className="bld-reusable-card__title" title={b.name}>{b.name}</div>
-                      <div className="bld-reusable-card__meta">
-                        #{b.id}
-                      </div>
+                      <div className="bld-reusable-card__meta">Reusable section</div>
                       <div className="bld-reusable-card__actions">
                         <button type="button" className="bld-chip" onClick={() => onInsertReusableBlock?.(b.id)}>
                           Insert

@@ -29,6 +29,7 @@ export async function POST(request, { params }) {
     if (error.message.startsWith('Invalid') || error.message.startsWith('Bulk create')) {
       return fail(error.message, 400);
     }
+    if (/locked/i.test(error.message)) return fail(error.message, 400);
     return fail('Failed to bulk create nodes', 500, error.message);
   }
 }

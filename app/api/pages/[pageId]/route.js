@@ -1,5 +1,7 @@
 import { fail, ok, parseJsonBody } from '@/lib/api';
+import { revalidatePath, revalidateTag } from 'next/cache';
 import { resolveMaybeAsyncParams } from '@/lib/routeParams';
+import { previewPagePath } from '@/lib/builder/adminBuilderRoutes';
 import {
   deletePageSafely,
   updatePageMeta,
@@ -19,12 +21,25 @@ export async function PATCH(request, { params }) {
     return fail('Invalid JSON body', 400);
   }
   try {
-    const page = await updatePageMeta(pageId, {
+    const result = await updatePageMeta(pageId, {
       title: body.title,
       slug: body.slug,
     });
-    if (!page) return fail('Page not found', 404);
-    return ok({ page });
+    if (!result) return fail('Page not found', 404);
+    const { page, projectSlug, previousSlug } = result;
+    if (projectSlug) {
+      revalidateTag(`route:${projectSlug}:${page.slug}`);
+      revalidatePath(`/${projectSlug}/${page.slug}`);
+      const preview = previewPagePath(projectSlug, page.slug);
+      if (preview) revalidatePath(preview);
+      if (previousSlug) {
+        revalidateTag(`route:${projectSlug}:${previousSlug}`);
+        revalidatePath(`/${projectSlug}/${previousSlug}`);
+        const prevPreview = previewPagePath(projectSlug, previousSlug);
+        if (prevPreview) revalidatePath(prevPreview);
+      }
+    }
+    return ok({ page, projectSlug, previousSlug });
   } catch (error) {
     if (error.message.startsWith('Invalid')) return fail(error.message, 400);
     if (error.message.includes('already exists')) return fail(error.message, 409);

@@ -14,6 +14,7 @@ import {
   sameBuilderNodeId,
   validateTree,
 } from '@/lib/builderTree';
+import { adminBuilderPagePath, previewPagePath } from '@/lib/builder/adminBuilderRoutes';
 import { isValidNodeHierarchy } from '@/lib/builderHierarchy';
 import { normalizeResponsiveStyle } from '@/lib/styleNormalizer';
 import { getDeviceStyle } from '@/lib/styleToCss';
@@ -593,11 +594,11 @@ export default function BuilderShell({ pageId }) {
       const cid = Number(componentId);
       if (!Number.isInteger(projectId) || projectId <= 0) return;
       if (!Number.isInteger(cid) || cid <= 0) return;
-      const returnTo = `/admin/builder/${pid}`;
+      const returnTo = adminBuilderPagePath(page?.projectSlug, page?.slug);
       const url = `/admin/projects/${projectId}/global-components/${cid}?returnTo=${encodeURIComponent(returnTo)}`;
       if (typeof window !== 'undefined') window.open(url, '_blank', 'noopener,noreferrer');
     },
-    [page?.projectId, pid]
+    [page?.projectId, page?.projectSlug, page?.slug]
   );
 
   const setPreviewCssForNode = useCallback((nodeId, css, opts = {}) => {
@@ -860,7 +861,8 @@ export default function BuilderShell({ pageId }) {
 
   const liveUrl =
     page?.projectSlug && page?.slug ? `/${page.projectSlug}/${page.slug}` : null;
-  const previewUrl = pageIdValid ? `/preview/${pid}` : null;
+  const previewUrl =
+    page?.projectSlug && page?.slug ? previewPagePath(page.projectSlug, page.slug) : null;
   const canOpenLivePreview = Boolean(liveUrl && page?.publishedVersionId);
   const projectTemplates = Array.isArray(page?.projectConfig?.pageTemplates) ? page.projectConfig.pageTemplates : [];
 
