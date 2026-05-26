@@ -28,6 +28,19 @@ test('blocks only inside stack', () => {
   assertValidNodeHierarchy('rich_text', 'stack');
   assertValidNodeHierarchy('table', 'stack');
   assertValidNodeHierarchy('form', 'stack');
+  assertValidNodeHierarchy('input', 'stack');
+  assertValidNodeHierarchy('textarea', 'stack');
+  assertValidNodeHierarchy('select', 'stack');
+  assertValidNodeHierarchy('submit', 'stack');
+  assertValidNodeHierarchy('icon', 'stack');
+  assertValidNodeHierarchy('content_card', 'stack');
+  assertValidNodeHierarchy('video_embed', 'stack');
+  assertValidNodeHierarchy('container_box', 'stack');
+  assertValidNodeHierarchy('grid_block', 'stack');
+  assertValidNodeHierarchy('table_pro', 'stack');
+  assertValidNodeHierarchy('modal', 'stack');
+  assertValidNodeHierarchy('stack', 'modal');
+  assert.throws(() => assertValidNodeHierarchy('heading', 'modal'), /inside stack/);
   assert.throws(() => assertValidNodeHierarchy('heading', 'row'), /inside stack/);
 });
 

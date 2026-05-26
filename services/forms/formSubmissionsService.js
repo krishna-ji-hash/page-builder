@@ -58,3 +58,60 @@ export async function createFormSubmission({ projectId, pageId, formNodeId, valu
   return { id: r.insertId, projectId: pid, pageId: pgid, formNodeId: formId };
 }
 
+/**
+ * @param {{ projectId: number, pageId?: number|null, formNodeId?: string|null, limit?: number }} query
+ */
+export async function listFormSubmissions({ projectId, pageId = null, formNodeId = null, limit = 50 }) {
+  const pid = Number(projectId);
+  if (!Number.isInteger(pid) || pid <= 0) throw new Error('Invalid projectId');
+
+  const clauses = ['project_id = ?'];
+  const params = [pid];
+  const pgid = pageId != null ? Number(pageId) : null;
+  if (Number.isInteger(pgid) && pgid > 0) {
+    clauses.push('page_id = ?');
+    params.push(pgid);
+  }
+  const fid =
+    typeof formNodeId === 'string' || typeof formNodeId === 'number'
+      ? String(formNodeId).trim().slice(0, 96)
+      : '';
+  if (fid) {
+    clauses.push('form_node_id = ?');
+    params.push(fid);
+  }
+
+  const lim = Math.min(200, Math.max(1, Number(limit) || 50));
+  params.push(lim);
+
+  const pool = getDbPool();
+  const [rows] = await pool.query(
+    `SELECT id, project_id, page_id, form_node_id, submission_json, meta_json, created_at
+     FROM form_submissions
+     WHERE ${clauses.join(' AND ')}
+     ORDER BY id DESC
+     LIMIT ?`,
+    params
+  );
+
+  const parseJsonCol = (val) => {
+    if (val == null) return {};
+    if (typeof val === 'object') return val;
+    try {
+      return JSON.parse(String(val));
+    } catch {
+      return {};
+    }
+  };
+
+  return (rows || []).map((row) => ({
+    id: row.id,
+    projectId: row.project_id,
+    pageId: row.page_id,
+    formNodeId: row.form_node_id,
+    values: parseJsonCol(row.submission_json),
+    meta: parseJsonCol(row.meta_json),
+    createdAt: row.created_at,
+  }));
+}
+

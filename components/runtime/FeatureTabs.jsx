@@ -5,7 +5,7 @@ import FeatureTabCanvasField from '@/components/builder/canvas/FeatureTabCanvasF
 import { resolveFeatureTabsProps } from '@/lib/featureTabsDefaults';
 
 /**
- * Shipmozo-style feature tabs: nav bar + two-column panel (copy | image).
+ * Dispatch Solutions-style feature tabs: nav bar + two-column panel (copy | image).
  * Live: local click state only. Builder: persists activeTabId + canvas inline edit.
  */
 export default function FeatureTabs({

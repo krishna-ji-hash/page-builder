@@ -20,12 +20,12 @@ test('isWidgetAllowed: website has core marketing widgets only', () => {
   assert.equal(isWidgetAllowed('website', 'accordion'), true);
   assert.equal(isWidgetAllowed('website', 'divider'), true);
   assert.equal(isWidgetAllowed('website', 'table'), false);
-  assert.equal(isWidgetAllowed('website', 'form'), false);
+  assert.equal(isWidgetAllowed('website', 'form'), true);
 });
 
-test('isWidgetAllowed: dashboard includes table, not form', () => {
+test('isWidgetAllowed: dashboard includes table and form', () => {
   assert.equal(isWidgetAllowed('dashboard', 'table'), true);
-  assert.equal(isWidgetAllowed('dashboard', 'form'), false);
+  assert.equal(isWidgetAllowed('dashboard', 'form'), true);
 });
 
 test('isWidgetAllowed: admin includes table and form', () => {
@@ -61,7 +61,7 @@ test('getWidgetDefinition returns null for missing widget', () => {
 });
 
 test('form defaults include fields and submitLabel', () => {
-  const form = getWidgetDefinition('admin', 'form');
+  const form = getWidgetDefinition('website', 'form');
   assert.ok(form);
   assert.ok(Array.isArray(form.defaultProps.fields));
   assert.equal(form.defaultProps.submitLabel, 'Submit');

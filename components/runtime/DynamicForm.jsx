@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import { validateFormFieldValue } from '@/lib/runtime/formValidation';
+import { RuntimeLeafProvider } from './RuntimeLeafProvider';
 import { useRuntimeData } from './RuntimeProvider';
 
 function normalizeSubmitPath(path) {
@@ -32,7 +33,39 @@ function coerceWidthPercent(width) {
 /**
  * @param {{ name: string; label?: string; type?: string; required?: boolean; placeholder?: string }[]} fields
  */
-export default function DynamicForm({
+function resolveFormLayoutPx(layout, key, legacyKey, fallback) {
+  const l = layout && typeof layout === 'object' && !Array.isArray(layout) ? layout : {};
+  if (l[key] != null && l[key] !== '') {
+    const n = Number(l[key]);
+    if (Number.isFinite(n) && n >= 0) return n;
+  }
+  if (legacyKey && l[legacyKey] != null && l[legacyKey] !== '') {
+    const legacy = Number(l[legacyKey]);
+    if (Number.isFinite(legacy) && legacy > 0) return legacy;
+  }
+  return fallback;
+}
+
+function formLayoutStyle(layout, style) {
+  const base = style && typeof style === 'object' ? { ...style } : {};
+  const labelGap = resolveFormLayoutPx(layout, 'labelGapPx', null, 8);
+  const inputAfterGap = resolveFormLayoutPx(layout, 'inputAfterGapPx', 'fieldGapPx', 16);
+  const beforeSubmitGap = resolveFormLayoutPx(layout, 'beforeSubmitGapPx', null, 20);
+  base['--live-form-label-gap'] = `${labelGap}px`;
+  base['--live-form-input-after-gap'] = `${inputAfterGap}px`;
+  base['--live-form-before-submit-gap'] = `${beforeSubmitGap}px`;
+  return base;
+}
+
+export default function DynamicForm(props) {
+  return (
+    <RuntimeLeafProvider>
+      <DynamicFormInner {...props} />
+    </RuntimeLeafProvider>
+  );
+}
+
+function DynamicFormInner({
   fields = [],
   submitLabel = 'Submit',
   dataSource,
@@ -42,6 +75,7 @@ export default function DynamicForm({
   pageId,
   projectId,
   notifications,
+  layout = null,
 }) {
   const { fetchInternal, bumpRefresh } = useRuntimeData();
   const [values, setValues] = useState(() => ({}));
@@ -110,15 +144,16 @@ export default function DynamicForm({
               pageId,
               formId,
               values: body,
+              fields,
               notifications: notifications && typeof notifications === 'object' ? notifications : null,
             }
           : body;
-      await fetchInternal(effectivePath, {
+      const data = await fetchInternal(effectivePath, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      setStatus('Saved successfully');
+      setStatus(data?.message || 'Thank you — we received your message.');
       setStatusKind('success');
       setValues({});
       bumpRefresh();
@@ -138,10 +173,12 @@ export default function DynamicForm({
     );
   }
 
+  const mergedStyle = formLayoutStyle(layout, style);
+
   return (
     <form
       className={`live-form ${className || ''}`.trim()}
-      style={style}
+      style={mergedStyle}
       onSubmit={handleSubmit}
       noValidate
     >

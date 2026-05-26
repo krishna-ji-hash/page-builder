@@ -1,4 +1,5 @@
 import { fail, ok, parseJsonBody } from '@/lib/api';
+import { dispatchFormNotifications } from '@/services/forms/dispatchFormNotifications';
 import { createFormSubmission } from '@/services/forms/formSubmissionsService';
 import { validateFormFields } from '@/lib/runtime/formValidation';
 
@@ -55,7 +56,23 @@ export async function POST(request) {
       values,
       meta,
     });
-    return ok({ ok: true, submissionId: created.id });
+
+    const notify = await dispatchFormNotifications({
+      notifications,
+      values,
+      projectId,
+      pageId,
+      formNodeId: formId,
+      submissionId: created.id,
+    });
+    if (notify.webhook && notify.webhook !== 'sent') {
+      meta.webhookStatus = notify.webhook;
+    }
+    if (notify.email === 'pending' && notifications?.emailTo) {
+      meta.emailNotifyTo = notifications.emailTo;
+    }
+
+    return ok({ ok: true, submissionId: created.id, message: 'Thank you — we received your message.' });
   } catch (err) {
     return fail('Failed to store submission', 500, err instanceof Error ? err.message : String(err));
   }

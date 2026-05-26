@@ -1,6 +1,10 @@
 @import '../shared/site-header-bar.css';
 @import '../shared/feature-tabs.css';
 @import '../shared/faq-accordion.css';
+@import '../shared/get-in-touch.css';
+@import '../shared/section-layout.css';
+@import '../shared/template-sections.css';
+@import '../shared/advanced-elements.css';
 
 .live-site {
   min-height: 100vh;
@@ -141,18 +145,19 @@
   margin-top: calc(var(--live-row-gap-before) - var(--live-section-gap, 12px)) !important;
 }
 
-.live-doc > section.live-node:not([data-live-section-content='boxed']):not([data-live-root-strip='full']),
-.live-doc > main.live-node:not([data-live-section-content='boxed']):not([data-live-root-strip='full']) {
+/* Theme gutters only when the row does not define its own padding (Style → Spacing). */
+.live-doc
+  > section.live-node:not([data-live-section-content='boxed']):not([data-live-root-strip='full']):not(
+    [data-live-row-padding-defined]
+  ),
+.live-doc
+  > main.live-node:not([data-live-section-content='boxed']):not([data-live-root-strip='full']):not(
+    [data-live-row-padding-defined]
+  ) {
   padding-left: var(--live-content-padding-x, clamp(16px, 3vw, 40px));
   padding-right: var(--live-content-padding-x, clamp(16px, 3vw, 40px));
-  /* Theme bottom pad when the row has no padding in style_json (rows with padding use `data-live-row-padding-defined`). */
   padding-bottom: var(--live-root-row-pad-bottom, var(--live-section-pad-bottom, 12px)) !important;
   box-sizing: border-box;
-}
-
-.live-doc > section.live-node[data-live-row-padding-defined],
-.live-doc > main.live-node[data-live-row-padding-defined] {
-  padding-bottom: unset !important;
 }
 
 /*
@@ -1628,14 +1633,15 @@
   text-decoration: underline;
 }
 
-/* Dynamic form */
+/* Dynamic form — spacing via CSS vars from Style → Form spacing */
 .live-form {
   display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 0.75rem;
-  max-width: 32rem;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
 /* Standalone form field widgets (Phase 6) */
@@ -1703,8 +1709,16 @@
 .live-form__field {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: var(--live-form-label-gap, 8px);
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  padding-bottom: var(--live-form-input-after-gap, 16px);
+  box-sizing: border-box;
+}
+
+.live-form__field:last-of-type {
+  padding-bottom: 0;
 }
 
 .live-form__toggle {
@@ -1777,6 +1791,7 @@
   display: flex;
   gap: 0.5rem;
   width: 100%;
+  margin-top: var(--live-form-before-submit-gap, 20px);
 }
 
 .live-form__submit {

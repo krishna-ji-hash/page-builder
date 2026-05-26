@@ -91,7 +91,7 @@ function defaultMetaByTemplateId(id) {
     },
     whychoosecourier: {
       title: 'Why Choose Courier',
-      description: 'Title, subtitle, and 2×2 icon feature grid (Shipmozo-style).',
+      description: 'Title, subtitle, and 2×2 icon feature grid (Dispatch Solutions-style).',
       category: 'features',
       icon: 'WC',
     },
@@ -121,9 +121,15 @@ function defaultMetaByTemplateId(id) {
     },
     faq: {
       title: 'FAQ',
-      description: 'Accordion Q&A with expandable answers (Shipmozo-style).',
+      description: 'Accordion Q&A with expandable answers (Dispatch Solutions-style).',
       category: 'features',
       icon: 'FAQ',
+    },
+    getintouch: {
+      title: 'Get in Touch',
+      description: 'Dark contact band — office details, dividers, and white lead form card.',
+      category: 'cta',
+      icon: '✉',
     },
     features: {
       title: 'Features',
@@ -179,6 +185,7 @@ function getMarketplaceTemplates() {
     { id: 'benefits', type: 'section' },
     { id: 'testimonials', type: 'section' },
     { id: 'faq', type: 'section' },
+    { id: 'getInTouch', type: 'section' },
     { id: 'cta', type: 'section' },
     { id: 'footer', type: 'section' },
     { id: 'navbar', type: 'section' },

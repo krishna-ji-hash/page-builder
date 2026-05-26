@@ -1,6 +1,5 @@
-import { RuntimeProvider } from '@/components/runtime/RuntimeProvider';
 import { getPublishedPage } from '@/services/site/publishedPageService';
-import { renderTree } from '@/lib/liveRenderer';
+import PublishedLiveTree from '@/components/live/PublishedLiveTree';
 import { getPageVarsBucket, livePageCssVarOverrides, resolveBodyLayout, resolveContentMaxWidthPx } from '@/lib/livePageCssVars';
 import { normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesignTheme';
 import { buildRenderNodesWithGlobals } from '@/lib/globalSectionMerge';
@@ -116,8 +115,9 @@ export default async function PublicSitePage({ params, searchParams }) {
     >
       <JsonLd data={schemaJsonLd} />
       <LiveDoc>
-        <RuntimeProvider>
-          {renderTree(renderNodes, {
+        <PublishedLiveTree
+          nodes={renderNodes}
+          options={{
             currentPath,
             projectPages: page.projectPages || [],
             siteTheme,
@@ -125,8 +125,8 @@ export default async function PublicSitePage({ params, searchParams }) {
             pageId: page.id,
             projectId: page.projectId,
             projectSlug,
-          })}
-        </RuntimeProvider>
+          }}
+        />
       </LiveDoc>
     </div>
   );

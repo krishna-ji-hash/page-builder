@@ -7,10 +7,10 @@ import {
   resolveFaqAccordionProps,
 } from '../lib/faqAccordionDefaults.js';
 
-test('normalizeFaqItems returns Shipmozo defaults when empty', () => {
+test('normalizeFaqItems returns Dispatch Solutions defaults when empty', () => {
   const items = normalizeFaqItems(null);
   assert.equal(items.length, 4);
-  assert.ok(items[0].question.includes('Shipmozo'));
+  assert.ok(items[0].question.includes('Dispatch Solutions'));
 });
 
 test('resolveFaqAccordionProps accepts openItemId', () => {

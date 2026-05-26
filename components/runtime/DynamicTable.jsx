@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getColumnsForPath } from '@/lib/runtime/dataSourceRegistry';
+import { RuntimeLeafProvider } from './RuntimeLeafProvider';
 import { useRuntimeData } from './RuntimeProvider';
 
 const empty = '—';
@@ -21,7 +22,15 @@ function filterRows(rows, query) {
   });
 }
 
-export default function DynamicTable({ columns = [], dataSource, className, style }) {
+export default function DynamicTable(props) {
+  return (
+    <RuntimeLeafProvider>
+      <DynamicTableInner {...props} />
+    </RuntimeLeafProvider>
+  );
+}
+
+function DynamicTableInner({ columns = [], dataSource, className, style }) {
   const { fetchInternal, dataRefreshKey } = useRuntimeData();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');

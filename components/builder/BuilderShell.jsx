@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   autoFixTree,
   canonicalNodeId,
+  findAncestorRowNode,
   findAncestorStackNode,
   findNodeInTree,
   getSiblingContext,
@@ -36,7 +37,13 @@ import { getGlobalLinkMeta, isLinkedGlobalPlaceholder, treeContainsLinkedGlobals
 import { isNodeEditsDisabledBySectionLock, isSectionLockedRow, isStrictAncestorSectionLocked, metaRepresentsExplicitSectionUnlock } from '@/lib/rowLayoutMeta';
 import { loadAppsForProject } from '@/lib/registry/appLoader';
 import { buildDividerCreatePayload } from '@/lib/dividerDefaults';
+import { payloadForWidgetCreate } from '@/lib/nodeCreatePayload';
 import { resolveDividerInsertPlan } from '@/lib/dividerInsert';
+import {
+  findFirstUnlockedStackId,
+  isStackLeafWidgetType,
+  resolveQuickAddStackParentId,
+} from '@/lib/quickAddResolve';
 import PageSeoModal from './seo/PageSeoModal';
 import AuditModal from './audits/AuditModal';
 import AuditBadgesOverlay from './audits/AuditBadgesOverlay';
@@ -1608,31 +1615,59 @@ export default function BuilderShell({ pageId }) {
     return data;
   };
 
-  const WIDGET_NODE_TYPES = new Set([
-    'heading',
-    'text',
-    'rich_text',
-    'image',
-    'button',
-    'menu',
-    'divider',
-    'table',
-    'form',
-  ]);
+  const dividerPayloadForCreate = (nodeType, dividerOrientation) =>
+    payloadForWidgetCreate(nodeType, page?.projectType || 'website', { dividerOrientation });
 
-  const dividerPayloadForCreate = (nodeType, dividerOrientation) => {
-    if (nodeType !== 'divider') return {};
-    return buildDividerCreatePayload(dividerOrientation === 'vertical' ? 'vertical' : 'horizontal');
+  const unlockSectionRowForQuickAdd = async (rowId, currentTree) => {
+    const row = findNodeInTree(currentTree, rowId);
+    if (!row || row.nodeType !== 'row' || !isSectionLockedRow(row)) return;
+    const meta = { ...(row.props?.meta || {}), sectionLocked: false };
+    await handleNodeUpdate({
+      nodeId: row.id,
+      payload: { props: { ...row.props, meta } },
+    });
+  };
+
+  const ensureUnlockedQuickAddParent = async (parentId, currentTree) => {
+    if (parentId == null) return parentId;
+    const pid = Number(parentId);
+    if (!Number.isFinite(pid)) return parentId;
+    if (!isNodeEditsDisabledBySectionLock(currentTree, pid)) return pid;
+    const unlocked = findFirstUnlockedStackId(currentTree);
+    if (unlocked != null && !isNodeEditsDisabledBySectionLock(currentTree, unlocked)) {
+      return unlocked;
+    }
+    const row = findAncestorRowNode(currentTree, pid);
+    if (row?.id) {
+      await unlockSectionRowForQuickAdd(row.id, currentTree);
+      return pid;
+    }
+    return pid;
   };
 
   const resolveQuickAddParentId = async ({ targetNodeId, nodeType }) => {
     const target = findNodeInTree(tree, targetNodeId);
-    if (!target?.id) return targetNodeId || null;
-    if (WIDGET_NODE_TYPES.has(nodeType)) {
-      const ancestorStack = findAncestorStackNode(tree, targetNodeId);
-      if (ancestorStack?.id) return ancestorStack.id;
+    if (!target?.id) {
+      if (isStackLeafWidgetType(nodeType)) return findFirstUnlockedStackId(tree);
+      return targetNodeId || null;
     }
-    if (!WIDGET_NODE_TYPES.has(nodeType)) return target.id;
+    if (isStackLeafWidgetType(nodeType) && target.nodeType !== 'column' && target.nodeType !== 'row') {
+      const stackId = resolveQuickAddStackParentId(tree, targetNodeId);
+      if (stackId) return stackId;
+    }
+    if (target.nodeType === 'modal') {
+      const existingStack = Array.isArray(target.children)
+        ? target.children.find((child) => child?.nodeType === 'stack')
+        : null;
+      if (existingStack?.id) return existingStack.id;
+      const stack = await createNodeRequest({
+        nodeType: 'stack',
+        parentNodeId: target.id,
+        displayName: 'Modal content',
+        positionIndex: 0,
+      });
+      return stack?.id || null;
+    }
     if (target.nodeType === 'stack') return target.id;
     if (target.nodeType === 'column') {
       const existingStack = Array.isArray(target.children)
@@ -1695,9 +1730,11 @@ export default function BuilderShell({ pageId }) {
       return stack?.id || null;
     }
     const parentId = target.parentNodeId;
-    if (parentId && WIDGET_NODE_TYPES.has(nodeType)) {
+    if (parentId && isStackLeafWidgetType(nodeType)) {
       const parent = findNodeInTree(tree, parentId);
       if (parent?.nodeType === 'stack') return parent.id;
+      const stackId = resolveQuickAddStackParentId(tree, parentId);
+      if (stackId) return stackId;
     }
     return parentId || null;
   };
@@ -1813,14 +1850,12 @@ export default function BuilderShell({ pageId }) {
     setErrorMessage('');
     try {
       let effectiveParentId = parentNodeId;
-      if (parentNodeId && WIDGET_NODE_TYPES.has(nodeType)) {
+      if (parentNodeId && isStackLeafWidgetType(nodeType)) {
         const resolved = await resolveQuickAddParentId({ targetNodeId: parentNodeId, nodeType });
         if (resolved != null) effectiveParentId = resolved;
       }
-      if (effectiveParentId && isNodeEditsDisabledBySectionLock(beforeTree, Number(effectiveParentId))) {
-        setErrorMessage('This section is locked. Unlock it in the left panel to add elements.');
-        setUndoStack((prev) => prev.slice(0, -1));
-        return;
+      if (effectiveParentId != null) {
+        effectiveParentId = await ensureUnlockedQuickAddParent(effectiveParentId, beforeTree);
       }
       const dividerExtra = dividerPayloadForCreate(nodeType, dividerOrientation);
       const node = await createNodeRequest({
@@ -1856,6 +1891,18 @@ export default function BuilderShell({ pageId }) {
             positionIndex: 0,
           });
           await reloadBuilder();
+        } else if (nodeType === 'modal') {
+          const stack = await createNodeRequest({
+            nodeType: 'stack',
+            parentNodeId: node.id,
+            displayName: 'Modal content',
+            positionIndex: 0,
+          });
+          await reloadBuilder();
+          if (stack?.id) setSelectedNodeId(stack.id);
+          else setSelectedNodeId(node.id);
+          setHasUnpublishedEdits(true);
+          return;
         }
         setSelectedNodeId(node.id);
       }
@@ -1874,14 +1921,12 @@ export default function BuilderShell({ pageId }) {
     setIsCreatingNode(true);
     setErrorMessage('');
     try {
-      const resolvedParentNodeId = await resolveQuickAddParentId({ targetNodeId, nodeType });
+      let resolvedParentNodeId = await resolveQuickAddParentId({ targetNodeId, nodeType });
       if (resolvedParentNodeId == null && nodeType !== 'row') {
-        throw new Error('Could not resolve quick-add target');
+        throw new Error('Could not resolve quick-add target. Select a Stack or add a section first.');
       }
-      if (resolvedParentNodeId != null && isNodeEditsDisabledBySectionLock(beforeTree, Number(resolvedParentNodeId))) {
-        setErrorMessage('This section is locked. Unlock it to add elements.');
-        setUndoStack((prev) => prev.slice(0, -1));
-        return;
+      if (resolvedParentNodeId != null) {
+        resolvedParentNodeId = await ensureUnlockedQuickAddParent(resolvedParentNodeId, beforeTree);
       }
       const dividerExtra = dividerPayloadForCreate(nodeType, dividerOrientation);
       const node = await createNodeRequest({
@@ -4556,6 +4601,8 @@ export default function BuilderShell({ pageId }) {
               activeSpacingEdit={activeSpacingEdit}
               onOverflowDiagnosticsChange={handleOverflowDiagnostics}
               showGrid={showGrid}
+              pageId={pid}
+              projectId={page?.projectId}
             />
           </div>
           <aside className="bld-right" aria-label="Style and properties">
@@ -4568,6 +4615,7 @@ export default function BuilderShell({ pageId }) {
               onUpdateNode={handleNodeUpdate}
               projectPages={projectPages}
               projectId={page?.projectId}
+              pageId={pid}
               activeTab={inspectorTab}
               onActiveTabChange={setInspectorTab}
               onSetPreviewCssForNode={setPreviewCssForNode}

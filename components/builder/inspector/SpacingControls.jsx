@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { formatBoxFromSides } from '@/lib/parseBoxShorthand';
 
 const SIDES = ['top', 'right', 'bottom', 'left'];
 
@@ -18,17 +19,7 @@ function boxSidesAllEmpty(box) {
 }
 
 function boxToCssString(box, clampFn) {
-  const q = (side) => {
-    const raw = box[side];
-    if (raw === '' || raw == null) return clampFn(0);
-    const n = parseNum(raw);
-    return clampFn(Number.isFinite(n) ? n : 0);
-  };
-  const t = q('top');
-  const r = q('right');
-  const b = q('bottom');
-  const l = q('left');
-  return `${t}px ${r}px ${b}px ${l}px`;
+  return formatBoxFromSides(box, (n) => clampFn(typeof n === 'number' && Number.isFinite(n) ? n : parseNum(n)));
 }
 
 function clampMargin(v) {

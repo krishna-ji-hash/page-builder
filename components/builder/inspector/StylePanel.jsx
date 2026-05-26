@@ -17,6 +17,10 @@ import { isRootPageRow } from '@/lib/liveDocSectionSpacing';
 import { resolveHeaderLayoutMode } from '@/lib/headerLayoutMode';
 import { resolveRootStripLayout, resolveSectionWidthMode } from '@/lib/livePageCssVars';
 import { SECTION_WIDTH_MODES } from '@/lib/liveContentContainer';
+import { isGetInTouchSectionRow } from '@/lib/getInTouchSection';
+import FormSpacingControls from '@/components/builder/inspector/FormSpacingControls';
+import SectionLayoutControls from '@/components/builder/inspector/SectionLayoutControls';
+import { sectionRowHasLayoutControls } from '@/lib/sectionLayout';
 
 function Section({ title, defaultOpen = true, children }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -48,6 +52,7 @@ export default function StylePanel({
   onResetLayoutKeys,
   onRowLayoutLockedChange,
   onHeaderLayoutQuickAction,
+  onContentChange,
   pageTree = null,
   /** Nearest section row for strip width (may differ from `selectedNode` when a child widget is selected). */
   stripLayoutTargetRow = null,
@@ -106,16 +111,68 @@ export default function StylePanel({
   const stripSelectionIsRow = selectedNode?.nodeType === 'row' && stripRow && selectedNode.id === stripRow.id;
 
   const isFeatureTabs = selectedNode?.nodeType === 'tabs';
+  const isForm = selectedNode?.nodeType === 'form';
+  const showManualSpacingGuide =
+    stripRow && isRootStripRow && !stripRowIsHeader && !stripRowIsFooter;
+  const showSectionLayout =
+    stripRow && sectionRowHasLayoutControls(stripRow.props?.meta) && typeof onPatchSectionLayout === 'function';
 
   return (
     <div className="bld-panel">
       <div className="bld-panel__head">Style</div>
+      {showManualSpacingGuide ? (
+        <div
+          className="bld-manual-guide"
+          style={{
+            marginBottom: 12,
+            padding: '10px 12px',
+            border: '1px solid var(--bld-border)',
+            borderRadius: 8,
+            fontSize: 12,
+            lineHeight: 1.55,
+          }}
+        >
+          <strong>Manual spacing — aap control karte ho</strong>
+          <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
+            <li>
+              <strong>Spacing</strong> (neeche) → Padding: andar top / bottom / left / right
+            </li>
+            <li>
+              <strong>Theme</strong> tab → is section select → <strong>Gap to strip below</strong> (footer se pehle
+              gap)
+            </li>
+            <li>
+              <strong>Layout (responsive)</strong> → Align items: <strong>Flex start</strong> (form card niche na
+              khinche)
+            </li>
+            <li>
+              Section toolbar <strong>Pad+ / Pad−</strong> bhi padding badhata/ghatata hai
+            </li>
+          </ul>
+          {isGetInTouchSectionRow(stripRow) ? (
+            <p className="bld-field-note" style={{ margin: '8px 0 0' }}>
+              Get in Touch par koi auto padding lock nahi — jo values yahan set karoge wahi live par jayengi (Publish
+              ke baad).
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       {isFeatureTabs ? (
         <p className="bld-field-note" style={{ marginTop: 0, marginBottom: 12 }}>
           <strong>Block size & position:</strong> use <strong>Size</strong> (width, max width), <strong>Spacing</strong>{' '}
           (margin/padding), <strong>Layout</strong> (align in column), and <strong>Background</strong> below. Tab text,
           images, and alignment are under the <strong>Content</strong> tab.
         </p>
+      ) : null}
+      {showSectionLayout ? (
+        <Section title="Layout direction" defaultOpen>
+          <SectionLayoutControls sectionRow={stripRow} onApplyLayout={onPatchSectionLayout} />
+        </Section>
+      ) : null}
+      {isForm && typeof onContentChange === 'function' ? (
+        <Section title="Form spacing" defaultOpen>
+          <FormSpacingControls selectedNode={selectedNode} onChange={onContentChange} />
+        </Section>
       ) : null}
       {stripRow && typeof onPatchRootStripLayout === 'function' ? (
         <Section title="Section width (this strip)" defaultOpen>
@@ -240,7 +297,13 @@ export default function StylePanel({
       <Section title="Background">
         <BackgroundControls form={form} onUpdate={onChange} projectId={projectId} selectedNode={selectedNode} />
       </Section>
-      <Section title="Spacing">
+      <Section title="Spacing" defaultOpen={selectedNode?.nodeType === 'row'}>
+        {selectedNode?.nodeType === 'row' ? (
+          <p className="bld-field-note" style={{ marginTop: 0, marginBottom: 10 }}>
+            <strong>Padding → Bottom</strong> = space under text &amp; form inside this section. Set the same number as
+            Top (e.g. 56) for equal top/bottom. Changes apply on blur in each box.
+          </p>
+        ) : null}
         <InspectorTipChips
           chips={[
             'Vertical space',

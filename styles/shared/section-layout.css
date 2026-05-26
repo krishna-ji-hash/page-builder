@@ -1,0 +1,179 @@
+/**
+ * Section item layout — driven by data attributes from props.meta.sectionLayout.
+ * Builder canvas + published live site share these rules.
+ */
+
+.bld-section-layout.bld-layout-grid {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.bld-section-layout.bld-layout-horizontal {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.bld-section-layout.bld-layout-vertical {
+  flex-direction: column;
+  flex-wrap: nowrap;
+}
+
+.bld-section-layout.bld-layout-auto {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.bld-section-layout.bld-layout-reverse.bld-layout-horizontal {
+  flex-direction: row-reverse;
+}
+
+.bld-section-layout.bld-layout-reverse.bld-layout-vertical {
+  flex-direction: column-reverse;
+}
+
+/* Direct item cards (stack shells or leaf wraps) */
+.bld-section-layout > .live-node.bld-stack,
+.bld-section-layout > .live-leaf-wrap,
+.bld-section-layout > .bld-stack,
+.bld-canvas__live-mirror .bld-section-layout > .live-node.bld-stack,
+.bld-canvas__live-mirror .bld-section-layout > .live-leaf-wrap {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.bld-section-layout.bld-layout-horizontal > .live-node.bld-stack,
+.bld-section-layout.bld-layout-horizontal > .live-leaf-wrap,
+.bld-section-layout.bld-layout-auto > .live-node.bld-stack,
+.bld-section-layout.bld-layout-auto > .live-leaf-wrap {
+  flex: 1 1 auto;
+}
+
+.bld-section-layout.bld-cols-1.bld-layout-horizontal > .live-node.bld-stack,
+.bld-section-layout.bld-cols-1.bld-layout-horizontal > .live-leaf-wrap {
+  flex: 1 1 100%;
+  max-width: 100%;
+}
+
+.bld-section-layout.bld-cols-2.bld-layout-horizontal > .live-node.bld-stack,
+.bld-section-layout.bld-cols-2.bld-layout-horizontal > .live-leaf-wrap {
+  flex: 1 1 calc(50% - 12px);
+  max-width: calc(50% - 6px);
+  min-width: min(100%, 260px);
+}
+
+.bld-section-layout.bld-cols-3.bld-layout-horizontal > .live-node.bld-stack,
+.bld-section-layout.bld-cols-3.bld-layout-horizontal > .live-leaf-wrap {
+  flex: 1 1 calc(33.333% - 14px);
+  max-width: calc(33.333% - 10px);
+  min-width: min(100%, 220px);
+}
+
+.bld-section-layout.bld-cols-4.bld-layout-horizontal > .live-node.bld-stack,
+.bld-section-layout.bld-cols-4.bld-layout-horizontal > .live-leaf-wrap {
+  flex: 1 1 calc(25% - 16px);
+  max-width: calc(25% - 12px);
+  min-width: min(100%, 200px);
+}
+
+.bld-section-layout.bld-cols-5.bld-layout-horizontal > .live-node.bld-stack,
+.bld-section-layout.bld-cols-5.bld-layout-horizontal > .live-leaf-wrap {
+  flex: 1 1 calc(20% - 16px);
+  max-width: calc(20% - 12px);
+  min-width: min(100%, 160px);
+}
+
+.bld-section-layout.bld-cols-6.bld-layout-horizontal > .live-node.bld-stack,
+.bld-section-layout.bld-cols-6.bld-layout-horizontal > .live-leaf-wrap {
+  flex: 1 1 calc(16.666% - 16px);
+  max-width: calc(16.666% - 12px);
+  min-width: min(100%, 140px);
+}
+
+.bld-section-layout.bld-layout-vertical > .live-node.bld-stack,
+.bld-section-layout.bld-layout-vertical > .live-leaf-wrap {
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: 100%;
+}
+
+.bld-gap-sm {
+  gap: 12px;
+  row-gap: 12px;
+  column-gap: 12px;
+}
+
+.bld-gap-md {
+  gap: 20px;
+  row-gap: 20px;
+  column-gap: 20px;
+}
+
+.bld-gap-lg {
+  gap: 32px;
+  row-gap: 32px;
+  column-gap: 32px;
+}
+
+.bld-align-center {
+  justify-content: center;
+}
+
+.bld-align-right {
+  justify-content: flex-end;
+}
+
+.bld-align-left {
+  justify-content: flex-start;
+}
+
+/* Section row: map / video two-column split */
+.live-node.bld-row[data-bld-section-columns='true'].bld-layout-horizontal,
+.bld-canvas__live-mirror .live-node.bld-row[data-bld-section-columns='true'].bld-layout-horizontal {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: stretch;
+}
+
+.live-node.bld-row[data-bld-section-columns='true'].bld-layout-vertical,
+.bld-canvas__live-mirror .live-node.bld-row[data-bld-section-columns='true'].bld-layout-vertical {
+  flex-direction: column;
+}
+
+/* Comparison table scroll */
+[data-section-template='comparisonTable'] .bld-section-layout,
+.live-site [data-section-template='comparisonTable'] .live-node.bld-stack {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 767px) {
+  .bld-section-layout.bld-layout-mobile-stack,
+  .bld-section-layout[data-bld-layout-mobile-stack='true'] {
+    flex-direction: column !important;
+    flex-wrap: nowrap !important;
+  }
+
+  .bld-section-layout.bld-layout-mobile-stack > .live-node.bld-stack,
+  .bld-section-layout.bld-layout-mobile-stack > .live-leaf-wrap,
+  .bld-section-layout[data-bld-layout-mobile-stack='true'] > .live-node.bld-stack,
+  .bld-section-layout[data-bld-layout-mobile-stack='true'] > .live-leaf-wrap {
+    flex: 0 0 auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .live-node.bld-row[data-bld-section-columns='true'][data-bld-layout-mobile-stack='true'] {
+    flex-direction: column !important;
+  }
+
+  .bld-section-layout.bld-cols-2.bld-layout-mobile-stack > .live-node.bld-stack,
+  .bld-section-layout.bld-cols-2[data-bld-layout-mobile-stack='true'] > .live-node.bld-stack {
+    flex: 1 1 calc(50% - 8px) !important;
+    max-width: calc(50% - 4px) !important;
+    min-width: min(100%, 160px) !important;
+  }
+}

@@ -7,14 +7,24 @@ import {
   MENU_HAMBURGER_ALIGNS,
 } from '@/lib/menuMobile';
 import { useMemo, useState } from 'react';
+import FormLeadsPanel from './FormLeadsPanel';
 import MediaLibraryModal from '@/components/builder/media/MediaLibraryModal';
 import MenuTreeEditor from '@/components/builder/inspector/MenuTreeEditor';
 import CmsBindingsPanel from '@/components/builder/inspector/CmsBindingsPanel';
 import InspectorTipChips from '@/components/builder/inspector/InspectorTipChips';
 import FeatureTabsControls from '@/components/builder/inspector/FeatureTabsControls';
 import FaqAccordionControls from '@/components/builder/inspector/FaqAccordionControls';
+import AdvancedElementControls, { isAdvancedElementNodeType } from '@/components/builder/inspector/AdvancedElementControls';
 
-export default function ContentPanel({ selectedNode, form, onChange, jsonErrors = {}, projectPages = [], projectId }) {
+export default function ContentPanel({
+  selectedNode,
+  form,
+  onChange,
+  jsonErrors = {},
+  projectPages = [],
+  projectId,
+  pageId,
+}) {
   const [mediaOpen, setMediaOpen] = useState(false);
   const [mediaAllowedKinds, setMediaAllowedKinds] = useState(null);
   const [mediaPickTarget, setMediaPickTarget] = useState(null);
@@ -150,6 +160,7 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
   const isTabs = selectedNode.nodeType === 'tabs';
   const isAccordion = selectedNode.nodeType === 'accordion';
   const isDivider = selectedNode.nodeType === 'divider';
+  const isAdvancedElement = isAdvancedElementNodeType(selectedNode.nodeType);
   const carouselVariantKey =
     isCarousel && ['image', 'hero', 'card', 'logo', 'ticker', 'marquee'].includes(form.carouselVariant)
       ? form.carouselVariant
@@ -164,7 +175,6 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
     isForm && selectedNode.props?.notifications && typeof selectedNode.props.notifications === 'object'
       ? selectedNode.props.notifications
       : {};
-
   return (
     <div className="bld-panel">
       <div className="bld-panel__head">Content</div>
@@ -1220,6 +1230,9 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
           jsonErrors={jsonErrors}
         />
       ) : null}
+      {isAdvancedElement ? (
+        <AdvancedElementControls selectedNode={selectedNode} form={form} onChange={onChange} jsonErrors={jsonErrors} />
+      ) : null}
       {isTable ? (
         <>
           <div className="bld-field">
@@ -1236,10 +1249,19 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
       ) : null}
       {isForm ? (
         <>
+          <FormLeadsPanel
+            pageId={pageId}
+            projectId={projectId}
+            formNodeId={selectedNode?.id}
+            fields={formFields}
+          />
           <div className="bld-field">
             <label className="bld-label">Submit Label</label>
             <input className="bld-input" value={form.submitLabel || ''} onChange={(e) => onChange('submitLabel', e.target.value)} />
           </div>
+          <p className="bld-field-note" style={{ marginTop: 0, marginBottom: 12 }}>
+            Label/input gap: <strong>Style</strong> tab → <strong>Form spacing</strong>. Fields &amp; submit text yahan.
+          </p>
           <div className="bld-form-builder">
             <div className="bld-form-builder__head">
               <div className="bld-form-builder__title">Fields</div>
@@ -1501,26 +1523,32 @@ export default function ContentPanel({ selectedNode, form, onChange, jsonErrors 
               </details>
             ))}
 
-            <details className="bld-acc" style={{ marginTop: 10 }}>
-              <summary>Notifications (placeholders)</summary>
+            <details className="bld-acc" style={{ marginTop: 10 }} open>
+              <summary>Notifications</summary>
               <div className="bld-field" style={{ marginTop: 10 }}>
-                <label className="bld-label">Webhook URL</label>
+                <label className="bld-label">Webhook URL (optional)</label>
                 <input
                   className="bld-input"
                   value={String(formNotifications.webhookUrl || '')}
                   onChange={(e) => onChange('formSetNotifications', { webhookUrl: e.target.value })}
-                  placeholder="https://example.com/webhook"
+                  placeholder="https://hooks.zapier.com/..."
                 />
-                <p className="bld-field-note">Stored with the form. Sending will be wired later (no 3rd-party dependency).</p>
+                <p className="bld-field-note">
+                  On submit, we POST JSON with <code>values</code>, <code>formId</code>, and <code>projectId</code> to
+                  this URL.
+                </p>
               </div>
               <div className="bld-field">
-                <label className="bld-label">Email notify (to)</label>
+                <label className="bld-label">Email notify (optional)</label>
                 <input
                   className="bld-input"
                   value={String(formNotifications.emailTo || '')}
                   onChange={(e) => onChange('formSetNotifications', { emailTo: e.target.value })}
                   placeholder="you@domain.com"
                 />
+                <p className="bld-field-note">
+                  Saved with the form. Leads always go to the database first; automatic email is coming soon.
+                </p>
               </div>
             </details>
 

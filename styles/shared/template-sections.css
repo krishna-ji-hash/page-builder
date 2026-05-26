@@ -1,0 +1,251 @@
+/**
+ * Polished section templates (14 marketplace sections).
+ * Works with section-layout.css — only enhances cards/media/hover, not flex grid rules.
+ */
+
+/* —— Scoped section rows —— */
+.live-site [data-tpl-polish='true'],
+.bld-canvas__live-mirror [data-tpl-polish='true'] {
+  --tpl-card-radius: 16px;
+  --tpl-card-border: rgba(15, 23, 42, 0.08);
+  --tpl-card-shadow: 0 12px 40px rgba(15, 23, 42, 0.08);
+  --tpl-accent: #4f46e5;
+}
+
+/* Equal-height cards in horizontal layout hosts */
+[data-tpl-polish='true'] .bld-section-layout.bld-layout-horizontal > .live-node.bld-stack,
+[data-tpl-polish='true'] .bld-section-layout.bld-layout-horizontal > .live-leaf-wrap,
+[data-tpl-polish='true'] .bld-section-layout.bld-layout-auto > .live-node.bld-stack,
+[data-tpl-polish='true'] .bld-section-layout.bld-layout-auto > .live-leaf-wrap,
+.bld-canvas__live-mirror [data-tpl-polish='true'] .bld-section-layout.bld-layout-horizontal > .live-node.bld-stack,
+.bld-canvas__live-mirror [data-tpl-polish='true'] .bld-section-layout.bld-layout-auto > .live-node.bld-stack {
+  display: flex;
+  flex-direction: column;
+}
+
+[data-tpl-role*='pricing-card'],
+[data-tpl-role*='blog-card'],
+[data-tpl-role*='team-card'],
+[data-tpl-role*='stat-card'],
+[data-tpl-role*='process-step'],
+[data-tpl-role*='story-card'],
+[data-tpl-role*='trust-badge'],
+[data-tpl-role*='gallery-item'] {
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+/* —— Pricing —— */
+[data-tpl-role*='pricing-card'] {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+[data-tpl-role*='pricing-card']:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.12);
+}
+[data-tpl-role*='pricing-card--popular'] {
+  border-color: rgba(79, 70, 229, 0.35) !important;
+  box-shadow: 0 16px 48px rgba(79, 70, 229, 0.15);
+}
+
+/* —— Blog cards —— */
+[data-tpl-role='blog-card'] {
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+[data-tpl-role='blog-card']:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 44px rgba(15, 23, 42, 0.12);
+}
+[data-tpl-role='blog-card'] .live-leaf-wrap:first-child img,
+[data-tpl-role='blog-card'] > .live-node.bld-image img {
+  display: block;
+  width: 100%;
+  object-fit: cover;
+  border-radius: var(--tpl-card-radius) var(--tpl-card-radius) 0 0;
+}
+
+/* —— Gallery —— */
+[data-tpl-role='gallery-item'] {
+  overflow: hidden;
+  border-radius: 14px;
+  transition: transform 0.25s ease;
+}
+[data-tpl-role='gallery-item']:hover {
+  transform: scale(1.02);
+}
+[data-tpl-role='gallery-item'] img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.35s ease;
+}
+[data-tpl-role='gallery-item']:hover img {
+  transform: scale(1.06);
+}
+
+/* —— Team —— */
+[data-tpl-role='team-card'] {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+[data-tpl-role='team-card']:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.1);
+}
+[data-tpl-role='team-card'] img {
+  object-fit: cover;
+}
+
+/* —— Video embed / play affordance —— */
+[data-tpl-role='video-embed'] {
+  position: relative;
+  overflow: hidden;
+}
+[data-tpl-role='video-embed'] img {
+  display: block;
+  width: 100%;
+  object-fit: cover;
+}
+[data-tpl-role='video-play'] {
+  position: absolute !important;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 2;
+  line-height: 1 !important;
+  box-shadow: 0 8px 24px rgba(79, 70, 229, 0.45);
+}
+
+/* —— Timeline —— */
+[data-section-template='timeline'] [data-tpl-role='items-host'].bld-layout-vertical [data-tpl-role='timeline-step'] {
+  position: relative;
+}
+[data-section-template='timeline'] [data-tpl-role='timeline-rail'] {
+  position: relative;
+}
+[data-section-template='timeline'] [data-tpl-role='timeline-rail']::after {
+  content: '';
+  position: absolute;
+  top: 1.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  bottom: -1.75rem;
+  background: linear-gradient(180deg, var(--tpl-accent), rgba(79, 70, 229, 0.15));
+}
+[data-section-template='timeline'] [data-tpl-role='timeline-step']:last-child [data-tpl-role='timeline-rail']::after {
+  display: none;
+}
+[data-section-template='timeline'] .bld-section-layout.bld-layout-horizontal {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+[data-section-template='timeline'] .bld-section-layout.bld-layout-horizontal [data-tpl-role='timeline-step'] {
+  flex: 1 1 200px;
+  max-width: 100%;
+  padding-bottom: 0 !important;
+}
+[data-section-template='timeline'] .bld-section-layout.bld-layout-horizontal [data-tpl-role='timeline-rail']::after {
+  display: none;
+}
+
+/* —— Comparison table —— */
+[data-section-template='comparisonTable'] [data-tpl-role='items-host'],
+[data-section-template='comparisonTable'] [data-tpl-role='compare-table'] {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+[data-tpl-role='compare-col-highlight'] {
+  background-color: rgba(79, 70, 229, 0.06) !important;
+}
+[data-tpl-role='compare-header'] {
+  background-color: #f8fafc !important;
+  font-weight: 800;
+}
+
+/* —— Web stories — unified cards —— */
+[data-tpl-role='story-card'] {
+  overflow: hidden;
+  text-align: center;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+[data-tpl-role='story-card']:hover {
+  transform: translateY(-3px);
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}
+[data-tpl-role='story-card'] img {
+  object-fit: cover;
+  flex-shrink: 0;
+}
+[data-section-template='webStory'] .bld-section-layout.bld-layout-vertical [data-tpl-role='story-card'] {
+  flex-direction: row !important;
+  align-items: center !important;
+  text-align: left;
+  max-width: 100%;
+  flex: 1 1 100% !important;
+}
+[data-section-template='webStory'] .bld-section-layout.bld-layout-vertical [data-tpl-role='story-card'] img {
+  width: 56px !important;
+  height: 56px !important;
+}
+
+/* —— Process steps connector (desktop horizontal) —— */
+@media (min-width: 768px) {
+  [data-section-template='processSteps'] .bld-section-layout.bld-layout-horizontal {
+    position: relative;
+  }
+  [data-section-template='processSteps'] .bld-section-layout.bld-layout-horizontal > .live-node.bld-stack:not(:last-child)::after,
+  [data-section-template='processSteps'] .bld-section-layout.bld-layout-horizontal > .live-leaf-wrap:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 2.5rem;
+    right: -0.5rem;
+    width: 1rem;
+    height: 2px;
+    background: rgba(79, 70, 229, 0.25);
+    pointer-events: none;
+  }
+}
+
+/* —— Map —— */
+[data-tpl-role='map-card'] img {
+  display: block;
+  width: 100%;
+  object-fit: cover;
+}
+
+/* —— Form card (contact) —— */
+[data-tpl-role='form-card'] .live-form,
+[data-tpl-role='form-card'] form {
+  width: 100%;
+}
+
+/* —— Logo carousel —— */
+[data-section-template='brandsLogoSlider'] img {
+  object-fit: contain;
+  max-height: 48px;
+  width: auto;
+}
+
+/* —— Images: prevent stretch —— */
+[data-tpl-polish='true'] img {
+  max-width: 100%;
+}
+
+/* —— Dark section text on stats / webStory rows —— */
+[data-section-template='stats'] [data-tpl-role='stat-card'],
+[data-section-template='webStory'] [data-tpl-role='story-card'] {
+  color: inherit;
+}
+
+/* Mobile: full-width cards in stacked layout */
+@media (max-width: 767px) {
+  [data-tpl-polish='true'] .bld-section-layout.bld-layout-mobile-stack > .live-node.bld-stack,
+  [data-tpl-polish='true'] .bld-section-layout[data-bld-layout-mobile-stack='true'] > .live-node.bld-stack {
+    min-width: 0;
+  }
+}

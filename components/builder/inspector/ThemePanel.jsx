@@ -74,8 +74,9 @@ function NumRow({ fieldId, label, value, onChange }) {
  * @param {object} props
  * @param {unknown[]} [props.pageTree]
  * @param {(nodeId: number, patch: { sectionGapBeforePx?: number | null | ''; sectionGapAfterPx?: number | null | ''; sectionPadBottomPx?: number | null | '' }) => Promise<void>} [props.onPatchRootSectionPageSpacing]
+ * @param {number|null} [props.selectedNodeId] — when a root section row is selected, show its gap overrides
  */
-export default function ThemePanel({ pageTree = [], onPatchRootSectionPageSpacing }) {
+export default function ThemePanel({ pageTree = [], onPatchRootSectionPageSpacing, selectedNodeId = null }) {
   const { siteTheme, setSiteTheme, applySitePreset, siteThemePersist, currentPageSlug } = useBuilderTheme();
   const { colors, typography, spacing } = siteTheme;
 
@@ -126,6 +127,14 @@ export default function ThemePanel({ pageTree = [], onPatchRootSectionPageSpacin
       setOverrideSectionId(null);
     }
   }, [rootRows, overrideSectionId]);
+
+  useEffect(() => {
+    const id = Number(selectedNodeId);
+    if (!Number.isInteger(id) || id <= 0) return;
+    if (rootRows.some((r) => r.id === id)) {
+      setOverrideSectionId(id);
+    }
+  }, [selectedNodeId, rootRows]);
 
   const singleRow = useMemo(
     () =>

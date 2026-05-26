@@ -1,7 +1,6 @@
 import { notFound } from 'next/navigation';
-import { RuntimeProvider } from '@/components/runtime/RuntimeProvider';
 import { getPublishedPage } from '@/services/site/publishedPageService';
-import { renderTree } from '@/lib/liveRenderer';
+import PublishedLiveTree from '@/components/live/PublishedLiveTree';
 import { normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesignTheme';
 import { resolveMaybeAsyncParams, isPublicSlug } from '@/lib/routeParams';
 import { getItemBySlug } from '@/services/builder/cmsService';
@@ -100,8 +99,9 @@ export default async function PropertyRoute({ params }) {
     >
       <JsonLd data={schemaJsonLd} />
       <LiveDoc>
-        <RuntimeProvider>
-          {renderTree(boundNodes, {
+        <PublishedLiveTree
+          nodes={boundNodes}
+          options={{
             currentPath,
             projectPages: page.projectPages || [],
             siteTheme,
@@ -109,8 +109,8 @@ export default async function PropertyRoute({ params }) {
             pageId: page.id,
             projectId: page.projectId,
             projectSlug,
-          })}
-        </RuntimeProvider>
+          }}
+        />
       </LiveDoc>
     </div>
   );

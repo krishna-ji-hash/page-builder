@@ -15,6 +15,11 @@ import {
 import { normalizeMenuItems } from '@/lib/menuItems';
 import { mergeDeviceStyleWithTypeDefaults, mergeMenuDeviceStyle } from '@/lib/nodeLayoutDefaults';
 import { normalizeFeatureTabs, patchFeatureTabs } from '@/lib/featureTabsDefaults';
+import {
+  advancedElementFormFromProps,
+  advancedElementPatchFromFormKey,
+  tryParseAdvancedElementJson,
+} from '@/lib/advancedElementInspector';
 import { appendFaqItem, normalizeFaqItems, patchFaqItems, removeFaqItemAt } from '@/lib/faqAccordionDefaults';
 import { finalizeLeafDeviceStyle } from '@/lib/leafStylePipeline';
 import { mergeNodeStyleWithSiteTheme, themeSpacingPx } from '@/lib/siteDesignTheme';
@@ -40,10 +45,16 @@ import { isRootPageRow } from '@/lib/liveDocSectionSpacing';
 import { resolveSectionWidthMode, SECTION_WIDTH_MODES } from '@/lib/liveContentContainer';
 import { findAncestorRowNode, findDescendantNodeByType, findNodeInTree } from '@/lib/builderTree';
 import {
+  applySectionLayoutToStyleJson,
+  findSectionItemsHostNode,
+  normalizeSectionLayout,
+} from '@/lib/sectionLayout';
+import {
   dividerOrientationFromProps,
   dividerSizePatchForOrientation,
   dividerSizePatchForThickness,
 } from '@/lib/dividerDefaults';
+import { boxSideDisplayValue, parseBoxShorthand } from '@/lib/parseBoxShorthand';
 
 function inspectorRoleLabel(node) {
   if (!node?.nodeType) return '';
@@ -52,6 +63,32 @@ function inspectorRoleLabel(node) {
   if (node.nodeType === 'stack') return 'Stack';
   if (node.nodeType === 'tabs') return 'Feature tabs';
   if (node.nodeType === 'accordion') return 'FAQ accordion';
+  if (node.nodeType === 'icon') return 'Icon';
+  if (node.nodeType === 'icon_box') return 'Icon box';
+  if (node.nodeType === 'content_card') return 'Card';
+  if (node.nodeType === 'spacer') return 'Spacer';
+  if (node.nodeType === 'modal') return 'Modal';
+  if (node.nodeType === 'video_embed') return 'Video embed';
+  if (node.nodeType === 'map_embed') return 'Map embed';
+  if (node.nodeType === 'social_icons') return 'Social icons';
+  if (node.nodeType === 'container_box') return 'Container';
+  if (node.nodeType === 'grid_block') return 'Grid';
+  if (node.nodeType === 'alert_notice') return 'Alert';
+  if (node.nodeType === 'badge_label') return 'Badge';
+  if (node.nodeType === 'counter_block') return 'Counter';
+  if (node.nodeType === 'progress_bar') return 'Progress bar';
+  if (node.nodeType === 'rating_stars') return 'Rating';
+  if (node.nodeType === 'testimonial_card') return 'Testimonial';
+  if (node.nodeType === 'pricing_card') return 'Pricing card';
+  if (node.nodeType === 'newsletter_form') return 'Newsletter';
+  if (node.nodeType === 'whatsapp_button') return 'WhatsApp';
+  if (node.nodeType === 'countdown_timer') return 'Countdown';
+  if (node.nodeType === 'html_block') return 'HTML block';
+  if (node.nodeType === 'code_block') return 'Code block';
+  if (node.nodeType === 'lottie_animation') return 'Lottie';
+  if (node.nodeType === 'logo_block') return 'Logo';
+  if (node.nodeType === 'feature_list') return 'Feature list';
+  if (node.nodeType === 'table_pro') return 'Table Pro';
   return 'Widget';
 }
 
@@ -190,17 +227,6 @@ function parsePxValue(value, fallback = 0) {
   return Number.isFinite(num) ? num : fallback;
 }
 
-function parseBoxToObject(value) {
-  const parts = String(value || '0px 0px 0px 0px').trim().split(/\s+/);
-  const [top = '0px', right = top, bottom = top, left = right] = parts;
-  return {
-    top: parsePxValue(top, 0),
-    right: parsePxValue(right, 0),
-    bottom: parsePxValue(bottom, 0),
-    left: parsePxValue(left, 0),
-  };
-}
-
 /** Raw stored spacing for this breakpoint (no theme / type defaults). */
 function getStoredSpacingShorthands(styleJson, device) {
   const s = styleJson && typeof styleJson === 'object' ? styleJson : {};
@@ -228,8 +254,13 @@ function boxSidesFromShorthandOrUnset(shorthand) {
   if (shorthand == null || String(shorthand).trim() === '') {
     return { top: '', right: '', bottom: '', left: '' };
   }
-  const o = parseBoxToObject(shorthand);
-  return { top: o.top, right: o.right, bottom: o.bottom, left: o.left };
+  const parsed = parseBoxShorthand(shorthand);
+  return {
+    top: boxSideDisplayValue(parsed, 'top'),
+    right: boxSideDisplayValue(parsed, 'right'),
+    bottom: boxSideDisplayValue(parsed, 'bottom'),
+    left: boxSideDisplayValue(parsed, 'left'),
+  };
 }
 
 /** Inspector fields: prefer saved shorthand; if unset, show effective spacing (theme / type defaults) so values match canvas. */
@@ -257,6 +288,7 @@ export default function BuilderInspector({
   onUpdateNode,
   projectPages = [],
   projectId,
+  pageId,
   activeTab: activeTabProp,
   onActiveTabChange,
   /** `rail` = embedded under library; `panel` / `default` = dedicated right column. */
@@ -354,6 +386,47 @@ export default function BuilderInspector({
     [sectionStripLayoutRow, pageTree, editingDisabledBySectionLock, onUpdateNode],
   );
 
+  const patchSectionLayout = useCallback(
+    async (layout) => {
+      if (!sectionStripLayoutRow || sectionStripLayoutRow.nodeType !== 'row') return;
+      if (isLinkedGlobalPlaceholder(sectionStripLayoutRow)) return;
+      if (editingDisabledBySectionLock) return;
+      if (!onUpdateNode) return;
+      const templateId = sectionStripLayoutRow.props?.meta?.sectionTemplate;
+      if (!templateId) return;
+      const nextLayout = normalizeSectionLayout(layout, templateId);
+      const prevMeta =
+        sectionStripLayoutRow.props?.meta &&
+        typeof sectionStripLayoutRow.props.meta === 'object' &&
+        !Array.isArray(sectionStripLayoutRow.props.meta)
+          ? sectionStripLayoutRow.props.meta
+          : {};
+      const host = findSectionItemsHostNode(pageTree, sectionStripLayoutRow.id);
+      const rowPayload = {
+        props: {
+          ...sectionStripLayoutRow.props,
+          meta: { ...prevMeta, sectionLayout: nextLayout },
+        },
+      };
+      if (prevMeta.sectionColumnLayout) {
+        rowPayload.style_json = applySectionLayoutToStyleJson(sectionStripLayoutRow.style_json, nextLayout);
+      }
+      await onUpdateNode({
+        nodeId: sectionStripLayoutRow.id,
+        payload: rowPayload,
+      });
+      if (host?.id != null) {
+        await onUpdateNode({
+          nodeId: host.id,
+          payload: {
+            style_json: applySectionLayoutToStyleJson(host.style_json, nextLayout),
+          },
+        });
+      }
+    },
+    [sectionStripLayoutRow, pageTree, editingDisabledBySectionLock, onUpdateNode]
+  );
+
   const patchHeaderLayoutMode = useCallback(
     async (mode) => {
       if (!sectionStripLayoutRow || sectionStripLayoutRow.nodeType !== 'row') return;
@@ -399,6 +472,11 @@ export default function BuilderInspector({
     carouselSlidesJson: '',
     featureTabsJson: '',
     faqAccordionJson: '',
+    socialIconsJson: '',
+    gridItemsJson: '',
+    featureListJson: '',
+    tableProHeadersJson: '',
+    tableProRowsJson: '',
   });
   const [form, setForm] = useState({
     text: '',
@@ -756,6 +834,7 @@ export default function BuilderInspector({
         null,
         2
       ),
+      ...advancedElementFormFromProps(selectedNode.props || {}),
       carouselVariant: pickPending(
         'carouselVariant',
         shouldUsePendingVariant ? pendingVariant.value : nodeCarouselVariant
@@ -1427,6 +1506,51 @@ export default function BuilderInspector({
       setForm((prevForm) => ({ ...prevForm, faqAccordionJson: JSON.stringify(next, null, 2) }));
       return;
     }
+
+    const advPatch = advancedElementPatchFromFormKey(selectedNode.nodeType, key, value);
+    if (advPatch) {
+      const payload = { props: { ...(selectedNode.props || {}), ...advPatch.patch } };
+      if (advPatch.stylePatch) {
+        const prev = selectedNode.style_json || {};
+        payload.style_json = {
+          ...prev,
+          desktop: {
+            ...(prev.desktop || {}),
+            ...(advPatch.stylePatch.desktop || {}),
+            size: {
+              ...(prev.desktop?.size || {}),
+              ...(advPatch.stylePatch.desktop?.size || {}),
+            },
+          },
+        };
+      }
+      await updateNode(selectedNode.id, payload);
+      return;
+    }
+    const advancedJsonKeys = [
+      'socialIconsJson',
+      'gridItemsJson',
+      'featureListJson',
+      'tableProHeadersJson',
+      'tableProRowsJson',
+    ];
+    if (advancedJsonKeys.includes(key)) {
+      try {
+        const jsonUpdate = tryParseAdvancedElementJson(selectedNode.nodeType, key, value);
+        if (!jsonUpdate) return;
+        await updateProps(jsonUpdate.propPatch);
+        setJsonErrors((prev) => ({ ...prev, [jsonUpdate.errorKey]: '' }));
+        const propVal = jsonUpdate.propPatch[Object.keys(jsonUpdate.propPatch)[0]];
+        setForm((prevForm) => ({ ...prevForm, [jsonUpdate.formKey]: JSON.stringify(propVal, null, 2) }));
+      } catch (err) {
+        setJsonErrors((prev) => ({
+          ...prev,
+          [key]: err instanceof Error ? err.message : 'Invalid JSON format.',
+        }));
+      }
+      return;
+    }
+
     if (selectedNode.nodeType === 'carousel') {
       if (key === 'carouselVariant') {
         const v = String(value || 'image');
@@ -1784,6 +1908,37 @@ export default function BuilderInspector({
       next.splice(to, 0, moved);
       await updateProps({ fields: next });
       setForm((prev) => ({ ...prev, formFieldsJson: JSON.stringify(next, null, 2) }));
+    }
+    if (key === 'formSetLayout' && selectedNode.nodeType === 'form') {
+      const patch = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+      const prev =
+        selectedNode.props?.layout && typeof selectedNode.props.layout === 'object'
+          ? selectedNode.props.layout
+          : {};
+      const next = { ...prev };
+      if ('labelGapPx' in patch) {
+        const n = Number(patch.labelGapPx);
+        if (Number.isFinite(n) && n >= 0) next.labelGapPx = Math.min(48, Math.round(n));
+        else delete next.labelGapPx;
+      }
+      if ('fieldGapPx' in patch) {
+        const n = Number(patch.fieldGapPx);
+        if (Number.isFinite(n) && n >= 0) next.fieldGapPx = Math.min(80, Math.round(n));
+        else delete next.fieldGapPx;
+      }
+      if ('inputAfterGapPx' in patch) {
+        const n = Number(patch.inputAfterGapPx);
+        if (Number.isFinite(n) && n >= 0) {
+          next.inputAfterGapPx = Math.min(80, Math.round(n));
+          delete next.fieldGapPx;
+        } else delete next.inputAfterGapPx;
+      }
+      if ('beforeSubmitGapPx' in patch) {
+        const n = Number(patch.beforeSubmitGapPx);
+        if (Number.isFinite(n) && n >= 0) next.beforeSubmitGapPx = Math.min(80, Math.round(n));
+        else delete next.beforeSubmitGapPx;
+      }
+      await updateProps({ layout: Object.keys(next).length ? next : undefined });
     }
     if (key === 'formSetNotifications' && selectedNode.nodeType === 'form') {
       const patch = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -2380,6 +2535,7 @@ export default function BuilderInspector({
           jsonErrors={jsonErrors}
           projectPages={projectPages}
           projectId={projectId}
+          pageId={pageId}
         />
       ) : null}
       {activeTab === 'style' ? (
@@ -2387,6 +2543,7 @@ export default function BuilderInspector({
           selectedNode={selectedNode}
           form={form}
           onChange={handleStyleChange}
+          onContentChange={handleContentChange}
           onPatchForm={patchForm}
           projectId={projectId}
           onPreviewStylePatch={previewStylePatch}
@@ -2404,6 +2561,7 @@ export default function BuilderInspector({
           stripLayoutTargetRow={sectionStripLayoutRow}
           onPatchRootStripLayout={patchRootStripLayout}
           onPatchHeaderLayoutMode={patchHeaderLayoutMode}
+          onPatchSectionLayout={patchSectionLayout}
         />
       ) : null}
       {activeTab === 'style' ? (
@@ -2429,7 +2587,13 @@ export default function BuilderInspector({
         />
       ) : null}
       {activeTab === 'theme' ? (
-        <ThemePanel pageTree={pageTree} onPatchRootSectionPageSpacing={patchRootSectionPageSpacingById} />
+        <ThemePanel
+          pageTree={pageTree}
+          onPatchRootSectionPageSpacing={patchRootSectionPageSpacingById}
+          selectedNodeId={
+            selectedNode?.nodeType === 'row' && isRootPageRow(pageTree, selectedNode) ? selectedNode.id : null
+          }
+        />
       ) : null}
       </div>
     </div>

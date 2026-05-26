@@ -1,0 +1,47 @@
+/* Get in Touch — form look only; layout/spacing comes from Style tab (no forced padding/align). */
+
+.live-doc
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='getInTouch']
+  .live-form__label {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.live-doc
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='getInTouch']
+  .live-form__input {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 14px;
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.live-doc
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='getInTouch']
+  .live-form__submit {
+  width: 100%;
+  margin-top: 8px;
+  padding: 14px 20px;
+  border: none;
+  border-radius: 8px;
+  background: #3b82f6;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.live-doc
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='getInTouch']
+  .live-form__submit:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.live-doc
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='getInTouch']
+  .live-divider {
+  flex-shrink: 0;
+}

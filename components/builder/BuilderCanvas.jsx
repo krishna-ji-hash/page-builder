@@ -19,6 +19,7 @@ import { normalizeResponsiveStyle } from '@/lib/styleNormalizer';
 import { withResolvedLayoutGap } from '@/lib/layoutGapUtils';
 import { mergeDeviceStyleWithTypeDefaults, mergeMenuDeviceStyle } from '@/lib/nodeLayoutDefaults';
 import { SECTION_TEMPLATES } from '@/lib/sectionTemplates';
+import { isGetInTouchSectionRow } from '@/lib/getInTouchSection';
 import { mergeImageFigureStyleForShadow } from '@/lib/boxShadowLayout';
 import {
   buildBuilderLiveRenderOptions,
@@ -26,6 +27,7 @@ import {
   wrapBuilderLeafForInlineEdit,
 } from '@/lib/builderLiveParity';
 import { renderNode } from '@/lib/liveRenderer';
+import { RuntimeProvider } from '@/components/runtime/RuntimeProvider';
 import { sanitizeLiveFlowPositionCss, sanitizeLiveRootContentRowCss } from '@/lib/sanitizeLiveLayout';
 import { imageFitMode, mergeImageFigureStyleForContain } from '@/lib/imageFigureStyle';
 import { getRichTextAnimationStyle } from '@/lib/richTextAnimation';
@@ -381,6 +383,8 @@ function renderNodeContent(
     onFaqAccordionAddItem = null,
     siteTheme = null,
     insideSiteHeaderRow = false,
+    builderPageId = null,
+    builderProjectId = null,
   }
 ) {
   const bind = (s) => (cmsBindingContext ? applyBindingsToString(String(s || ''), cmsBindingContext) : s);
@@ -415,6 +419,8 @@ function renderNodeContent(
     siteTheme,
     insideSiteHeaderRow,
     builderCanvas: builderCanvasHooks,
+    pageId: builderPageId,
+    projectId: builderProjectId,
   });
 
   const renderViaLive = () => {
@@ -579,6 +585,14 @@ function renderNodeContent(
         neutralizeBodyColorsPersist={neutralizeBodyColorsPersist}
       />
     );
+  }
+
+  if (node.nodeType === 'modal') {
+    const preview = renderNode(node, String(node.id ?? 'modal'), {
+      ...liveRenderOptions,
+      builderCanvas: builderCanvasHooks,
+    });
+    if (preview != null) return preview;
   }
 
   const liveLeaf = renderViaLive();
@@ -891,6 +905,8 @@ function NodeRenderer({
   cmsContext = null,
   cmsPreviewByCollection = null,
   insideSiteHeaderRow = false,
+  builderPageId = null,
+  builderProjectId = null,
 }) {
   const isSelected = node.id === selectedNodeId;
   const handleSelect = (event) => {
@@ -3059,7 +3075,9 @@ function NodeRenderer({
           {...rowPaddingDefinedAttrs}
           {...(node.props?.meta?.sectionTemplate
             ? { 'data-section-template': String(node.props.meta.sectionTemplate) }
-            : {})}
+            : isGetInTouchSectionRow(node)
+              ? { 'data-section-template': 'getInTouch' }
+              : {})}
           {...(node.props?.meta?.isHeader ||
           node.props?.meta?.role === 'header' ||
           isSiteHeaderRowForCompact(node)
@@ -3256,6 +3274,8 @@ function NodeRenderer({
                     freeMoveBrushActive={freeMoveBrushActive}
                     cmsPreviewByCollection={cmsPreviewByCollection}
                     insideSiteHeaderRow={childInsideSiteHeaderRow}
+                    builderPageId={builderPageId}
+                    builderProjectId={builderProjectId}
                   />
                 ))}
               </div>
@@ -3440,6 +3460,8 @@ function NodeRenderer({
                   onFaqAccordionAddItem: faqAccordionAddItemHandler,
                   siteTheme,
                   insideSiteHeaderRow,
+                  builderPageId,
+                  builderProjectId,
                 })}
               </div>
             ) : (
@@ -3471,6 +3493,8 @@ function NodeRenderer({
                 onFaqAccordionAddItem: faqAccordionAddItemHandler,
                 siteTheme,
                 insideSiteHeaderRow,
+                builderPageId,
+                builderProjectId,
               })
             )}
             {null}
@@ -3727,6 +3751,8 @@ function NodeRenderer({
                     onFreeMoveBrush={onFreeMoveBrush}
                     freeMoveBrushActive={freeMoveBrushActive}
                     insideSiteHeaderRow={childInsideSiteHeaderRow}
+                    builderPageId={builderPageId}
+                    builderProjectId={builderProjectId}
                   />
                 ))}
               </div>
@@ -3834,6 +3860,32 @@ function breadcrumbDisplayLabel(n) {
   if (n.nodeType === 'stack') return n.displayName || 'Stack';
   if (n.nodeType === 'tabs') return 'Feature tabs';
   if (n.nodeType === 'accordion') return 'FAQ accordion';
+  if (n.nodeType === 'icon') return 'Icon';
+  if (n.nodeType === 'icon_box') return 'Icon box';
+  if (n.nodeType === 'content_card') return 'Card';
+  if (n.nodeType === 'spacer') return 'Spacer';
+  if (n.nodeType === 'modal') return 'Modal';
+  if (n.nodeType === 'video_embed') return 'Video embed';
+  if (n.nodeType === 'map_embed') return 'Map embed';
+  if (n.nodeType === 'social_icons') return 'Social icons';
+  if (n.nodeType === 'container_box') return 'Container';
+  if (n.nodeType === 'grid_block') return 'Grid';
+  if (n.nodeType === 'alert_notice') return 'Alert';
+  if (n.nodeType === 'badge_label') return 'Badge';
+  if (n.nodeType === 'counter_block') return 'Counter';
+  if (n.nodeType === 'progress_bar') return 'Progress bar';
+  if (n.nodeType === 'rating_stars') return 'Rating';
+  if (n.nodeType === 'testimonial_card') return 'Testimonial';
+  if (n.nodeType === 'pricing_card') return 'Pricing card';
+  if (n.nodeType === 'newsletter_form') return 'Newsletter';
+  if (n.nodeType === 'whatsapp_button') return 'WhatsApp';
+  if (n.nodeType === 'countdown_timer') return 'Countdown';
+  if (n.nodeType === 'html_block') return 'HTML block';
+  if (n.nodeType === 'code_block') return 'Code block';
+  if (n.nodeType === 'lottie_animation') return 'Lottie';
+  if (n.nodeType === 'logo_block') return 'Logo';
+  if (n.nodeType === 'feature_list') return 'Feature list';
+  if (n.nodeType === 'table_pro') return 'Table Pro';
   return n.displayName || n.nodeType || 'Block';
 }
 
@@ -3896,7 +3948,10 @@ export default function BuilderCanvas({
   onOverflowDiagnosticsChange,
   showGrid = false,
   projectId,
+  pageId: builderPageIdProp = null,
 }) {
+  const builderPageId = Number(builderPageIdProp) > 0 ? Number(builderPageIdProp) : null;
+  const builderProjectId = Number(projectId) > 0 ? Number(projectId) : null;
   const { siteTheme, currentPageSlug } = useBuilderTheme();
   const pageVars = currentPageSlug ? siteTheme?.pageVars?.[currentPageSlug] : null;
   const sectionGapPx = pageVars && Number.isFinite(Number(pageVars.sectionGapPx)) ? Number(pageVars.sectionGapPx) : null;
@@ -4614,6 +4669,7 @@ export default function BuilderCanvas({
               </nav>
             ) : null}
             {!isLoading && tree?.length ? (
+              <RuntimeProvider>
               <div
                 className="live-site bld-canvas__live-mirror"
                 data-sticky-header={stickyHeader ? 'true' : 'false'}
@@ -4689,10 +4745,13 @@ export default function BuilderCanvas({
                       onFreeMoveBrush={onFreeMoveBrush}
                       freeMoveBrushActive={canvasFreeMoveActive}
                       cmsPreviewByCollection={cmsPreviewByCollection}
+                      builderPageId={builderPageId}
+                      builderProjectId={builderProjectId}
                     />
                   ))}
                 </div>
               </div>
+              </RuntimeProvider>
             ) : null}
             {!isLoading && tree?.length ? (
               <div className="bld-add-section-inline bld-add-section-inline--tail">

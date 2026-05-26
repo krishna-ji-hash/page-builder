@@ -1,5 +1,4 @@
-import { RuntimeProvider } from '@/components/runtime/RuntimeProvider';
-import { renderTree } from '@/lib/liveRenderer';
+import PublishedLiveTree from '@/components/live/PublishedLiveTree';
 import { getPageVarsBucket, livePageCssVarOverrides, resolveBodyLayout, resolveContentMaxWidthPx } from '@/lib/livePageCssVars';
 import { normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesignTheme';
 import { buildRenderNodesWithGlobals } from '@/lib/globalSectionMerge';
@@ -106,8 +105,9 @@ export default async function DraftPreviewPage({ params }) {
       }}
     >
       <LiveDoc>
-        <RuntimeProvider>
-          {renderTree(renderNodes, {
+        <PublishedLiveTree
+          nodes={renderNodes}
+          options={{
             currentPath,
             projectPages,
             siteTheme,
@@ -115,8 +115,8 @@ export default async function DraftPreviewPage({ params }) {
             pageId: state.page.id,
             projectId: state.page.projectId,
             projectSlug: state.page.projectSlug,
-          })}
-        </RuntimeProvider>
+          }}
+        />
       </LiveDoc>
     </div>
   );

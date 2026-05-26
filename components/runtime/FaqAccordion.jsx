@@ -5,7 +5,7 @@ import FeatureTabCanvasField from '@/components/builder/canvas/FeatureTabCanvasF
 import { resolveFaqAccordionProps } from '@/lib/faqAccordionDefaults';
 
 /**
- * Shipmozo-style FAQ accordion. Builder: edit Q&A on canvas; sidebar is layout/advanced only.
+ * Dispatch Solutions-style FAQ accordion. Builder: edit Q&A on canvas; sidebar is layout/advanced only.
  */
 export default function FaqAccordion({
   items: itemsProp,

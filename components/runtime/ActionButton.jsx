@@ -6,9 +6,18 @@ import {
   isActionExecutable,
   isSafeNavigateAction,
 } from '@/lib/runtime/actionExecutor';
+import { RuntimeLeafProvider } from './RuntimeLeafProvider';
 import { useRuntimeData } from './RuntimeProvider';
 
-export default function ActionButton({
+export default function ActionButton(props) {
+  return (
+    <RuntimeLeafProvider>
+      <ActionButtonInner {...props} />
+    </RuntimeLeafProvider>
+  );
+}
+
+function ActionButtonInner({
   label = 'Button',
   style,
   className,

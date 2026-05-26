@@ -2,19 +2,14 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
-const RuntimeDataContext = createContext({
-  fetchInternal: async () => {
-    throw new Error('RuntimeProvider missing');
-  },
-  dataRefreshKey: 0,
-  bumpRefresh: () => {},
-  showToast: () => {},
-  dismissToast: () => {},
-  toast: null,
-});
+export const RuntimeDataContext = createContext(null);
 
 export function useRuntimeData() {
-  return useContext(RuntimeDataContext);
+  const ctx = useContext(RuntimeDataContext);
+  if (!ctx) {
+    throw new Error('RuntimeProvider missing');
+  }
+  return ctx;
 }
 
 function RuntimeToast({ toast, onDismiss }) {
