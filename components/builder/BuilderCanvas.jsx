@@ -39,9 +39,8 @@ import {
 } from '@/lib/headerLayoutMode';
 import {
   landmarkContentDataAttrs,
-  livePageCssVarOverrides,
+  livePageCssVarOverridesForPage,
   resolveBodyLayout,
-  resolveContentMaxWidthPx,
   resolveLandmarkContentMaxWidthPx,
   resolveLandmarkContentWidth,
   resolveSectionContentMaxWidthPx,
@@ -3958,10 +3957,6 @@ export default function BuilderCanvas({
   const builderProjectId = Number(projectId) > 0 ? Number(projectId) : null;
   const { siteTheme, currentPageSlug } = useBuilderTheme();
   const pageVars = currentPageSlug ? siteTheme?.pageVars?.[currentPageSlug] : null;
-  const sectionGapPx = pageVars && Number.isFinite(Number(pageVars.sectionGapPx)) ? Number(pageVars.sectionGapPx) : null;
-  const sectionPadBottomPx =
-    pageVars && Number.isFinite(Number(pageVars.sectionPadBottomPx)) ? Number(pageVars.sectionPadBottomPx) : null;
-  const contentMaxWidthPx = resolveContentMaxWidthPx(pageVars);
   const stickyHeader = Boolean(pageVars?.stickyHeader);
   const bodyLayout = resolveBodyLayout(siteTheme, currentPageSlug);
   /** Same tokens + body font as `app/[projectSlug]/[pageSlug]/page.jsx` so canvas matches published/live preview. */
@@ -4680,7 +4675,7 @@ export default function BuilderCanvas({
                 data-live-body-layout={bodyLayout}
                 style={{
                   ...liveMirrorRootStyle,
-                  ...livePageCssVarOverrides({ sectionGapPx, sectionPadBottomPx, contentMaxWidthPx }),
+                  ...livePageCssVarOverridesForPage(siteTheme, currentPageSlug),
                 }}
               >
                 {showGrid ? <GridOverlay containerSelector=".bld-canvas__live-mirror .live-doc" /> : null}

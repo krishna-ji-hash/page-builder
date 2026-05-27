@@ -5,7 +5,7 @@ import { normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesig
 import { resolveMaybeAsyncParams, isPublicSlug } from '@/lib/routeParams';
 import { getItemBySlug } from '@/services/builder/cmsService';
 import { applyBindingsToTree, applyBindingsToString } from '@/lib/cms/cmsBindings';
-import { getPageVarsBucket, livePageCssVarOverrides, resolveBodyLayout, resolveContentMaxWidthPx } from '@/lib/livePageCssVars';
+import { livePageCssVarOverridesForPage, resolveBodyLayout } from '@/lib/livePageCssVars';
 import { resolveSeoMetadata } from '@/lib/seo/seoEngine';
 import JsonLd from '@/components/seo/JsonLd';
 import LiveDoc from '@/components/live/LiveDoc';
@@ -68,16 +68,6 @@ export default async function PropertyRoute({ params }) {
   });
 
   const propertyTemplateSlug = 'property-detail';
-  const propertyPageVars = getPageVarsBucket(siteTheme, propertyTemplateSlug);
-  const propertySectionGapPx =
-    propertyPageVars && Number.isFinite(Number(propertyPageVars.sectionGapPx))
-      ? Number(propertyPageVars.sectionGapPx)
-      : null;
-  const propertySectionPadBottomPx =
-    propertyPageVars && Number.isFinite(Number(propertyPageVars.sectionPadBottomPx))
-      ? Number(propertyPageVars.sectionPadBottomPx)
-      : null;
-  const propertyContentMaxWidthPx = resolveContentMaxWidthPx(propertyPageVars);
   const propertyBodyLayout = resolveBodyLayout(siteTheme, propertyTemplateSlug);
 
   return (
@@ -89,11 +79,7 @@ export default async function PropertyRoute({ params }) {
       data-live-body-layout={propertyBodyLayout}
       style={{
         ...siteCssVars,
-        ...livePageCssVarOverrides({
-          sectionGapPx: propertySectionGapPx,
-          sectionPadBottomPx: propertySectionPadBottomPx,
-          contentMaxWidthPx: propertyContentMaxWidthPx,
-        }),
+        ...livePageCssVarOverridesForPage(siteTheme, propertyTemplateSlug),
         fontFamily: siteTheme.typography.fontFamily,
       }}
     >

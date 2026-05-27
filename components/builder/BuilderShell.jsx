@@ -15,6 +15,7 @@ import {
   validateTree,
 } from '@/lib/builderTree';
 import { adminBuilderPagePath, previewPagePath } from '@/lib/builder/adminBuilderRoutes';
+import { publicPagePath } from '@/lib/publicSiteUrls';
 import { isValidNodeHierarchy } from '@/lib/builderHierarchy';
 import { normalizeResponsiveStyle } from '@/lib/styleNormalizer';
 import { getDeviceStyle } from '@/lib/styleToCss';
@@ -45,6 +46,7 @@ import {
   isStackLeafWidgetType,
   resolveQuickAddStackParentId,
 } from '@/lib/quickAddResolve';
+import { buildReusableBulkOrderedNodes } from '@/lib/reusableBlockInsert';
 import PageSeoModal from './seo/PageSeoModal';
 import AuditModal from './audits/AuditModal';
 import AuditBadgesOverlay from './audits/AuditBadgesOverlay';
@@ -468,6 +470,7 @@ export default function BuilderShell({ pageId }) {
   const [errorMessage, setErrorMessage] = useState('');
   const [isSavingNode, setIsSavingNode] = useState(false);
   const [isCreatingNode, setIsCreatingNode] = useState(false);
+  const [isApplyingResponsive, setIsApplyingResponsive] = useState(false);
   const [isDeletingNode, setIsDeletingNode] = useState(false);
   const [deletingNodeId, setDeletingNodeId] = useState(null);
   const deleteInFlightRef = useRef(false);
@@ -860,7 +863,7 @@ export default function BuilderShell({ pageId }) {
   );
 
   const liveUrl =
-    page?.projectSlug && page?.slug ? `/${page.projectSlug}/${page.slug}` : null;
+    page?.projectSlug && page?.slug ? publicPagePath(page.projectSlug, page.slug) : null;
   const previewUrl =
     page?.projectSlug && page?.slug ? previewPagePath(page.projectSlug, page.slug) : null;
   const canOpenLivePreview = Boolean(liveUrl && page?.publishedVersionId);
@@ -1550,7 +1553,8 @@ export default function BuilderShell({ pageId }) {
     }
     const data = await readJsonSafe(response);
     if (!response.ok) {
-      throw new Error(data.error || 'Failed to bulk create nodes');
+      const detail = data?.details ? ` (${data.details})` : '';
+      throw new Error(`${data.error || 'Failed to bulk create nodes'}${detail}`);
     }
     if (data.tree) {
       setTree(data.tree);
@@ -1573,6 +1577,36 @@ export default function BuilderShell({ pageId }) {
     const offset = Number.isInteger(Number(insertIndex)) ? Number(insertIndex) : 0;
     const nodes = flattened.map((n) => (n.parentRef ? n : { ...n, positionIndex: Number(n.positionIndex) + offset }));
     return await bulkCreateNodesRequest(nodes);
+  };
+
+  const handleApplyResponsiveToPage = async ({ mobile = true, tablet = true } = {}) => {
+    if (!pageIdValid || isApplyingResponsive) return;
+    const beforeTree = cloneTreeSnapshot(tree);
+    pushHistorySnapshot(beforeTree);
+    setIsApplyingResponsive(true);
+    setErrorMessage('');
+    try {
+      const response = await fetch(`/api/pages/${pid}/responsive-apply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mobile: mobile !== false, tablet: tablet !== false }),
+      });
+      const data = await readJsonSafe(response);
+      if (!response.ok) {
+        throw new Error(data.details || data.error || 'Failed to apply responsive layout');
+      }
+      if (data.tree) {
+        setTree(data.tree);
+      } else {
+        await reloadBuilder();
+      }
+      setHasUnpublishedEdits(true);
+    } catch (error) {
+      setUndoStack((prev) => prev.slice(0, -1));
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsApplyingResponsive(false);
+    }
   };
 
   const handleApplyFullPageTemplate = async ({ templateId, mode }) => {
@@ -3074,42 +3108,51 @@ export default function BuilderShell({ pageId }) {
     }
   };
 
-  const handleInsertReusableBlock = async (blockId) => {
+  const handleInsertReusableBlock = async (blockId, { mode = 'smart' } = {}) => {
     const id = Number(blockId);
     if (!Number.isInteger(id) || id <= 0) return;
     const block = reusableBlocks.find((b) => Number(b.id) === id);
     const nodes = block?.snapshot?.nodes;
     if (!Array.isArray(nodes) || !nodes.length) return;
-    try {
-      // Validate snapshot before insertion.
-      const fixed = reconcileStructuralParents(autoFixTree(nodes));
-      validateTree(fixed);
+    if (isCreatingNode) return;
 
-      // Flatten DFS order with tempId + parentRef so bulk API can map ids.
-      const ordered = [];
-      const rootInsertIndex = Array.isArray(tree) ? tree.length : 0;
-      const walk = (n, parentRef = null) => {
-        const tempId = `rb-${id}-${n.id}`;
-        const entry = {
-          tempId,
-          parentRef: parentRef || null,
-          nodeType: n.nodeType,
-          displayName: n.displayName || n.nodeType,
-          positionIndex: parentRef == null ? rootInsertIndex + (Number(n.positionIndex) || 0) : Number(n.positionIndex) || 0,
-          props: n.props || {},
-          style_json: n.style_json || (n.props ? n.props.style_json : undefined),
-          dataJson: n.dataJson ?? null,
-          actionsJson: n.actionsJson ?? null,
-        };
-        ordered.push(entry);
-        for (const child of n.children || []) {
-          walk(child, tempId);
-        }
-      };
-      for (const root of fixed) walk(root, null);
-      await bulkCreateNodesRequest(ordered);
+    const replaceRowId =
+      mode === 'append'
+        ? null
+        : selectedNode?.nodeType === 'row'
+          ? selectedNode.id
+          : activeSectionRowId;
+
+    const beforeTree = tree;
+    pushHistorySnapshot(beforeTree);
+    setIsCreatingNode(true);
+    setErrorMessage('');
+
+    try {
+      let rootInsertIndex = Array.isArray(tree) ? tree.length : 0;
+
+      if (replaceRowId != null) {
+        const ctx = getSiblingContext(tree, replaceRowId);
+        if (ctx) rootInsertIndex = Math.max(0, Number(ctx.index) || 0);
+        await deleteNodeRequest(replaceRowId);
+      }
+
+      const { ordered } = buildReusableBulkOrderedNodes(id, nodes, rootInsertIndex);
+      const data = await bulkCreateNodesRequest(ordered);
+      await reloadBuilder();
+      const rootIds = Array.isArray(data?.rootIds) ? data.rootIds : [];
+      if (rootIds.length) {
+        setSelectedNodeId(rootIds[0]);
+        setFlashReorderNodeId(rootIds[0]);
+      }
+      setHasUnpublishedEdits(true);
+      setLeftPanelTab('layers');
     } catch (e) {
+      setTree(beforeTree);
+      setUndoStack((prev) => prev.slice(0, -1));
       setErrorMessage(e instanceof Error ? e.message : String(e));
+    } finally {
+      setIsCreatingNode(false);
     }
   };
 
@@ -4489,6 +4532,8 @@ export default function BuilderShell({ pageId }) {
                     else if (activeSectionRowId) handleSaveReusableBlock(activeSectionRowId);
                   }}
                   onInsertReusableBlock={handleInsertReusableBlock}
+                  onAppendReusableBlock={(blockId) => handleInsertReusableBlock(blockId, { mode: 'append' })}
+                  activeSectionRowId={activeSectionRowId}
                   onRenameReusableBlock={handleRenameReusableBlock}
                   onDeleteReusableBlock={handleDeleteReusableBlock}
                   onInsertGlobalSection={handleInsertGlobalSection}
@@ -4630,6 +4675,8 @@ export default function BuilderShell({ pageId }) {
               onInsertDivider={handleInsertDivider}
               canInsertDivider={canInsertDividerLine}
               isCreatingNode={isCreatingNode}
+              onApplyResponsiveToPage={handleApplyResponsiveToPage}
+              isApplyingResponsive={isApplyingResponsive}
             />
           </aside>
         </div>

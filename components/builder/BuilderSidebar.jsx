@@ -250,8 +250,10 @@ export default function BuilderSidebar({
   reusableBlocks = [],
   onSaveReusableBlock,
   onInsertReusableBlock,
+  onAppendReusableBlock,
   onRenameReusableBlock,
   onDeleteReusableBlock,
+  activeSectionRowId = null,
   onInsertGlobalSection,
   onExportPage,
   globalSections,
@@ -764,7 +766,10 @@ export default function BuilderSidebar({
         ) : activeTab === 'reusable' ? (
           <>
             <div className="bld-sidebar__hint">
-              Reusable blocks: save any <strong>Section</strong> (row) and insert it into any page (detached copy).
+              Reusable blocks: save any <strong>Section</strong> (row) and insert a detached copy.
+              {activeSectionRowId
+                ? ' The active section will be replaced when you use Replace.'
+                : ' Select a section on the canvas to replace it, or use Insert below to add at the end.'}
             </div>
             <details className="bld-acc" open>
               <summary>Save selected section</summary>
@@ -793,8 +798,27 @@ export default function BuilderSidebar({
                       <div className="bld-reusable-card__title" title={b.name}>{b.name}</div>
                       <div className="bld-reusable-card__meta">Reusable section</div>
                       <div className="bld-reusable-card__actions">
-                        <button type="button" className="bld-chip" onClick={() => onInsertReusableBlock?.(b.id)}>
-                          Insert
+                        <button
+                          type="button"
+                          className="bld-chip"
+                          onClick={() => onInsertReusableBlock?.(b.id)}
+                          disabled={isCreatingNode}
+                          title={
+                            activeSectionRowId
+                              ? 'Replace the active section with this reusable block'
+                              : 'Select a section first to replace, or use Insert below'
+                          }
+                        >
+                          Replace
+                        </button>
+                        <button
+                          type="button"
+                          className="bld-chip"
+                          onClick={() => onAppendReusableBlock?.(b.id)}
+                          disabled={isCreatingNode}
+                          title="Add this reusable section at the bottom of the page"
+                        >
+                          Insert below
                         </button>
                         <button type="button" className="bld-chip" onClick={() => onRenameReusableBlock?.(b.id)}>
                           Rename

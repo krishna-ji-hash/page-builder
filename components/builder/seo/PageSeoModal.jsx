@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { normalizeProjectSeo, normalizePageSeo } from '@/lib/seo/seoEngine';
+import { publicPagePathForSeo } from '@/lib/publicSiteUrls';
 
 const TITLE_MIN = 15;
 const TITLE_MAX = 70;
@@ -358,11 +359,12 @@ export default function PageSeoModal({
 
   if (!open) return null;
 
+  const defaultPublicPath = publicPagePathForSeo(projectSlug, pageSlug);
   const canonicalPreview =
     safeTrim(form.canonicalUrl) ||
     (safeTrim(normalizeProjectSeo(projectConfig).canonicalDomain)
-      ? `${safeTrim(normalizeProjectSeo(projectConfig).canonicalDomain).replace(/\/+$/, '')}/${projectSlug}/${pageSlug}`
-      : `/${projectSlug}/${pageSlug}`);
+      ? `${safeTrim(normalizeProjectSeo(projectConfig).canonicalDomain).replace(/\/+$/, '')}${defaultPublicPath}`
+      : defaultPublicPath);
 
   return (
     <div className="bld-modal-backdrop" role="presentation" onClick={onClose}>

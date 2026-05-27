@@ -13,6 +13,8 @@ import { DEFAULT_SITE_THEME, themeSpacingPx } from '@/lib/siteDesignTheme';
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
 import { isSectionLockedFlagValue, metaRepresentsExplicitSectionUnlock } from '@/lib/rowLayoutMeta';
 import { freezeGlobalSectionsForPublish } from '@/lib/globalSectionSnapshot';
+import { applyResponsiveDefaultsToTree } from '@/lib/applyPageResponsiveDefaults';
+import { normalizeSiteTheme } from '@/lib/siteDesignTheme';
 
 function parseSnapshot(value) {
   if (!value) return null;
@@ -1205,6 +1207,23 @@ async function persistClientTreeOntoDraft(connection, draftVersionId, clientRoot
       ]
     );
   }
+}
+
+/** Apply tablet/mobile defaults to every node on the draft tree (builder → Theme → Page responsive). */
+export async function applyPageResponsiveDefaults(pageId, options = {}) {
+  const pid = Number(pageId);
+  if (!Number.isInteger(pid) || pid <= 0) {
+    throw new Error('Invalid pageId');
+  }
+  const mobile = options.mobile !== false;
+  const tablet = options.tablet !== false;
+  const state = await getBuilderState(pid);
+  if (!state?.tree) {
+    throw new Error('Page not found');
+  }
+  const siteTheme = normalizeSiteTheme(state.page.projectConfig?.siteTheme);
+  const patched = applyResponsiveDefaultsToTree(state.tree, { siteTheme, mobile, tablet });
+  return syncDraftSnapshot(pid, patched);
 }
 
 export async function syncDraftSnapshot(pageId, clientRoots = null) {

@@ -6,12 +6,15 @@ import { getGlobalComponentsByIds } from '@/services/builder/globalComponentsSer
 import { expandLinkedGlobalComponents } from '@/lib/globalComponentExpand';
 import { expandCms } from '@/lib/cms/cmsExpand';
 import * as cmsService from '@/services/builder/cmsService';
+import { publicPagePath } from '@/lib/publicSiteUrls';
 
 /**
  * Data sources (audit):
  * - PUBLIC/LIVE (`getPublishedPageForPublic`): `pages.published_version_id` → `page_versions.snapshot_json` only.
- *   Page nodes + frozen `globalSections` (header/footer) come from published snapshot — never `projects.config_json.globalSections`.
- *   `projectConfig` on live is used for siteTheme/SEO only, not mutable global header/footer.
+ *   Page nodes + frozen `globalSections` (header/footer) come from the published snapshot.
+ *   If an older publish omitted `globalSections` but the project still has globals configured, we fall back
+ *   to `projects.config_json.globalSections` so live matches builder preview (see merge below).
+ *   `projectConfig` is also used for siteTheme/SEO.
  * - BUILDER PREVIEW (`getDraftPageForBuilder`): draft nodes + live `projects.config_json.globalSections`.
  * - PUBLISH (`publishDraftToSnapshot`): copies draft nodes + freezes globalSections from project config into snapshot.
  */
@@ -114,9 +117,20 @@ async function getPublishedPageRaw(projectSlug, pageSlug, pageContext = null) {
     snapshotJson = await expandNodesWithLinkedGlobals(snapshotJson, row.project_id);
   }
 
+  const configGlobals =
+    projectConfig && typeof projectConfig === 'object' && projectConfig.globalSections
+      ? projectConfig.globalSections
+      : {};
+  const headerSource =
+    publishedGlobalSections.header ||
+    (configGlobals.header && typeof configGlobals.header === 'object' ? configGlobals.header : null);
+  const footerSource =
+    publishedGlobalSections.footer ||
+    (configGlobals.footer && typeof configGlobals.footer === 'object' ? configGlobals.footer : null);
+
   publishedGlobalSections = {
-    header: await expandFrozenGlobalSection(publishedGlobalSections.header, row.project_id),
-    footer: await expandFrozenGlobalSection(publishedGlobalSections.footer, row.project_id),
+    header: await expandFrozenGlobalSection(headerSource, row.project_id),
+    footer: await expandFrozenGlobalSection(footerSource, row.project_id),
   };
 
   if (Array.isArray(snapshotJson) && snapshotJson.length) {
@@ -137,7 +151,7 @@ async function getPublishedPageRaw(projectSlug, pageSlug, pageContext = null) {
     projectPages: pageRows.map((page) => ({
       slug: page.slug,
       title: page.title,
-      href: `/${row.project_slug}/${page.slug}`,
+      href: publicPagePath(row.project_slug, page.slug),
     })),
   };
 }

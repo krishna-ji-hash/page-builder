@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { adminBuilderPagePath, previewPagePath } from '@/lib/builder/adminBuilderRoutes';
+import { publicPagePath } from '@/lib/publicSiteUrls';
 import {
   isDuplicatePageSlugInProject,
   isLivePagePublished,
@@ -691,7 +692,7 @@ export default function BuilderProjectsManager() {
                         </thead>
                         <tbody>
                           {pages.map((page) => {
-                            const publicPath = `/${openProject.slug}/${page.slug}`;
+                            const publicPath = publicPagePath(openProject.slug, page.slug);
                             const published = isLivePagePublished(page);
                             return (
                               <tr key={page.id}>

@@ -3,9 +3,29 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+const publicProjectSlug = String(
+  process.env.NEXT_PUBLIC_PUBLIC_PROJECT_SLUG || process.env.PUBLIC_PROJECT_SLUG || 'dispatch'
+)
+  .trim()
+  .replace(/^\/+|\/+$/g, '') || 'dispatch';
+
+const flatPublicUrls =
+  process.env.NEXT_PUBLIC_FLAT_PUBLIC_URLS !== '0' &&
+  process.env.NEXT_PUBLIC_FLAT_PUBLIC_URLS !== 'false';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  async redirects() {
+    if (!flatPublicUrls) return [];
+    return [
+      {
+        source: `/${publicProjectSlug}/:page`,
+        destination: '/:page',
+        permanent: true,
+      },
+    ];
+  },
   // Avoid picking a parent folder when another package-lock.json exists above this project
   outputFileTracingRoot: path.join(__dirname),
   // Keep DOMPurify + jsdom as Node requires — avoids missing `.next/server/vendor-chunks/dompurify.js` after HMR.

@@ -1,5 +1,5 @@
 import PublishedLiveTree from '@/components/live/PublishedLiveTree';
-import { getPageVarsBucket, livePageCssVarOverrides, resolveBodyLayout, resolveContentMaxWidthPx } from '@/lib/livePageCssVars';
+import { getPageVarsBucket, livePageCssVarOverridesForPage, resolveBodyLayout } from '@/lib/livePageCssVars';
 import { normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesignTheme';
 import { buildRenderNodesWithGlobals } from '@/lib/globalSectionMerge';
 import { expandLinkedGlobalComponents } from '@/lib/globalComponentExpand';
@@ -8,6 +8,7 @@ import { getGlobalComponentsByIds } from '@/services/builder/globalComponentsSer
 import * as cmsService from '@/services/builder/cmsService';
 import LiveDoc from '@/components/live/LiveDoc';
 import { getDraftPageForBuilder } from '@/services/builder/builderService';
+import { publicPagePath } from '@/lib/publicSiteUrls';
 import '@/styles/live/live-site.css';
 import '@/styles/shared/menu.css';
 import '@/styles/shared/button.css';
@@ -66,20 +67,16 @@ export default async function DraftPreviewView({ pageId }) {
   renderBase = await expandCms(renderBase, { projectId: state.page.projectId, cmsService });
 
   const renderNodes = buildRenderNodesWithGlobals(renderBase, globalHeader, globalFooter, cloneGlobalNode);
-  const currentPath = `/${state.page.projectSlug}/${state.page.slug}`;
+  const currentPath = publicPagePath(state.page.projectSlug, state.page.slug);
   const projectPages = (state.projectPages || []).map((page) => ({
     slug: page.slug,
     title: page.title,
-    href: `/${state.page.projectSlug}/${page.slug}`,
+    href: publicPagePath(state.page.projectSlug, page.slug),
   }));
   const siteTheme = normalizeSiteTheme(state.page?.projectConfig?.siteTheme);
   const siteCssVars = siteThemeToCssVariableStyle(siteTheme);
   const pageSlug = state.page.slug;
   const pageVars = getPageVarsBucket(siteTheme, pageSlug);
-  const sectionGapPx = pageVars && Number.isFinite(Number(pageVars.sectionGapPx)) ? Number(pageVars.sectionGapPx) : null;
-  const sectionPadBottomPx =
-    pageVars && Number.isFinite(Number(pageVars.sectionPadBottomPx)) ? Number(pageVars.sectionPadBottomPx) : null;
-  const contentMaxWidthPx = resolveContentMaxWidthPx(pageVars);
   const stickyHeader = Boolean(pageVars?.stickyHeader);
   const bodyLayout = resolveBodyLayout(siteTheme, pageSlug);
 
@@ -93,7 +90,7 @@ export default async function DraftPreviewView({ pageId }) {
       data-live-body-layout={bodyLayout}
       style={{
         ...siteCssVars,
-        ...livePageCssVarOverrides({ sectionGapPx, sectionPadBottomPx, contentMaxWidthPx }),
+        ...livePageCssVarOverridesForPage(siteTheme, pageSlug),
         fontFamily: siteTheme.typography.fontFamily,
       }}
     >

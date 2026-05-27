@@ -5,7 +5,7 @@ import { normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesig
 import { resolveMaybeAsyncParams, isPublicSlug } from '@/lib/routeParams';
 import { getItemBySlug } from '@/services/builder/cmsService';
 import { applyBindingsToTree } from '@/lib/cms/cmsBindings';
-import { getPageVarsBucket, livePageCssVarOverrides, resolveBodyLayout, resolveContentMaxWidthPx } from '@/lib/livePageCssVars';
+import { livePageCssVarOverridesForPage, resolveBodyLayout } from '@/lib/livePageCssVars';
 import { resolveSeoMetadata } from '@/lib/seo/seoEngine';
 import JsonLd from '@/components/seo/JsonLd';
 import LiveDoc from '@/components/live/LiveDoc';
@@ -67,16 +67,6 @@ export default async function ProductDetailRoute({ params }) {
   });
 
   const productTemplateSlug = 'product-detail';
-  const productPageVars = getPageVarsBucket(siteTheme, productTemplateSlug);
-  const productSectionGapPx =
-    productPageVars && Number.isFinite(Number(productPageVars.sectionGapPx))
-      ? Number(productPageVars.sectionGapPx)
-      : null;
-  const productSectionPadBottomPx =
-    productPageVars && Number.isFinite(Number(productPageVars.sectionPadBottomPx))
-      ? Number(productPageVars.sectionPadBottomPx)
-      : null;
-  const productContentMaxWidthPx = resolveContentMaxWidthPx(productPageVars);
   const productBodyLayout = resolveBodyLayout(siteTheme, productTemplateSlug);
 
   return (
@@ -88,11 +78,7 @@ export default async function ProductDetailRoute({ params }) {
       data-live-body-layout={productBodyLayout}
       style={{
         ...siteCssVars,
-        ...livePageCssVarOverrides({
-          sectionGapPx: productSectionGapPx,
-          sectionPadBottomPx: productSectionPadBottomPx,
-          contentMaxWidthPx: productContentMaxWidthPx,
-        }),
+        ...livePageCssVarOverridesForPage(siteTheme, productTemplateSlug),
         fontFamily: siteTheme.typography.fontFamily,
       }}
     >

@@ -306,6 +306,8 @@ export default function BuilderInspector({
   canInsertDivider = true,
   isCreatingNode = false,
   onSelectNode,
+  onApplyResponsiveToPage,
+  isApplyingResponsive = false,
 }) {
   const [internalTab, setInternalTab] = useState('content');
   const activeTab = activeTabProp || internalTab;
@@ -2593,6 +2595,8 @@ export default function BuilderInspector({
           selectedNodeId={
             selectedNode?.nodeType === 'row' && isRootPageRow(pageTree, selectedNode) ? selectedNode.id : null
           }
+          onApplyResponsiveToPage={onApplyResponsiveToPage}
+          isApplyingResponsive={isApplyingResponsive}
         />
       ) : null}
       </div>

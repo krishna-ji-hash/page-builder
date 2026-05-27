@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useBuilderTheme } from '@/context/BuilderThemeContext';
 import { isRootPageRow } from '@/lib/liveDocSectionSpacing';
 import InspectorTipChips from '@/components/builder/inspector/InspectorTipChips';
+import PageResponsivePanel from '@/components/builder/inspector/PageResponsivePanel';
 
 function Section({ title, children }) {
   return (
@@ -76,7 +77,13 @@ function NumRow({ fieldId, label, value, onChange }) {
  * @param {(nodeId: number, patch: { sectionGapBeforePx?: number | null | ''; sectionGapAfterPx?: number | null | ''; sectionPadBottomPx?: number | null | '' }) => Promise<void>} [props.onPatchRootSectionPageSpacing]
  * @param {number|null} [props.selectedNodeId] — when a root section row is selected, show its gap overrides
  */
-export default function ThemePanel({ pageTree = [], onPatchRootSectionPageSpacing, selectedNodeId = null }) {
+export default function ThemePanel({
+  pageTree = [],
+  onPatchRootSectionPageSpacing,
+  selectedNodeId = null,
+  onApplyResponsiveToPage,
+  isApplyingResponsive = false,
+}) {
   const { siteTheme, setSiteTheme, applySitePreset, siteThemePersist, currentPageSlug } = useBuilderTheme();
   const { colors, typography, spacing } = siteTheme;
 
@@ -463,6 +470,17 @@ export default function ThemePanel({ pageTree = [], onPatchRootSectionPageSpacin
                   </button>
                 </div>
               ) : null}
+            </details>
+
+            <details className="bld-acc" open>
+              <summary>Page responsive (tablet &amp; mobile)</summary>
+              <div className="bld-acc__body">
+                <PageResponsivePanel
+                  pageTree={pageTree}
+                  onApplyResponsiveToPage={onApplyResponsiveToPage}
+                  isApplying={isApplyingResponsive}
+                />
+              </div>
             </details>
 
             <div className="bld-panel__subhead" style={{ marginTop: 16, marginBottom: 4 }}>

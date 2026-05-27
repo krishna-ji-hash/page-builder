@@ -2,6 +2,7 @@ import { fail, ok } from '@/lib/api';
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { resolveMaybeAsyncParams } from '@/lib/routeParams';
 import { previewPagePath } from '@/lib/builder/adminBuilderRoutes';
+import { publicPagePath } from '@/lib/publicSiteUrls';
 import { getPageRoutingInfo, publishDraftToSnapshot } from '@/services/builder/builderService';
 
 export const runtime = 'nodejs';
@@ -21,6 +22,7 @@ export async function POST(_request, { params }) {
     const routeInfo = await getPageRoutingInfo(pageId);
     if (routeInfo) {
       revalidateTag(`route:${routeInfo.projectSlug}:${routeInfo.pageSlug}`);
+      revalidatePath(publicPagePath(routeInfo.projectSlug, routeInfo.pageSlug));
       revalidatePath(`/${routeInfo.projectSlug}/${routeInfo.pageSlug}`);
       const preview = previewPagePath(routeInfo.projectSlug, routeInfo.pageSlug);
       if (preview) revalidatePath(preview);

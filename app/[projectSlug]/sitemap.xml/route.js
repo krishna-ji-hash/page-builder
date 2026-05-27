@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDbPool } from '@/lib/db';
 import { resolveMaybeAsyncParams, isPublicSlug } from '@/lib/routeParams';
 import { normalizeProjectSeo } from '@/lib/seo/seoEngine';
+import { publicPagePath } from '@/lib/publicSiteUrls';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -70,7 +71,7 @@ export async function GET(request, { params }) {
       const seo = parseJsonValue(r.seo_json, {}) || {};
       const noindex = seo?.noindex === true;
       if (!projectSeo.indexingEnabled || noindex) return null;
-      const loc = joinUrl(base, `/${projectSlug}/${r.slug}`);
+      const loc = joinUrl(base, publicPagePath(projectSlug, r.slug));
       return { loc, lastmod: r.updated_at ? new Date(r.updated_at).toISOString() : null };
     })
     .filter(Boolean);

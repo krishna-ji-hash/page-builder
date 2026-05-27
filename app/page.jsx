@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { adminBuilderPagePath, previewPagePath } from '@/lib/builder/adminBuilderRoutes';
+import { publicPagePath } from '@/lib/publicSiteUrls';
 import { isLivePagePublished } from '@/lib/builder/projectPageRules';
 import {
   listPagesByProject,
@@ -88,7 +89,7 @@ export default async function HomePage() {
                 className="home-btn home-btn--secondary"
                 href={
                   isLivePagePublished(featured.page)
-                    ? `/${featured.project.slug}/${featured.page.slug}`
+                    ? publicPagePath(featured.project.slug, featured.page.slug)
                     : previewPagePath(featured.project.slug, featured.page.slug)
                 }
               >
@@ -150,7 +151,7 @@ export default async function HomePage() {
                   ) : (
                     <ul className="home-page-table">
                       {pages.map((page) => {
-                        const publicPath = `/${project.slug}/${page.slug}`;
+                        const publicPath = publicPagePath(project.slug, page.slug);
                         const builderPath = adminBuilderPagePath(project.slug, page.slug);
                         const published = isLivePagePublished(page);
                         return (
@@ -210,7 +211,7 @@ export default async function HomePage() {
             <div className="home-info__paths">
               <div className="home-info__path">
                 <span className="home-info__path-label">Public</span>
-                <code>/{featured.project.slug}/{featured.page.slug}</code>
+                <code>{publicPagePath(featured.project.slug, featured.page.slug)}</code>
               </div>
               <div className="home-info__path">
                 <span className="home-info__path-label">Builder</span>

@@ -5,7 +5,7 @@ import { normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesig
 import { resolveMaybeAsyncParams, isPublicSlug } from '@/lib/routeParams';
 import { getItemBySlug } from '@/services/builder/cmsService';
 import { applyBindingsToTree, applyBindingsToString } from '@/lib/cms/cmsBindings';
-import { getPageVarsBucket, livePageCssVarOverrides, resolveBodyLayout, resolveContentMaxWidthPx } from '@/lib/livePageCssVars';
+import { livePageCssVarOverridesForPage, resolveBodyLayout } from '@/lib/livePageCssVars';
 import { resolveSeoMetadata } from '@/lib/seo/seoEngine';
 import JsonLd from '@/components/seo/JsonLd';
 import LiveDoc from '@/components/live/LiveDoc';
@@ -69,14 +69,6 @@ export default async function BlogPostRoute({ params }) {
   });
 
   const blogTemplateSlug = 'blog-post';
-  const blogPageVars = getPageVarsBucket(siteTheme, blogTemplateSlug);
-  const blogSectionGapPx =
-    blogPageVars && Number.isFinite(Number(blogPageVars.sectionGapPx)) ? Number(blogPageVars.sectionGapPx) : null;
-  const blogSectionPadBottomPx =
-    blogPageVars && Number.isFinite(Number(blogPageVars.sectionPadBottomPx))
-      ? Number(blogPageVars.sectionPadBottomPx)
-      : null;
-  const blogContentMaxWidthPx = resolveContentMaxWidthPx(blogPageVars);
   const blogBodyLayout = resolveBodyLayout(siteTheme, blogTemplateSlug);
 
   return (
@@ -88,11 +80,7 @@ export default async function BlogPostRoute({ params }) {
       data-live-body-layout={blogBodyLayout}
       style={{
         ...siteCssVars,
-        ...livePageCssVarOverrides({
-          sectionGapPx: blogSectionGapPx,
-          sectionPadBottomPx: blogSectionPadBottomPx,
-          contentMaxWidthPx: blogContentMaxWidthPx,
-        }),
+        ...livePageCssVarOverridesForPage(siteTheme, blogTemplateSlug),
         fontFamily: siteTheme.typography.fontFamily,
       }}
     >
