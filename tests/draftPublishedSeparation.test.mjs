@@ -10,16 +10,28 @@ function read(relPath) {
   return readFileSync(path.join(root, relPath), 'utf8');
 }
 
+/** Published live pipeline (route delegates to shared module). */
+const LIVE_PIPELINE = ['lib/publicSitePage.jsx', 'app/[projectSlug]/[pageSlug]/page.jsx'];
+
 test('public live route uses getPublishedPageForPublic only', () => {
-  const src = read('app/[projectSlug]/[pageSlug]/page.jsx');
-  assert.match(src, /getPublishedPageForPublic/);
-  assert.doesNotMatch(src, /getBuilderState|getDraftPageForBuilder|builder_nodes/);
+  const pageRoute = read('app/[projectSlug]/[pageSlug]/page.jsx');
+  const liveSrc = read('lib/publicSitePage.jsx');
+  assert.match(pageRoute, /publicSitePage/);
+  assert.match(liveSrc, /getPublishedPageForPublic/);
+  assert.doesNotMatch(liveSrc, /getBuilderState|getDraftPageForBuilder|builder_nodes/);
+  assert.doesNotMatch(pageRoute, /getBuilderState|getDraftPageForBuilder|builder_nodes/);
 });
 
 test('draft preview uses getDraftPageForBuilder not published service', () => {
   const src = read('components/live/DraftPreviewView.jsx');
   assert.match(src, /getDraftPageForBuilder/);
-  assert.doesNotMatch(src, /getPublishedPage/);
+  assert.doesNotMatch(src, /getPublishedPageForPublic/);
+});
+
+test('draft preview metadata uses draft loader not published service', () => {
+  const src = read('lib/draftPreviewMetadata.js');
+  assert.match(src, /getDraftPageForBuilder/);
+  assert.doesNotMatch(src, /getPublishedPageForPublic|builder_nodes/);
 });
 
 test('publishedPageService requires published_version_id and published status', () => {
@@ -39,10 +51,10 @@ test('publishPage creates new published version without flipping draft row', () 
   assert.match(publishBlock, /globalSections:/);
 });
 
-test('live page route uses publishedGlobalSections not project config globals', () => {
-  const src = read('app/[projectSlug]/[pageSlug]/page.jsx');
-  assert.match(src, /publishedGlobalSections/);
-  assert.doesNotMatch(src, /projectConfig\?\.globalSections/);
+test('live page uses publishedGlobalSections via publicSitePage', () => {
+  const liveSrc = read('lib/publicSitePage.jsx');
+  assert.match(liveSrc, /publishedGlobalSections/);
+  assert.doesNotMatch(liveSrc, /projectConfig\?\.globalSections/);
 });
 
 test('save draft route does not revalidate public live path', () => {

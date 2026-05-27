@@ -1,6 +1,7 @@
 'use client';
 
 import { InspectorField } from './InspectorUi';
+import { InspectorNumInput, inspectorNumStringChange } from '@/components/builder/inspector/InspectorNumeric';
 
 export default function ProSizeFields({ form, onUpdate, onResetLayoutKeys, selectedNode, disabled }) {
   const isRow = selectedNode?.nodeType === 'row';
@@ -21,21 +22,26 @@ export default function ProSizeFields({ form, onUpdate, onResetLayoutKeys, selec
           )}
         </InspectorField>
         <InspectorField label="Height (px)" keywords="height min max" disabled={disabled}>
-          <input
-            className="bld-input"
-            type="number"
-            min="0"
+          <InspectorNumInput
+            min={0}
+            max={9999}
             value={form.heightPx ?? ''}
             placeholder="auto"
             disabled={disabled}
-            onChange={(e) => onUpdate('heightPx', e.target.value)}
+            onChange={inspectorNumStringChange(onUpdate, 'heightPx')}
           />
         </InspectorField>
       </div>
 
       {form.widthMode === 'px' && !isRow ? (
         <InspectorField label="Width (px)" disabled={disabled}>
-          <input className="bld-input" type="number" min="0" value={form.widthPx ?? 0} disabled={disabled} onChange={(e) => onUpdate('widthPx', e.target.value)} />
+          <InspectorNumInput
+            min={0}
+            max={9999}
+            value={form.widthPx ?? 0}
+            disabled={disabled}
+            onChange={inspectorNumStringChange(onUpdate, 'widthPx')}
+          />
         </InspectorField>
       ) : null}
 

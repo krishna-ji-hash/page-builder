@@ -1,5 +1,7 @@
 'use client';
 
+import { InspectorNumInput, numInputDisplayValue } from '@/components/builder/inspector/InspectorNumeric';
+
 export default function MenuControls({ form, onUpdate }) {
   return (
     <>
@@ -19,15 +21,14 @@ export default function MenuControls({ form, onUpdate }) {
           min="0"
           max="80"
           className="bld-range"
-          value={Number(form.menuGapPx ?? 12)}
+          value={numInputDisplayValue(form.menuGapPx, 12)}
           onChange={(event) => onUpdate('menuGapPx', event.target.value)}
         />
-        <input
-          type="number"
-          min="0"
-          className="bld-input"
-          value={Number(form.menuGapPx ?? 12)}
-          onChange={(event) => onUpdate('menuGapPx', event.target.value)}
+        <InspectorNumInput
+          min={0}
+          max={80}
+          value={form.menuGapPx ?? 12}
+          onChange={(n) => onUpdate('menuGapPx', n == null ? '' : String(n))}
         />
       </div>
 

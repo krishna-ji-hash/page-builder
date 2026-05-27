@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { liveCarouselSlideImageAttrs } from '@/lib/liveCarouselImageAttrs';
 
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
@@ -398,7 +399,7 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
         <div className={`live-carousel__ticker ${isMarqueeVariant ? 'live-carousel__ticker--single' : ''}`.trim()}>
           <div className="live-carousel__ticker-row">
             <div className={`live-carousel__ticker-track ${row1TrackClass}`.trim()}>
-              {tickerDupSlides.map(({ slide, key }) => (
+              {tickerDupSlides.map(({ slide, key }, slideIndex) => (
                 <div key={key} className="live-carousel__ticker-card">
                   {slide.imageSrc ? (
                     <img
@@ -406,6 +407,7 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
                       src={slide.imageSrc}
                       alt={slide.imageAlt || ''}
                       style={tickerSlideImgStyle(slide)}
+                      {...liveCarouselSlideImageAttrs(slide, { slideIndex, isFirstVisible: slideIndex === 0 })}
                     />
                   ) : (
                     <span className="live-carousel__ticker-fallback">{tickerFallbackLabel(slide) || '\u00a0'}</span>
@@ -417,7 +419,7 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
           {!isMarqueeVariant ? (
             <div className="live-carousel__ticker-row">
               <div className={`live-carousel__ticker-track ${row2TrackClass}`.trim()}>
-                {tickerDupSlides.map(({ slide, key }) => (
+                {tickerDupSlides.map(({ slide, key }, slideIndex) => (
                   <div key={`${key}-b`} className="live-carousel__ticker-card">
                     {slide.imageSrc ? (
                       <img
@@ -425,6 +427,8 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
                         src={slide.imageSrc}
                         alt={slide.imageAlt || ''}
                         style={tickerSlideImgStyle(slide)}
+                        loading="lazy"
+                        decoding="async"
                       />
                     ) : (
                       <span className="live-carousel__ticker-fallback">{tickerFallbackLabel(slide) || '\u00a0'}</span>
@@ -532,7 +536,12 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
           }}
           onTransitionEnd={handleTrackTransitionEnd}
         >
-          {trackSlides.map(({ slide, key }) => (
+          {trackSlides.map(({ slide, key }, slideIndex) => {
+            const imgAttrs = liveCarouselSlideImageAttrs(slide, {
+              slideIndex,
+              isFirstVisible: slideIndex === (useSeamlessLoop ? 1 : 0),
+            });
+            return (
             <div key={key} className="live-carousel__item">
               {cfg.variant === 'card' ? (
                 <article className="live-carousel__card-slide">
@@ -542,6 +551,7 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
                       src={slide.imageSrc}
                       alt={slide.imageAlt || ''}
                       style={slideImageStyle(slide, imageFit, imageObjectPosition)}
+                      {...imgAttrs}
                     />
                   ) : null}
                   {slideOverlayVisible(slide) ? (
@@ -566,6 +576,7 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
                       src={slide.imageSrc}
                       alt={slide.imageAlt || ''}
                       style={slideImageStyle(slide, imageFit, imageObjectPosition)}
+                      {...imgAttrs}
                     />
                   ) : null}
                   {!showOverlay || !slideOverlayVisible(slide) ? null : (
@@ -588,7 +599,8 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
                 </article>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

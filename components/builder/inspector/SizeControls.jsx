@@ -1,5 +1,7 @@
 'use client';
 
+import { InspectorNumField, inspectorNumStringChange } from '@/components/builder/inspector/InspectorNumeric';
+
 export default function SizeControls({ selectedNode, form, onUpdate }) {
   const isRow = selectedNode?.nodeType === 'row';
   const isColumn = selectedNode?.nodeType === 'column';
@@ -31,31 +33,26 @@ export default function SizeControls({ selectedNode, form, onUpdate }) {
             </select>
           )}
         </div>
-        <div className="bld-field">
-          <label className="bld-label">Height (px)</label>
-          <input
-            className="bld-input"
-            type="number"
-            min="0"
-            step="1"
-            value={form.heightPx ?? ''}
-            placeholder="0 = auto"
-            onChange={(e) => onUpdate('heightPx', e.target.value)}
-          />
-        </div>
+        <InspectorNumField
+          id="size-height-px"
+          label="Height (px)"
+          min={0}
+          max={9999}
+          value={form.heightPx ?? ''}
+          placeholder="0 = auto"
+          onChange={inspectorNumStringChange(onUpdate, 'heightPx')}
+        />
       </div>
 
       {form.widthMode === 'px' && !isRow ? (
-        <div className="bld-field">
-          <label className="bld-label">Width (px)</label>
-          <input
-            className="bld-input"
-            type="number"
-            min="0"
-            value={form.widthPx ?? 0}
-            onChange={(e) => onUpdate('widthPx', e.target.value)}
-          />
-        </div>
+        <InspectorNumField
+          id="size-width-px"
+          label="Width (px)"
+          min={0}
+          max={9999}
+          value={form.widthPx ?? 0}
+          onChange={inspectorNumStringChange(onUpdate, 'widthPx')}
+        />
       ) : null}
 
       {(isColumn || isStack) && Number(form.heightPx) > 0 ? (

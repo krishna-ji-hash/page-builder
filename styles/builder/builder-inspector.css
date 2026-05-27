@@ -300,12 +300,39 @@
   flex-wrap: nowrap;
   gap: 0;
   overflow-x: auto;
+  overflow-y: hidden;
   border-bottom: 1px solid var(--bld-border);
   background: var(--bld-surface);
   position: sticky;
   top: 0;
   z-index: 2;
+  -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--bld-text) 28%, transparent) transparent;
+}
+
+/* Slim horizontal scrollbar — Content / Layout / Style / … tab row */
+.bld-inspector-tabs::-webkit-scrollbar {
+  height: 3px;
+}
+
+.bld-inspector-tabs::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.bld-inspector-tabs::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--bld-text) 22%, transparent);
+  border-radius: 999px;
+}
+
+.bld-inspector-tabs:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--bld-text) 36%, transparent);
+}
+
+.bld-inspector-tabs::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .bld-inspector-tabs--pro .bld-inspector-tabs__tab {

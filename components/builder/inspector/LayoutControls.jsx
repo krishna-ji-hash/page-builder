@@ -8,6 +8,7 @@ import { isHeaderRowNode, isLayoutLockedRow } from '@/lib/rowLayoutMeta';
 import { themeSpacingPx } from '@/lib/siteDesignTheme';
 import FlexLayoutPreview from './FlexLayoutPreview';
 import FlexLayoutControlsPanel from './FlexLayoutControlsPanel';
+import { InspectorNumInput, inspectorNumStringChange } from '@/components/builder/inspector/InspectorNumeric';
 
 const DIRECTION_OPTIONS = ['row', 'column'];
 const WRAP_OPTIONS = [
@@ -64,14 +65,12 @@ function RowContentWidthControls({ form, onUpdate, isHeaderLandmark = false }) {
         <div className="bld-field-grid" style={{ marginTop: 8 }}>
           <div className="bld-field" style={{ gridColumn: '1 / -1' }}>
             <label className="bld-label">Max width (px)</label>
-            <input
-              className="bld-input"
-              type="number"
+            <InspectorNumInput
               min={320}
               max={2400}
               step={10}
               value={maxPx}
-              onChange={(e) => onUpdate('containerWidthPx', e.target.value)}
+              onChange={(n) => onUpdate('containerWidthPx', n == null ? '' : String(n))}
             />
             <input
               className="bld-range"
@@ -389,13 +388,12 @@ export default function LayoutControls({
               >
                 Gap (px)
               </LayoutFieldLabel>
-              <input
-                className="bld-input"
-                type="number"
-                min="0"
+              <InspectorNumInput
+                min={0}
+                max={240}
                 disabled={flexDisabled}
                 value={form.layoutGapPx ?? 0}
-                onChange={(e) => onUpdate('layoutGapPx', e.target.value)}
+                onChange={inspectorNumStringChange(onUpdate, 'layoutGapPx')}
               />
             </div>
             <div className="bld-field">
@@ -441,19 +439,19 @@ export default function LayoutControls({
             {form.widthMode === 'px' ? (
               <div className="bld-field">
                 <label className="bld-label">Width px</label>
-                <input className="bld-input" type="number" min="0" value={form.widthPx ?? 0} onChange={(e) => onUpdate('widthPx', e.target.value)} />
+                <InspectorNumInput min={0} max={9999} value={form.widthPx ?? 0} onChange={inspectorNumStringChange(onUpdate, 'widthPx')} />
               </div>
             ) : (
               <div className="bld-field">
                 <label className="bld-label">Height px</label>
-                <input className="bld-input" type="number" min="0" value={form.heightPx ?? 0} onChange={(e) => onUpdate('heightPx', e.target.value)} />
+                <InspectorNumInput min={0} max={9999} value={form.heightPx ?? 0} onChange={inspectorNumStringChange(onUpdate, 'heightPx')} />
               </div>
             )}
           </div>
           {form.widthMode === 'px' ? (
             <div className="bld-field">
               <label className="bld-label">Height px</label>
-              <input className="bld-input" type="number" min="0" value={form.heightPx ?? 0} onChange={(e) => onUpdate('heightPx', e.target.value)} />
+              <InspectorNumInput min={0} max={9999} value={form.heightPx ?? 0} onChange={inspectorNumStringChange(onUpdate, 'heightPx')} />
             </div>
           ) : null}
         </>

@@ -7,6 +7,7 @@ import { expandCms } from '@/lib/cms/cmsExpand';
 import { getGlobalComponentsByIds } from '@/services/builder/globalComponentsService';
 import * as cmsService from '@/services/builder/cmsService';
 import LiveDoc from '@/components/live/LiveDoc';
+import LcpImagePreload from '@/components/seo/LcpImagePreload';
 import { getDraftPageForBuilder } from '@/services/builder/builderService';
 import { publicPagePath } from '@/lib/publicSiteUrls';
 import '@/styles/live/live-site.css';
@@ -94,6 +95,7 @@ export default async function DraftPreviewView({ pageId }) {
         fontFamily: siteTheme.typography.fontFamily,
       }}
     >
+      <LcpImagePreload nodes={renderNodes} />
       <LiveDoc>
         <PublishedLiveTree
           nodes={renderNodes}

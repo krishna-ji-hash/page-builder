@@ -840,6 +840,23 @@
   filter: saturate(1.05) contrast(1.02);
 }
 
+/* CLS: reserve image box before decode (style_json aspect-ratio / imageHeightPx). */
+.live-site figure.live-image-stable {
+  display: block;
+  margin: 0;
+  max-width: 100%;
+}
+
+.live-site figure.live-image-stable > img {
+  width: 100%;
+  height: auto;
+}
+
+.live-site figure.live-image-stable[data-has-fixed-height='true'] > img {
+  height: 100%;
+  object-fit: cover;
+}
+
 .live-carousel__overlay {
   position: relative;
   z-index: 1;
@@ -2382,8 +2399,11 @@
   animation-fill-mode: both;
 }
 
+/* Scroll-triggered motion: transform/opacity only (no height/width animation). */
 .live-node--ix-trigger-on-scroll:not(.live-node--ix-inview) {
   opacity: 0;
+  transform: translate3d(0, 10px, 0);
+  will-change: transform, opacity;
 }
 
 .live-node--ix-trigger-on-scroll.live-node--ix-inview {
@@ -2394,6 +2414,20 @@
   animation-iteration-count: var(--node-anim-iteration, 1);
   animation-fill-mode: both;
   opacity: 1;
+  transform: none;
+  will-change: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-node--ix-trigger-on-scroll:not(.live-node--ix-inview) {
+    opacity: 1;
+    transform: none;
+  }
+
+  .live-node--ix-anim-glow,
+  .live-node--ix-anim-shimmer {
+    animation: none !important;
+  }
 }
 
 .live-node--ix:focus-visible {

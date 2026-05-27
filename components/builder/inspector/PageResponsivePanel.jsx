@@ -3,48 +3,13 @@
 import { useState } from 'react';
 import { useBuilderTheme } from '@/context/BuilderThemeContext';
 import { defaultPageBreakpointVars } from '@/lib/applyPageResponsiveDefaults';
+import { InspectorNumField } from '@/components/builder/inspector/InspectorNumeric';
 
 const BREAKPOINTS = [
   { id: 'desktop', label: 'Desktop (default)' },
   { id: 'tablet', label: 'Tablet ≤1024px' },
   { id: 'mobile', label: 'Mobile ≤767px' },
 ];
-
-function numFieldDisplayValue(value) {
-  if (value === '' || value == null) return '';
-  const n = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(n) ? n : '';
-}
-
-function NumField({ id, label, value, onChange, placeholder, min = 0, max = 2560 }) {
-  return (
-    <div className="bld-field">
-      <label className="bld-label" htmlFor={id}>
-        {label}
-      </label>
-      <input
-        id={id}
-        type="number"
-        className="bld-input"
-        min={min}
-        max={max}
-        step={1}
-        placeholder={placeholder}
-        value={numFieldDisplayValue(value)}
-        onChange={(e) => {
-          const raw = e.target.value;
-          if (raw === '') {
-            onChange(null);
-            return;
-          }
-          const n = Number(raw);
-          if (!Number.isFinite(n)) return;
-          onChange(Math.max(min, Math.min(max, n)));
-        }}
-      />
-    </div>
-  );
-}
 
 /**
  * Page-level responsive controls (any page) + bulk apply section defaults.
@@ -113,7 +78,7 @@ export default function PageResponsivePanel({
 
       {bpTab !== 'desktop' ? (
         <div className="bld-acc__body" style={{ marginTop: 12 }}>
-          <NumField
+          <InspectorNumField
             id={`page-bp-${bpTab}-gap`}
             label="Section gap between strips"
             placeholder="Uses desktop if empty"
@@ -122,7 +87,7 @@ export default function PageResponsivePanel({
             min={0}
             max={120}
           />
-          <NumField
+          <InspectorNumField
             id={`page-bp-${bpTab}-pad`}
             label="Default padding below each strip"
             placeholder="Uses desktop if empty"
@@ -131,7 +96,7 @@ export default function PageResponsivePanel({
             min={0}
             max={120}
           />
-          <NumField
+          <InspectorNumField
             id={`page-bp-${bpTab}-width`}
             label="Max content width (px)"
             placeholder={bpTab === 'mobile' ? 'Empty = full width' : '960 suggested'}

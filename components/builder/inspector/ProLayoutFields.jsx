@@ -1,6 +1,7 @@
 'use client';
 
 import { InspectorField } from './InspectorUi';
+import { InspectorNumInput, inspectorNumStringChange } from '@/components/builder/inspector/InspectorNumeric';
 
 const DISPLAY_OPTIONS = ['block', 'flex', 'inline', 'inline-block', 'inline-flex', 'grid', 'none'];
 const OVERFLOW_OPTIONS = ['visible', 'hidden', 'auto', 'scroll'];
@@ -83,12 +84,12 @@ export default function ProLayoutFields({ form, onUpdate, onResetLayoutKeys, dis
           </select>
         </InspectorField>
         <InspectorField label="Order" keywords="flex order" resetKey="order" onReset={reset(['order'])} disabled={disabled}>
-          <input
-            className="bld-input"
-            type="number"
+          <InspectorNumInput
+            min={-99}
+            max={99}
             value={form.layoutOrder ?? ''}
             disabled={disabled}
-            onChange={(e) => onUpdate('layoutOrder', e.target.value)}
+            onChange={inspectorNumStringChange(onUpdate, 'layoutOrder')}
           />
         </InspectorField>
       </div>

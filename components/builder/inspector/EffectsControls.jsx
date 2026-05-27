@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from 'react';
 import InspectorTipChips from '@/components/builder/inspector/InspectorTipChips';
+import { InspectorNumInput } from '@/components/builder/inspector/InspectorNumeric';
+import { numInputDisplayValue } from '@/lib/inspectorNumeric';
 
 const SHADOW_PRESETS = [
   { id: 'none', label: 'None', value: 'none' },
@@ -21,6 +23,17 @@ function clamp01(n) {
 function composeBoxShadow({ x, y, blur, spread, color, inset }) {
   const ix = inset ? 'inset ' : '';
   return `${ix}${x}px ${y}px ${blur}px ${spread}px ${color}`;
+}
+
+function ShadowNumCell({ label, value, onChange, min = -240, max = 240 }) {
+  return (
+    <div>
+      <span className="bld-label" style={{ fontSize: 12 }}>
+        {label}
+      </span>
+      <InspectorNumInput value={value} min={min} max={max} onChange={(n) => onChange(n ?? 0)} />
+    </div>
+  );
 }
 
 export default function EffectsControls({ form, onUpdate, selectedNode = null }) {
@@ -73,30 +86,10 @@ export default function EffectsControls({ form, onUpdate, selectedNode = null })
       <div className="bld-field">
         <label className="bld-label">Shadow builder</label>
         <div className="bld-field-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          <div>
-            <span className="bld-label" style={{ fontSize: 12 }}>
-              X (px)
-            </span>
-            <input className="bld-input" type="number" value={bx} onChange={(e) => setBx(Number(e.target.value) || 0)} />
-          </div>
-          <div>
-            <span className="bld-label" style={{ fontSize: 12 }}>
-              Y (px)
-            </span>
-            <input className="bld-input" type="number" value={by} onChange={(e) => setBy(Number(e.target.value) || 0)} />
-          </div>
-          <div>
-            <span className="bld-label" style={{ fontSize: 12 }}>
-              Blur
-            </span>
-            <input className="bld-input" type="number" min={0} value={blur} onChange={(e) => setBlur(Number(e.target.value) || 0)} />
-          </div>
-          <div>
-            <span className="bld-label" style={{ fontSize: 12 }}>
-              Spread
-            </span>
-            <input className="bld-input" type="number" value={spread} onChange={(e) => setSpread(Number(e.target.value) || 0)} />
-          </div>
+          <ShadowNumCell label="X (px)" value={bx} onChange={setBx} />
+          <ShadowNumCell label="Y (px)" value={by} onChange={setBy} />
+          <ShadowNumCell label="Blur" value={blur} onChange={setBlur} min={0} max={240} />
+          <ShadowNumCell label="Spread" value={spread} onChange={setSpread} />
         </div>
         <div className="bld-field" style={{ marginTop: 8 }}>
           <label className="bld-label">Shadow color</label>
@@ -118,16 +111,14 @@ export default function EffectsControls({ form, onUpdate, selectedNode = null })
           min={0}
           max={100}
           value={opacityPct}
-          onChange={(e) => onUpdate('opacity', String((Number(e.target.value) || 0) / 100))}
+          onChange={(e) => onUpdate('opacity', String((numInputDisplayValue(e.target.value, 0) || 0) / 100))}
         />
-        <input
-          className="bld-input"
-          type="number"
+        <InspectorNumInput
           min={0}
           max={100}
           step={1}
           value={opacityPct}
-          onChange={(e) => onUpdate('opacity', String((Number(e.target.value) || 0) / 100))}
+          onChange={(n) => onUpdate('opacity', String((n ?? 0) / 100))}
         />
       </div>
     </div>

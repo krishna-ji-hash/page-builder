@@ -10,6 +10,7 @@ import { isPublicSlug } from '@/lib/routeParams';
 import { publicPagePathForSeo } from '@/lib/publicSiteUrls';
 import { resolveSeoMetadata } from '@/lib/seo/seoEngine';
 import JsonLd from '@/components/seo/JsonLd';
+import LcpImagePreload from '@/components/seo/LcpImagePreload';
 import LiveDoc from '@/components/live/LiveDoc';
 
 function cloneGlobalNode(node, prefix) {
@@ -126,6 +127,7 @@ export default async function PublicSitePageView({ projectSlug, pageSlug, search
       }}
     >
       <JsonLd data={schemaJsonLd} />
+      <LcpImagePreload nodes={renderNodes} />
       <LiveDoc>
         <PublishedLiveTree
           nodes={renderNodes}

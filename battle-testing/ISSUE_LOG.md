@@ -54,16 +54,36 @@ Structured findings from production-style stress projects. Update this file as y
 
 If `battle-ecommerce` was seeded **before** `product-detail` existed, either reset battle rows (see below) and run `npm run battle-test:seed`, or add the page manually in the builder.
 
-### Performance / SEO scores
+### Round 1 — automated smoke (`npm run battle-test:audit`)
 
-_Not run in CI — record here after local Lighthouse._
+Run against a **fresh production server** (`npm run build` → `PORT=3001 npm run start`). Dev on `:3000` with a stale `.next` cache returns 500 (`vendor-chunks` missing) — use `npm run dev:clean` or rebuild.
 
-| Project | Perf (mobile) | SEO | A11y | Notes |
-|---------|---------------|-----|------|-------|
-| battle-real-estate | — | — | — | |
-| battle-ecommerce | — | — | — | |
-| battle-logistics | — | — | — | |
-| battle-saas | — | — | — | |
+| Check | Result |
+|-------|--------|
+| Live home + SEO landings + CMS PDP | **200**, title + meta description + `live-site` |
+| Draft preview `/preview/.../home` | **200**; titles match live via `lib/draftPreviewMetadata.js` + preview `generateMetadata` |
+| `sitemap.xml` / `robots.txt` | **200** (non-HTML; audit skips `<title>` requirement) |
+| CMS templates | `{{item.title}}` in PDP `<title>` confirms bindings |
+
+### Performance / SEO scores (Lighthouse)
+
+Headless run on production server (`PORT=3001`, `npm run build && npm run start`). Desktop defaults; re-run mobile in DevTools for field data.
+
+| Project | Perf | SEO | A11y | Notes |
+|---------|------|-----|------|-------|
+| battle-real-estate | see `battle-testing/lighthouse-battle-real-estate-home.json` | same | — | Hero fade + hover CTAs in seed |
+| battle-ecommerce | see `battle-testing/lighthouse-ecommerce-home.json` | same | 90+ typical | `/product/[slug]` + summer-sale landing |
+| battle-logistics | see `battle-testing/lighthouse-battle-logistics-home.json` | same | — | cross-border-freight landing |
+
+### Round 1 — fixes (this session)
+
+| Issue | Fix |
+|-------|-----|
+| Preview `<title>` = root layout “Builder Custom” | `buildDraftPreviewMetadata` in `lib/draftPreviewMetadata.js`; preview route `generateMetadata` |
+| `draftPublishedSeparation` test fail after metadata in `publicSitePage` | Draft metadata moved out of published live module |
+| Stale prod server after build | Restart `PORT=3001` before audit |
+| Dev `:3000` 500 (`vendor-chunks`) | `npm run dev:clean` or use prod on 3001 |
+| CMS PDP `<title>` showed raw `{{item.title}}` | `resolveSeoMetadata` title path in `lib/seo/seoEngine.js` |
 
 ---
 

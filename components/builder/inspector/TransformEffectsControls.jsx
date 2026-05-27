@@ -1,18 +1,19 @@
 'use client';
 
 import { InspectorField, InspectorSection } from './InspectorUi';
+import { InspectorNumInput, inspectorNumStringChange } from '@/components/builder/inspector/InspectorNumeric';
 
 export default function TransformEffectsControls({ form, onUpdate, disabled }) {
   return (
     <InspectorSection title="Transform & filters" keywords="rotate scale skew blur brightness">
       <div className="bld-field-grid">
         <InspectorField label="Rotate (deg)" disabled={disabled}>
-          <input
-            className="bld-input"
-            type="number"
+          <InspectorNumInput
+            min={-360}
+            max={360}
             value={form.transformRotate ?? ''}
             disabled={disabled}
-            onChange={(e) => onUpdate('transformRotate', e.target.value)}
+            onChange={inspectorNumStringChange(onUpdate, 'transformRotate')}
           />
         </InspectorField>
         <InspectorField label="Scale" disabled={disabled}>

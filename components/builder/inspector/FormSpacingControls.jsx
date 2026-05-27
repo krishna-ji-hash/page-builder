@@ -1,5 +1,7 @@
 'use client';
 
+import { InspectorNumField } from '@/components/builder/inspector/InspectorNumeric';
+
 const PRESETS = [
   { id: 'comfortable', label: 'Comfortable', labelGapPx: 10, inputAfterGapPx: 22, beforeSubmitGapPx: 24 },
   { id: 'balanced', label: 'Balanced', labelGapPx: 8, inputAfterGapPx: 16, beforeSubmitGapPx: 20 },
@@ -47,49 +49,34 @@ export default function FormSpacingControls({ selectedNode, onChange }) {
           </button>
         ))}
       </div>
+      <InspectorNumField
+        id="form-label-gap"
+        label="Label → input (px)"
+        min={0}
+        max={48}
+        value={labelGapPx}
+        onChange={(n) => onChange?.('formSetLayout', { labelGapPx: n ?? 0 })}
+      />
       <div className="bld-field">
-        <label className="bld-label">Label → input (px)</label>
-        <input
-          className="bld-input"
-          type="number"
-          min={0}
-          max={48}
-          step={1}
-          value={labelGapPx}
-          onChange={(e) =>
-            onChange?.('formSetLayout', { labelGapPx: Math.max(0, Number(e.target.value) || 0) })
-          }
-        />
-      </div>
-      <div className="bld-field">
-        <label className="bld-label">Input ke niche (px)</label>
-        <input
-          className="bld-input"
-          type="number"
+        <InspectorNumField
+          id="form-input-after-gap"
+          label="Input ke niche (px)"
           min={0}
           max={80}
-          step={1}
           value={inputAfterGapPx}
-          onChange={(e) =>
-            onChange?.('formSetLayout', { inputAfterGapPx: Math.max(0, Number(e.target.value) || 0) })
-          }
+          onChange={(n) => onChange?.('formSetLayout', { inputAfterGapPx: n ?? 0 })}
+          className="bld-field"
         />
         <p className="bld-field-note">Har input / dropdown ke <strong>neeche</strong> — yahi aapko chahiye tha.</p>
       </div>
-      <div className="bld-field">
-        <label className="bld-label">Submit ke upar (px)</label>
-        <input
-          className="bld-input"
-          type="number"
-          min={0}
-          max={80}
-          step={1}
-          value={beforeSubmitGapPx}
-          onChange={(e) =>
-            onChange?.('formSetLayout', { beforeSubmitGapPx: Math.max(0, Number(e.target.value) || 0) })
-          }
-        />
-      </div>
+      <InspectorNumField
+        id="form-before-submit-gap"
+        label="Submit ke upar (px)"
+        min={0}
+        max={80}
+        value={beforeSubmitGapPx}
+        onChange={(n) => onChange?.('formSetLayout', { beforeSubmitGapPx: n ?? 0 })}
+      />
     </>
   );
 }

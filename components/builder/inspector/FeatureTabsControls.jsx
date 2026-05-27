@@ -1,5 +1,7 @@
 'use client';
 
+import { InspectorNumField, inspectorNumStringChange } from '@/components/builder/inspector/InspectorNumeric';
+
 /**
  * Feature tabs — sidebar layout controls only. Text, images, and tab names are edited on the canvas.
  */
@@ -61,18 +63,15 @@ export default function FeatureTabsControls({
             <option value="fill">Fill</option>
           </select>
         </div>
-        <div className="bld-field">
-          <label className="bld-label">Image height (px)</label>
-          <input
-            className="bld-input"
-            type="number"
-            min={120}
-            max={800}
-            step={10}
-            value={form.featureTabsImageHeightPx ?? ''}
-            onChange={(e) => onChange('featureTabsImageHeightPx', e.target.value)}
-          />
-        </div>
+        <InspectorNumField
+          id="feature-tabs-img-h"
+          label="Image height (px)"
+          min={120}
+          max={800}
+          step={10}
+          value={form.featureTabsImageHeightPx ?? ''}
+          onChange={inspectorNumStringChange(onChange, 'featureTabsImageHeightPx')}
+        />
       </div>
 
       <details className="bld-details">

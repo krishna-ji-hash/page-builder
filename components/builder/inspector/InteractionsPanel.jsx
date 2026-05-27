@@ -2,6 +2,7 @@
 
 import { InspectorField, InspectorPanel, InspectorSection } from './InspectorUi';
 import { ANIMATION_PRESET_GROUPS, normalizeAnimationPreset } from '@/lib/interactionAnimations';
+import { InspectorNumInput } from '@/components/builder/inspector/InspectorNumeric';
 import { sanitizeCssColor } from '@/lib/inspectorStyleValidate';
 
 const ANIM_TRIGGERS = [
@@ -117,16 +118,14 @@ export default function InteractionsPanel({
             />
           </InspectorField>
           <InspectorField label="Opacity" disabled={disabled}>
-            <input
-              className="bld-input"
-              type="number"
-              min="0"
-              max="1"
-              step="0.05"
+            <InspectorNumInput
+              min={0}
+              max={1}
+              step={0.05}
               value={hover.opacity ?? ''}
               disabled={disabled}
               placeholder="1"
-              onChange={(e) => patchHover('opacity', e.target.value)}
+              onChange={(n) => patchHover('opacity', n == null ? '' : String(n))}
             />
           </InspectorField>
         </div>
@@ -190,16 +189,14 @@ export default function InteractionsPanel({
             />
           </InspectorField>
           <InspectorField label="Opacity" disabled={disabled}>
-            <input
-              className="bld-input"
-              type="number"
-              min="0"
-              max="1"
-              step="0.05"
+            <InspectorNumInput
+              min={0}
+              max={1}
+              step={0.05}
               value={active.opacity ?? ''}
               disabled={disabled}
               placeholder="1"
-              onChange={(e) => patchActive('opacity', e.target.value)}
+              onChange={(n) => patchActive('opacity', n == null ? '' : String(n))}
             />
           </InspectorField>
         </div>
@@ -284,25 +281,23 @@ export default function InteractionsPanel({
             </p>
             <div className="bld-field-grid">
               <InspectorField label="Duration (s)" disabled={disabled}>
-                <input
-                  className="bld-input"
-                  type="number"
-                  min="0"
-                  step="0.1"
+                <InspectorNumInput
+                  min={0}
+                  max={120}
+                  step={0.1}
                   value={anim.duration ?? 0.6}
                   disabled={disabled}
-                  onChange={(e) => patchAnim('duration', e.target.value)}
+                  onChange={(n) => patchAnim('duration', n == null ? '' : String(n))}
                 />
               </InspectorField>
               <InspectorField label="Delay (s)" disabled={disabled}>
-                <input
-                  className="bld-input"
-                  type="number"
-                  min="0"
-                  step="0.1"
+                <InspectorNumInput
+                  min={0}
+                  max={120}
+                  step={0.1}
                   value={anim.delay ?? 0}
                   disabled={disabled}
-                  onChange={(e) => patchAnim('delay', e.target.value)}
+                  onChange={(n) => patchAnim('delay', n == null ? '' : String(n))}
                 />
               </InspectorField>
               <InspectorField label="Easing" disabled={disabled}>

@@ -1,6 +1,7 @@
 'use client';
 
 import AdvancedElementControlsBatch2 from '@/components/builder/inspector/AdvancedElementControlsBatch2';
+import { InspectorNumField, InspectorNumInput, inspectorNumStringChange } from '@/components/builder/inspector/InspectorNumeric';
 import { ADVANCED_BLOCK_NODE_TYPES } from '@/lib/advancedElementRegistry';
 
 /** Inspector fields for advanced element node types (lib/advancedElementRegistry.js). */
@@ -84,17 +85,14 @@ export default function AdvancedElementControls({ selectedNode, form, onChange, 
 
   if (t === 'spacer') {
     return (
-      <div className="bld-field">
-        <label className="bld-label">Height (px)</label>
-        <input
-          type="number"
-          className="bld-input"
-          min={4}
-          max={400}
-          value={form.spacerHeightPx ?? 48}
-          onChange={(e) => onChange('spacerHeightPx', e.target.value)}
-        />
-      </div>
+      <InspectorNumField
+        id="spacer-height"
+        label="Height (px)"
+        min={4}
+        max={400}
+        value={form.spacerHeightPx ?? 48}
+        onChange={inspectorNumStringChange(onChange, 'spacerHeightPx')}
+      />
     );
   }
 
@@ -122,21 +120,21 @@ export default function AdvancedElementControls({ selectedNode, form, onChange, 
         <div className="bld-field-grid">
           <div className="bld-field">
             <label className="bld-label">Dialog width (px)</label>
-            <input type="number" className="bld-input" min={280} max={1200} value={form.modalDialogWidthPx ?? 560} onChange={(e) => onChange('modalDialogWidthPx', e.target.value)} />
+            <InspectorNumInput min={280} max={1200} value={form.modalDialogWidthPx ?? 560} onChange={inspectorNumStringChange(onChange, 'modalDialogWidthPx')} />
           </div>
           <div className="bld-field">
             <label className="bld-label">Max width (px)</label>
-            <input type="number" className="bld-input" min={280} max={1200} value={form.modalDialogMaxWidthPx ?? 720} onChange={(e) => onChange('modalDialogMaxWidthPx', e.target.value)} />
+            <InspectorNumInput min={280} max={1200} value={form.modalDialogMaxWidthPx ?? 720} onChange={inspectorNumStringChange(onChange, 'modalDialogMaxWidthPx')} />
           </div>
         </div>
         <div className="bld-field-grid">
           <div className="bld-field">
             <label className="bld-label">Min height (px)</label>
-            <input type="number" className="bld-input" min={80} max={900} value={form.modalDialogMinHeightPx ?? 160} onChange={(e) => onChange('modalDialogMinHeightPx', e.target.value)} />
+            <InspectorNumInput min={80} max={900} value={form.modalDialogMinHeightPx ?? 160} onChange={inspectorNumStringChange(onChange, 'modalDialogMinHeightPx')} />
           </div>
           <div className="bld-field">
             <label className="bld-label">Max height (px)</label>
-            <input type="number" className="bld-input" min={120} max={900} value={form.modalDialogMaxHeightPx ?? 560} onChange={(e) => onChange('modalDialogMaxHeightPx', e.target.value)} />
+            <InspectorNumInput min={120} max={900} value={form.modalDialogMaxHeightPx ?? 560} onChange={inspectorNumStringChange(onChange, 'modalDialogMaxHeightPx')} />
           </div>
         </div>
         <div className="bld-field">
@@ -199,17 +197,14 @@ export default function AdvancedElementControls({ selectedNode, form, onChange, 
           <label className="bld-label">Address label</label>
           <input className="bld-input" value={form.mapEmbedAddress || ''} onChange={(e) => onChange('mapEmbedAddress', e.target.value)} />
         </div>
-        <div className="bld-field">
-          <label className="bld-label">Height (px)</label>
-          <input
-            type="number"
-            className="bld-input"
-            min={160}
-            max={600}
-            value={form.mapEmbedHeightPx ?? 320}
-            onChange={(e) => onChange('mapEmbedHeightPx', e.target.value)}
-          />
-        </div>
+        <InspectorNumField
+          id="map-height"
+          label="Height (px)"
+          min={160}
+          max={600}
+          value={form.mapEmbedHeightPx ?? 320}
+          onChange={inspectorNumStringChange(onChange, 'mapEmbedHeightPx')}
+        />
       </>
     );
   }
@@ -230,11 +225,11 @@ export default function AdvancedElementControls({ selectedNode, form, onChange, 
         <div className="bld-field-grid">
           <div className="bld-field">
             <label className="bld-label">Icon size (px)</label>
-            <input type="number" className="bld-input" min={28} max={64} value={form.socialIconsSizePx ?? 40} onChange={(e) => onChange('socialIconsSizePx', e.target.value)} />
+            <InspectorNumInput min={28} max={64} value={form.socialIconsSizePx ?? 40} onChange={inspectorNumStringChange(onChange, 'socialIconsSizePx')} />
           </div>
           <div className="bld-field">
             <label className="bld-label">Gap (px)</label>
-            <input type="number" className="bld-input" min={4} max={32} value={form.socialIconsGapPx ?? 12} onChange={(e) => onChange('socialIconsGapPx', e.target.value)} />
+            <InspectorNumInput min={4} max={32} value={form.socialIconsGapPx ?? 12} onChange={inspectorNumStringChange(onChange, 'socialIconsGapPx')} />
           </div>
         </div>
         <div className="bld-field">

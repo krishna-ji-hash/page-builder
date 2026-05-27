@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatBoxFromSides } from '@/lib/parseBoxShorthand';
+import { numInputDisplayValue } from '@/lib/inspectorNumeric';
 
 const SIDES = ['top', 'right', 'bottom', 'left'];
 
@@ -36,7 +37,7 @@ function clampPadding(v) {
 
 function SideInput({ label, value, onChange, onFocus, onBlur, onHover, onLeave, onDragDelta, disabled }) {
   const startRef = useRef(null);
-  const display = value === '' || value == null ? '' : String(value);
+  const display = numInputDisplayValue(value, '');
   return (
     <div className="bld-boxmodel__cell">
       <label className="bld-boxmodel__side">{label}</label>

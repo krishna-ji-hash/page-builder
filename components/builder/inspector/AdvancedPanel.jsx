@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { dataSourceRegistry, listResourceIds } from '@/lib/runtime/dataSourceRegistry';
+import { InspectorNumField, inspectorNumStringChange } from '@/components/builder/inspector/InspectorNumeric';
 
 function Section({ title, defaultOpen = true, children }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -86,28 +87,24 @@ export default function AdvancedPanel({
               <option value="scale">Scale</option>
             </select>
           </div>
-          <div className="bld-field">
-            <label className="bld-label">Duration (sec)</label>
-            <input
-              type="number"
-              step="0.1"
-              min="0"
-              className="bld-input"
-              value={form.animationDuration ?? 0.6}
-              onChange={(e) => onContentChange('animationDuration', e.target.value)}
-            />
-          </div>
-          <div className="bld-field">
-            <label className="bld-label">Delay (sec)</label>
-            <input
-              type="number"
-              step="0.1"
-              min="0"
-              className="bld-input"
-              value={form.animationDelay ?? 0}
-              onChange={(e) => onContentChange('animationDelay', e.target.value)}
-            />
-          </div>
+          <InspectorNumField
+            id="adv-anim-duration"
+            label="Duration (sec)"
+            min={0}
+            max={60}
+            step={0.1}
+            value={form.animationDuration ?? 0.6}
+            onChange={inspectorNumStringChange(onContentChange, 'animationDuration')}
+          />
+          <InspectorNumField
+            id="adv-anim-delay"
+            label="Delay (sec)"
+            min={0}
+            max={60}
+            step={0.1}
+            value={form.animationDelay ?? 0}
+            onChange={inspectorNumStringChange(onContentChange, 'animationDelay')}
+          />
         </Section>
       ) : null}
 

@@ -5,6 +5,7 @@ import { DndContext, PointerSensor, useSensor, useSensors, useDroppable } from '
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { normalizeMenuItems } from '@/lib/menuItems';
+import { InspectorNumInput } from '@/components/builder/inspector/InspectorNumeric';
 
 const MAX_DEPTH = 4;
 
@@ -185,13 +186,13 @@ function SortableRow({ item, depth, collapsed, onToggleCollapse, selectedId, onS
             </div>
             <div className="bld-field">
               <label className="bld-label">Columns</label>
-              <input
-                className="bld-input"
-                type="number"
+              <InspectorNumInput
                 min={1}
                 max={6}
-                value={Number(item.mega?.columns ?? 2)}
-                onChange={(e) => onPatch(item.id, { mega: { ...(item.mega || {}), columns: Number(e.target.value || 2) } })}
+                value={item.mega?.columns ?? 2}
+                onChange={(n) =>
+                  onPatch(item.id, { mega: { ...(item.mega || {}), columns: n == null ? 2 : n } })
+                }
               />
             </div>
             <div className="bld-field-grid">

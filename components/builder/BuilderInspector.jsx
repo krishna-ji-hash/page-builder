@@ -31,6 +31,7 @@ import {
   resolveHeaderLayoutMode,
 } from '@/lib/headerLayoutMode';
 import { isFooterRowNode, isHeaderRowNode, isLayoutLockedRow } from '@/lib/rowLayoutMeta';
+import { stripNaNFromStyleJson } from '@/lib/inspectorNumeric';
 import { getDeviceStyle, styleToCss } from '@/lib/styleToCss';
 import InspectorTabs from './inspector/InspectorTabs';
 import LineToolsPanel from './inspector/LineToolsPanel';
@@ -193,7 +194,7 @@ function mergeStyleForDevice(selectedNode, device, patch, siteTheme, styleJsonOv
 
   if (device === 'desktop') {
     next.desktop = merged;
-    return next;
+    return stripNaNFromStyleJson(next);
   }
 
   next[device] = {
@@ -214,7 +215,7 @@ function mergeStyleForDevice(selectedNode, device, patch, siteTheme, styleJsonOv
     if (!next[device][group]) delete next[device][group];
   });
 
-  return next;
+  return stripNaNFromStyleJson(next);
 }
 
 function hasRawDeviceOverrides(styleJson, deviceKey) {

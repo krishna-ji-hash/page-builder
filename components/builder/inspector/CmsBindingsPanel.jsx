@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { InspectorNumField } from '@/components/builder/inspector/InspectorNumeric';
 
 async function fetchJson(url, opts) {
   const res = await fetch(url, opts);
@@ -184,17 +185,14 @@ export default function CmsBindingsPanel({ selectedNode, projectId, onChange }) 
                 </select>
               </div>
               <div className="bld-field-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
-                <div className="bld-field">
-                  <label className="bld-label">Limit</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="200"
-                    className="bld-input"
-                    value={Number(repeat.limit ?? 0)}
-                    onChange={(e) => onChange('cmsRepeatPatch', { limit: Number(e.target.value) })}
-                  />
-                </div>
+                <InspectorNumField
+                  id="cms-repeat-limit"
+                  label="Limit"
+                  min={0}
+                  max={200}
+                  value={repeat.limit ?? 0}
+                  onChange={(n) => onChange('cmsRepeatPatch', { limit: n ?? 0 })}
+                />
                 <div className="bld-field">
                   <label className="bld-label">Status</label>
                   <select
@@ -287,17 +285,14 @@ export default function CmsBindingsPanel({ selectedNode, projectId, onChange }) 
               </div>
 
               <div className="bld-field-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
-                <div className="bld-field">
-                  <label className="bld-label">Page size</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="200"
-                    className="bld-input"
-                    value={Number(repeat.pageSize ?? 0)}
-                    onChange={(e) => onChange('cmsRepeatPatch', { pageSize: Number(e.target.value) })}
-                  />
-                </div>
+                <InspectorNumField
+                  id="cms-repeat-page-size"
+                  label="Page size"
+                  min={0}
+                  max={200}
+                  value={repeat.pageSize ?? 0}
+                  onChange={(n) => onChange('cmsRepeatPatch', { pageSize: n ?? 0 })}
+                />
                 <div className="bld-field">
                   <label className="bld-label">Page param</label>
                   <input

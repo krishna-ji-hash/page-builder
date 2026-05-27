@@ -271,8 +271,10 @@ export default function FeatureTabs({
                 key={`${activePanel.id}-${activePanel.imageSrc}`}
                 src={activePanel.imageSrc}
                 alt={activePanel.imageAlt || ''}
-                loading="lazy"
+                loading="eager"
+                fetchPriority="high"
                 decoding="async"
+                height={panelHeightPx > 0 ? panelHeightPx : undefined}
                 style={{
                   objectFit: imageFit,
                   width: '100%',

@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "runs": [
+    {
+      "at": "2026-05-27T12:38:32.543Z",
+      "url": "http://localhost:3001/battle-real-estate/home",
+      "project": "battle-real-estate",
+      "page": "home",
+      "lcpScore": 82,
+      "clsScore": 100,
+      "fcpScore": 99,
+      "tbtScore": 82,
+      "recommendations": [
+        "Serve appropriately sized responsive images."
+      ]
+    },
+    {
+      "at": "2026-05-27T12:38:48.892Z",
+      "url": "http://localhost:3001/battle-ecommerce/home",
+      "project": "battle-ecommerce",
+      "page": "home",
+      "lcpScore": 85,
+      "clsScore": 100,
+      "fcpScore": 99,
+      "tbtScore": 84,
+      "recommendations": [
+        "Serve appropriately sized responsive images."
+      ]
+    },
+    {
+      "at": "2026-05-27T12:39:04.797Z",
+      "url": "http://localhost:3001/battle-logistics/home",
+      "project": "battle-logistics",
+      "page": "home",
+      "lcpScore": 59,
+      "clsScore": 100,
+      "fcpScore": 99,
+      "tbtScore": 92,
+      "recommendations": [
+        "Improve LCP: prioritize hero image, compress assets, reduce main-thread work.",
+        "Serve appropriately sized responsive images."
+      ]
+    }
+  ]
+}

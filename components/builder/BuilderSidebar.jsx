@@ -8,6 +8,7 @@ import { FULL_PAGE_TEMPLATES } from '@/lib/fullPageTemplates';
 import { getGlobalLinkMeta, isLinkedGlobalPlaceholder } from '@/lib/globalComponentLinkMeta';
 import { isSectionLockedRow, isStrictAncestorSectionLocked } from '@/lib/rowLayoutMeta';
 import { EXTRA_ADVANCED_ELEMENT_CARDS } from '@/lib/advancedElementRegistry';
+import { InspectorNumInput } from '@/components/builder/inspector/InspectorNumeric';
 
 const ELEMENT_CARDS = [
   { id: 'heading', label: 'Heading', icon: 'H', supported: true },
@@ -872,15 +873,14 @@ export default function BuilderSidebar({
                 </div>
                 <div className="bld-field">
                   <label className="bld-label">Spacing (md)</label>
-                  <input
-                    className="bld-input"
-                    type="number"
-                    min="4"
-                    value={Number(tokens?.spacing?.md ?? 16)}
-                    onChange={(event) =>
+                  <InspectorNumInput
+                    min={4}
+                    max={128}
+                    value={tokens?.spacing?.md ?? 16}
+                    onChange={(n) =>
                       setTokens((prev) => ({
                         ...prev,
-                        spacing: { ...(prev.spacing || {}), md: Number(event.target.value || 16) },
+                        spacing: { ...(prev.spacing || {}), md: n ?? 16 },
                       }))
                     }
                   />

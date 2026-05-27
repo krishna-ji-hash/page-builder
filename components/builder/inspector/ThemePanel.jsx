@@ -5,6 +5,7 @@ import { useBuilderTheme } from '@/context/BuilderThemeContext';
 import { isRootPageRow } from '@/lib/liveDocSectionSpacing';
 import InspectorTipChips from '@/components/builder/inspector/InspectorTipChips';
 import PageResponsivePanel from '@/components/builder/inspector/PageResponsivePanel';
+import { InspectorNumField } from '@/components/builder/inspector/InspectorNumeric';
 
 function Section({ title, children }) {
   return (
@@ -54,20 +55,14 @@ function TextRow({ fieldId, label, value, onChange, placeholder }) {
 
 function NumRow({ fieldId, label, value, onChange }) {
   return (
-    <div className="bld-field">
-      <label className="bld-label" htmlFor={fieldId}>
-        {label} (px)
-      </label>
-      <input
-        id={fieldId}
-        type="number"
-        className="bld-input"
-        min={0}
-        step={1}
-        value={Number.isFinite(Number(value)) ? Number(value) : 0}
-        onChange={(e) => onChange(Number(e.target.value))}
-      />
-    </div>
+    <InspectorNumField
+      id={fieldId}
+      label={`${label} (px)`}
+      min={0}
+      max={9999}
+      value={value}
+      onChange={(n) => onChange(n ?? 0)}
+    />
   );
 }
 
@@ -259,20 +254,14 @@ export default function ThemePanel({
                 chips={['Gap is zero', 'Strips may touch', 'Try 24 or 40']}
               />
             ) : null}
-            <div className="bld-field">
-              <label className="bld-label" htmlFor="page-section-gap">
-                Gap between sections (px)
-              </label>
-              <input
-                id="page-section-gap"
-                type="number"
-                className="bld-input"
-                min={0}
-                step={1}
-                value={Number.isFinite(Number(pageSectionGap)) ? Number(pageSectionGap) : 0}
-                onChange={(e) => patchPageVar('sectionGapPx', Math.max(0, Number(e.target.value) || 0))}
-              />
-            </div>
+            <InspectorNumField
+              id="page-section-gap"
+              label="Gap between sections (px)"
+              min={0}
+              max={9999}
+              value={pageSectionGap}
+              onChange={(n) => patchPageVar('sectionGapPx', n ?? 0)}
+            />
 
             <div className="bld-panel__subhead" style={{ marginTop: 14, marginBottom: 4 }}>
               Different gap for one strip only
@@ -310,32 +299,18 @@ export default function ThemePanel({
               <>
                 <div className="bld-field-grid" style={{ marginTop: 8 }}>
                   <div className="bld-field">
-                    <label className="bld-label" htmlFor="theme-single-gap-before">
-                      Gap to strip above (outside)
-                    </label>
-                    <input
+                    <InspectorNumField
                       id="theme-single-gap-before"
-                      type="number"
-                      className="bld-input"
+                      label="Gap to strip above (outside)"
                       min={0}
-                      step={1}
+                      max={9999}
                       placeholder={`Page default (${pageSectionGap})`}
-                      aria-describedby="theme-gap-before-hint"
-                      value={
-                        Number.isFinite(Number(singleMeta.sectionGapBeforePx))
-                          ? Number(singleMeta.sectionGapBeforePx)
-                          : ''
-                      }
-                      onChange={(e) => {
-                        const raw = e.target.value;
-                        if (raw === '') {
-                          onPatchRootSectionPageSpacing?.(singleRow.id, { sectionGapBeforePx: null });
-                          return;
-                        }
+                      value={singleMeta.sectionGapBeforePx}
+                      onChange={(n) =>
                         onPatchRootSectionPageSpacing?.(singleRow.id, {
-                          sectionGapBeforePx: Math.max(0, Number(raw) || 0),
-                        });
-                      }}
+                          sectionGapBeforePx: n == null ? null : n,
+                        })
+                      }
                     />
                     <InspectorTipChips
                       id="theme-gap-before-hint"
@@ -344,32 +319,18 @@ export default function ThemePanel({
                     />
                   </div>
                   <div className="bld-field">
-                    <label className="bld-label" htmlFor="theme-single-gap-after">
-                      Gap to strip below (outside)
-                    </label>
-                    <input
+                    <InspectorNumField
                       id="theme-single-gap-after"
-                      type="number"
-                      className="bld-input"
+                      label="Gap to strip below (outside)"
                       min={0}
-                      step={1}
+                      max={9999}
                       placeholder={`Page default (${pageSectionGap})`}
-                      aria-describedby="theme-gap-after-hint"
-                      value={
-                        Number.isFinite(Number(singleMeta.sectionGapAfterPx))
-                          ? Number(singleMeta.sectionGapAfterPx)
-                          : ''
-                      }
-                      onChange={(e) => {
-                        const raw = e.target.value;
-                        if (raw === '') {
-                          onPatchRootSectionPageSpacing?.(singleRow.id, { sectionGapAfterPx: null });
-                          return;
-                        }
+                      value={singleMeta.sectionGapAfterPx}
+                      onChange={(n) =>
                         onPatchRootSectionPageSpacing?.(singleRow.id, {
-                          sectionGapAfterPx: Math.max(0, Number(raw) || 0),
-                        });
-                      }}
+                          sectionGapAfterPx: n == null ? null : n,
+                        })
+                      }
                     />
                     <InspectorTipChips
                       id="theme-gap-after-hint"
@@ -434,31 +395,18 @@ export default function ThemePanel({
               />
               {singleRow ? (
                 <div className="bld-field" style={{ marginTop: 10 }}>
-                  <label className="bld-label" htmlFor="theme-single-pad-bottom">
-                    This strip only (overrides default)
-                  </label>
-                  <input
+                  <InspectorNumField
                     id="theme-single-pad-bottom"
-                    type="number"
-                    className="bld-input"
+                    label="This strip only (overrides default)"
                     min={0}
-                    step={1}
+                    max={9999}
                     placeholder={`Page default (${pageSectionPadBottom})`}
-                    value={
-                      Number.isFinite(Number(singleMeta.sectionPadBottomPx))
-                        ? Number(singleMeta.sectionPadBottomPx)
-                        : ''
-                    }
-                    onChange={(e) => {
-                      const raw = e.target.value;
-                      if (raw === '') {
-                        onPatchRootSectionPageSpacing?.(singleRow.id, { sectionPadBottomPx: null });
-                        return;
-                      }
+                    value={singleMeta.sectionPadBottomPx}
+                    onChange={(n) =>
                       onPatchRootSectionPageSpacing?.(singleRow.id, {
-                        sectionPadBottomPx: Math.max(0, Number(raw) || 0),
-                      });
-                    }}
+                        sectionPadBottomPx: n == null ? null : n,
+                      })
+                    }
                   />
                   <button
                     type="button"
@@ -486,39 +434,21 @@ export default function ThemePanel({
             <div className="bld-panel__subhead" style={{ marginTop: 16, marginBottom: 4 }}>
               Page width (live + preview)
             </div>
-            <div className="bld-field">
-              <label className="bld-label" htmlFor="page-content-max-width">
-                Max content width (px), optional
-              </label>
-              <input
-                id="page-content-max-width"
-                type="number"
-                className="bld-input"
-                min={320}
-                max={2560}
-                step={20}
-                placeholder="1200 — default when empty"
-                value={
-                  Number.isFinite(Number(pageVars.contentMaxWidthPx)) && Number(pageVars.contentMaxWidthPx) >= 320
-                    ? Number(pageVars.contentMaxWidthPx)
-                    : ''
-                }
-                onChange={(e) => {
-                  const raw = e.target.value;
-                  if (raw === '') {
-                    patchPageVar('contentMaxWidthPx', null);
-                    return;
-                  }
-                  const n = Math.max(320, Math.min(2560, Math.floor(Number(raw) || 0)));
-                  patchPageVar('contentMaxWidthPx', n);
-                }}
-              />
-              <InspectorTipChips
-                size="xs"
-                style={{ marginTop: 4 }}
-                chips={['Clears to 1200px default', 'Builder + site same cap', 'Wider screens']}
-              />
-            </div>
+            <InspectorNumField
+              id="page-content-max-width"
+              label="Max content width (px), optional"
+              min={320}
+              max={2560}
+              step={20}
+              placeholder="1200 — default when empty"
+              value={pageVars.contentMaxWidthPx}
+              onChange={(n) => patchPageVar('contentMaxWidthPx', n == null ? null : n)}
+            />
+            <InspectorTipChips
+              size="xs"
+              style={{ marginTop: 4 }}
+              chips={['Clears to 1200px default', 'Builder + site same cap', 'Wider screens']}
+            />
 
             <div className="bld-panel__subhead" style={{ marginTop: 16, marginBottom: 4 }}>
               Sticky header (live site)

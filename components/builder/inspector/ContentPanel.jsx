@@ -15,6 +15,11 @@ import InspectorTipChips from '@/components/builder/inspector/InspectorTipChips'
 import FeatureTabsControls from '@/components/builder/inspector/FeatureTabsControls';
 import FaqAccordionControls from '@/components/builder/inspector/FaqAccordionControls';
 import AdvancedElementControls, { isAdvancedElementNodeType } from '@/components/builder/inspector/AdvancedElementControls';
+import {
+  InspectorNumField,
+  InspectorNumInput,
+  inspectorNumStringChange,
+} from '@/components/builder/inspector/InspectorNumeric';
 
 export default function ContentPanel({
   selectedNode,
@@ -201,17 +206,14 @@ export default function ContentPanel({
               onChange={(e) => onChange('bgColor', e.target.value)}
             />
           </div>
-          <div className="bld-field">
-            <label className="bld-label">Thickness (px)</label>
-            <input
-              type="number"
-              className="bld-input"
-              min={1}
-              max={32}
-              value={form.dividerThicknessPx ?? 2}
-              onChange={(e) => onChange('dividerThicknessPx', e.target.value)}
-            />
-          </div>
+          <InspectorNumField
+            id="divider-thickness"
+            label="Thickness (px)"
+            min={1}
+            max={32}
+            value={form.dividerThicknessPx ?? 2}
+            onChange={inspectorNumStringChange(onChange, 'dividerThicknessPx')}
+          />
           <InspectorTipChips
             style={{ marginBottom: 12 }}
             chips={['Style → Background for gradients', 'Style → Size for length', 'Row stack: use V Line']}
@@ -317,15 +319,14 @@ export default function ContentPanel({
               min="0"
               max="40"
               className="bld-range"
-              value={Number(form.buttonIconSpacing ?? 10)}
+              value={numInputDisplayValue(form.buttonIconSpacing, 10)}
               onChange={(e) => onChange('buttonIconSpacing', e.target.value)}
             />
-            <input
-              type="number"
-              min="0"
-              className="bld-input"
-              value={Number(form.buttonIconSpacing ?? 10)}
-              onChange={(e) => onChange('buttonIconSpacing', e.target.value)}
+            <InspectorNumInput
+              min={0}
+              max={80}
+              value={form.buttonIconSpacing ?? 10}
+              onChange={inspectorNumStringChange(onChange, 'buttonIconSpacing')}
             />
           </div>
           <div className="bld-field">
@@ -411,18 +412,16 @@ export default function ContentPanel({
               <option value="fill">Fill — stretches, may distort</option>
             </select>
           </div>
-          <div className="bld-field">
-            <label className="bld-label">Image height (px)</label>
-            <input
-              type="number"
-              min="0"
-              className="bld-input"
-              value={Number(form.imageHeightPx || 0)}
-              onChange={(e) => onChange('imageHeightPx', e.target.value)}
-              placeholder="0 = natural height"
-            />
-            <p className="bld-field-note">0 = natural height. Set px for fixed box.</p>
-          </div>
+          <InspectorNumField
+            id="image-height-px"
+            label="Image height (px)"
+            min={0}
+            max={9999}
+            value={form.imageHeightPx ?? 0}
+            placeholder="0 = natural height"
+            onChange={inspectorNumStringChange(onChange, 'imageHeightPx')}
+          />
+          <p className="bld-field-note">0 = natural height. Set px for fixed box.</p>
         </>
       ) : null}
       {isMenu ? (
@@ -611,17 +610,14 @@ export default function ContentPanel({
                 <option value="yes">Yes</option>
               </select>
             </div>
-            <div className="bld-field">
-              <label className="bld-label">Mega columns</label>
-              <input
-                type="number"
-                min="1"
-                max="6"
-                className="bld-input"
-                value={Number(form.menuMegaColumns ?? 2)}
-                onChange={(e) => onChange('menuMegaColumns', e.target.value)}
-              />
-            </div>
+            <InspectorNumField
+              id="menu-mega-cols"
+              label="Mega columns"
+              min={1}
+              max={6}
+              value={form.menuMegaColumns ?? 2}
+              onChange={inspectorNumStringChange(onChange, 'menuMegaColumns')}
+            />
           </details>
           <div className="bld-field">
             <label className="bld-label">Use Project Pages for Navigation</label>
@@ -811,18 +807,14 @@ export default function ContentPanel({
 
                     <div className="bld-field">
                       <label className="bld-label">Image border radius (px)</label>
-                      <input
-                        type="number"
+                      <InspectorNumInput
                         min={0}
                         max={200}
-                        className="bld-input"
-                        value={Number(slide?.imageBorderRadiusPx ?? 0) || 0}
-                        onChange={(e) =>
+                        value={slide?.imageBorderRadiusPx ?? 0}
+                        onChange={(n) =>
                           onChange('carouselSlidePatch', {
                             index: idx,
-                            patch: {
-                              imageBorderRadiusPx: Math.max(0, Math.min(200, Math.round(Number(e.target.value) || 0))),
-                            },
+                            patch: { imageBorderRadiusPx: n ?? 0 },
                           })
                         }
                       />
@@ -832,34 +824,26 @@ export default function ContentPanel({
                     <div className="bld-field-grid">
                       <div className="bld-field">
                         <label className="bld-label">Image width (px)</label>
-                        <input
-                          type="number"
+                        <InspectorNumInput
                           min={0}
                           max={2400}
-                          className="bld-input"
-                          value={Number(slide?.imageWidthPx) > 0 ? Number(slide.imageWidthPx) : ''}
+                          value={slide?.imageWidthPx ?? ''}
                           placeholder="0 = full width"
-                          onChange={(e) => {
-                            const raw = e.target.value.trim();
-                            const n = raw === '' ? 0 : Math.max(0, Math.min(2400, Math.round(Number(raw) || 0)));
-                            onChange('carouselSlidePatch', { index: idx, patch: { imageWidthPx: n } });
-                          }}
+                          onChange={(n) =>
+                            onChange('carouselSlidePatch', { index: idx, patch: { imageWidthPx: n ?? 0 } })
+                          }
                         />
                       </div>
                       <div className="bld-field">
                         <label className="bld-label">Image height (px)</label>
-                        <input
-                          type="number"
+                        <InspectorNumInput
                           min={0}
                           max={2400}
-                          className="bld-input"
-                          value={Number(slide?.imageHeightPx) > 0 ? Number(slide.imageHeightPx) : ''}
+                          value={slide?.imageHeightPx ?? ''}
                           placeholder="0 = full height"
-                          onChange={(e) => {
-                            const raw = e.target.value.trim();
-                            const n = raw === '' ? 0 : Math.max(0, Math.min(2400, Math.round(Number(raw) || 0)));
-                            onChange('carouselSlidePatch', { index: idx, patch: { imageHeightPx: n } });
-                          }}
+                          onChange={(n) =>
+                            onChange('carouselSlidePatch', { index: idx, patch: { imageHeightPx: n ?? 0 } })
+                          }
                         />
                       </div>
                     </div>
@@ -989,14 +973,11 @@ export default function ContentPanel({
             <label className="bld-label">{isTickerOrMarquee ? 'Scroll duration (seconds)' : 'Image fit'}</label>
             {isTickerOrMarquee ? (
               <>
-                <input
-                  className="bld-input"
-                  type="number"
+                <InspectorNumInput
                   min={8}
                   max={120}
-                  step={1}
                   value={form.carouselTickerDurationSec ?? ''}
-                  onChange={(e) => onChange('carouselTickerDurationSec', e.target.value)}
+                  onChange={inspectorNumStringChange(onChange, 'carouselTickerDurationSec')}
                 />
                 <p className="bld-field-note" style={{ marginTop: 8 }}>
                   Duration
@@ -1112,52 +1093,42 @@ export default function ContentPanel({
 
           {!isTickerOrMarquee ? (
           <div className="bld-field-grid">
-            <div className="bld-field">
-              <label className="bld-label">Speed (ms)</label>
-              <input
-                className="bld-input"
-                type="number"
-                min={0}
-                step={10}
-                value={form.carouselSpeedMs ?? ''}
-                onChange={(e) => onChange('carouselSpeedMs', e.target.value)}
-              />
-            </div>
-            <div className="bld-field">
-              <label className="bld-label">Interval (ms)</label>
-              <input
-                className="bld-input"
-                type="number"
-                min={0}
-                step={100}
-                value={form.carouselIntervalMs ?? ''}
-                onChange={(e) => onChange('carouselIntervalMs', e.target.value)}
-              />
-            </div>
-            <div className="bld-field">
-              <label className="bld-label">Gap (px)</label>
-              <input
-                className="bld-input"
-                type="number"
-                min={0}
-                step={1}
-                value={form.carouselGapPx ?? ''}
-                onChange={(e) => onChange('carouselGapPx', e.target.value)}
-              />
-            </div>
+            <InspectorNumField
+              id="carousel-speed"
+              label="Speed (ms)"
+              min={0}
+              max={60000}
+              step={10}
+              value={form.carouselSpeedMs ?? ''}
+              onChange={inspectorNumStringChange(onChange, 'carouselSpeedMs')}
+            />
+            <InspectorNumField
+              id="carousel-interval"
+              label="Interval (ms)"
+              min={0}
+              max={60000}
+              step={100}
+              value={form.carouselIntervalMs ?? ''}
+              onChange={inspectorNumStringChange(onChange, 'carouselIntervalMs')}
+            />
+            <InspectorNumField
+              id="carousel-gap"
+              label="Gap (px)"
+              min={0}
+              max={120}
+              value={form.carouselGapPx ?? ''}
+              onChange={inspectorNumStringChange(onChange, 'carouselGapPx')}
+            />
           </div>
           ) : (
-            <div className="bld-field">
-              <label className="bld-label">Gap between cards (px)</label>
-              <input
-                className="bld-input"
-                type="number"
-                min={0}
-                step={1}
-                value={form.carouselGapPx ?? ''}
-                onChange={(e) => onChange('carouselGapPx', e.target.value)}
-              />
-            </div>
+            <InspectorNumField
+              id="carousel-gap-cards"
+              label="Gap between cards (px)"
+              min={0}
+              max={120}
+              value={form.carouselGapPx ?? ''}
+              onChange={inspectorNumStringChange(onChange, 'carouselGapPx')}
+            />
           )}
 
           {!isTickerOrMarquee ? (
@@ -1180,14 +1151,11 @@ export default function ContentPanel({
           {!isTickerOrMarquee ? (
           <div className="bld-field">
             <label className="bld-label">Slides per view (this breakpoint)</label>
-            <input
-              className="bld-input"
-              type="number"
+            <InspectorNumInput
               min={1}
               max={6}
-              step={1}
               value={form.carouselPerView ?? ''}
-              onChange={(e) => onChange('carouselPerView', e.target.value)}
+              onChange={inspectorNumStringChange(onChange, 'carouselPerView')}
             />
             <p className="bld-field-note">Viewport</p>
             {carouselSlides.length > 1 &&

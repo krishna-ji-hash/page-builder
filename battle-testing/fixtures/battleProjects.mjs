@@ -4,10 +4,10 @@
  */
 
 const IMG = {
-  hero: 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=1600&q=80',
-  office: 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1600&q=80',
-  truck: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=1600&q=80',
-  shop: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=1600&q=80',
+  hero: 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=1200&q=75',
+  office: 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&q=75',
+  truck: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=1200&q=75',
+  shop: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=1200&q=75',
 };
 
 function stackSection(displayName, stackChildren) {
@@ -33,12 +33,66 @@ function stackSection(displayName, stackChildren) {
   };
 }
 
-function heading({ text, tag = 'h2' }) {
+function heading({ text, tag = 'h2', style_json = {} }) {
   return {
     nodeType: 'heading',
     displayName: 'Heading',
-    props: { text, tag, style_json: {} },
+    props: { text, tag, style_json },
     children: [],
+  };
+}
+
+function heroHeading(text) {
+  return heading({
+    text,
+    tag: 'h1',
+    style_json: {
+      interactions: {
+        animation: { preset: 'fade', trigger: 'on-scroll', duration: 0.45, easing: 'ease-out' },
+      },
+    },
+  });
+}
+
+function ctaButton(text, href = '#') {
+  const node = btn(text, href);
+  node.props.style_json = {
+    interactions: {
+      hover: { scale: '1.01', boxShadow: '0 4px 16px rgba(15,23,42,0.08)' },
+      active: { scale: '0.99' },
+    },
+  };
+  return node;
+}
+
+function seoLandingPage({ slug, title, seoTitle, seoDescription, heroTitle, heroHtml, ctaLabel, image = IMG.hero }) {
+  return {
+    slug,
+    title,
+    seo: baseSeo(seoTitle, seoDescription),
+    sections: [
+      stackSection('Nav', [menuNav(), ctaButton(ctaLabel, '#')]),
+      stackSection('Hero', [
+        heroHeading(heroTitle),
+        richText(heroHtml),
+        imageBlock(image, heroTitle, { imageHeightPx: 420, aspectRatio: '16 / 9' }),
+        ctaButton('Get started', '#'),
+      ]),
+      stackSection('Proof', [
+        heading({ text: 'Built for production battle testing', tag: 'h2' }),
+        richText(
+          '<p>Responsive layout, CMS routes, forms, carousel, interactions, and SEO metadata — validated on every deploy.</p>'
+        ),
+      ]),
+      stackSection('Lead', [
+        heading({ text: 'Talk to our team', tag: 'h2' }),
+        leadForm('Send message', [
+          { name: 'name', label: 'Name', type: 'text', required: true },
+          { name: 'email', label: 'Email', type: 'email', required: true },
+          { name: 'message', label: 'Message', type: 'textarea', required: false },
+        ]),
+      ]),
+    ],
   };
 }
 
@@ -51,11 +105,21 @@ function richText(html) {
   };
 }
 
-function imageBlock(src, alt) {
+function imageBlock(src, alt, { imageHeightPx = 400, aspectRatio = '16 / 9' } = {}) {
   return {
     nodeType: 'image',
     displayName: 'Image',
-    props: { src, alt: alt || '', style_json: {} },
+    props: {
+      src,
+      alt: alt || '',
+      imageFit: 'cover',
+      imageHeightPx,
+      style_json: {
+        desktop: {
+          size: { width: '100%', aspectRatio },
+        },
+      },
+    },
     children: [],
   };
 }
@@ -110,6 +174,8 @@ function carouselBlock() {
           image: IMG.hero,
           imageSrc: IMG.hero,
           imageAlt: 'Modern interior',
+          imageHeightPx: 420,
+          imageWidthPx: 1200,
           buttonText: 'Learn more',
           buttonUrl: '#',
         },
@@ -120,6 +186,8 @@ function carouselBlock() {
           image: IMG.office,
           imageSrc: IMG.office,
           imageAlt: 'Office workspace',
+          imageHeightPx: 420,
+          imageWidthPx: 1200,
           buttonText: 'View details',
           buttonUrl: '#',
         },
@@ -239,17 +307,18 @@ export const BATTLE_PROJECTS = [
         sections: [
           stackSection('Nav', [menuNav(), btn('Book a tour', '#')]),
           stackSection('Hero', [
-            heading({ text: 'Homes that fit real life', tag: 'h1' }),
+            heroHeading('Homes that fit real life'),
             richText('<p>Stress-test: navigation, hero, carousel, CMS repeater, and lead capture.</p>'),
-            imageBlock(IMG.hero, 'Residential exterior hero'),
+            imageBlock(IMG.hero, 'Residential exterior hero', { imageHeightPx: 480, aspectRatio: '16 / 9' }),
+            ctaButton('Browse listings', '#'),
           ]),
           stackSection('Carousel', [carouselBlock()]),
           stackSection('Listings', [
             heading({ text: 'Featured properties', tag: 'h2' }),
-            cmsRepeater('properties', 6, [
+            cmsRepeater('properties', 4, [
               heading({ text: '{{item.title}}', tag: 'h3' }),
               richText('<p>{{item.data.address}} · ${{item.data.price}} · {{item.data.beds}} bd</p>'),
-              imageBlock('{{item.data.image}}', '{{item.title}}'),
+              imageBlock('{{item.data.image}}', '{{item.title}}', { imageHeightPx: 200, aspectRatio: '4 / 3' }),
             ]),
           ]),
           stackSection('Lead', [
@@ -280,11 +349,21 @@ export const BATTLE_PROJECTS = [
           stackSection('Property header', [
             heading({ text: '{{item.title}}', tag: 'h1' }),
             richText('<p>{{item.data.address}}</p><p>Price: ${{item.data.price}}</p>'),
-            imageBlock('{{item.data.image}}', '{{item.title}}'),
+            imageBlock('{{item.data.image}}', '{{item.title}}', { imageHeightPx: 360, aspectRatio: '4 / 3' }),
           ]),
           stackSection('Detail CTA', [btn('Schedule tour', '#')]),
         ],
       },
+      seoLandingPage({
+        slug: 'austin-luxury-homes',
+        title: 'Austin luxury homes',
+        seoTitle: 'Austin luxury homes — Battle Real Estate',
+        seoDescription: 'SEO landing page for high-intent local search: luxury homes in Austin with lead capture.',
+        heroTitle: 'Luxury homes in Austin',
+        heroHtml: '<p>Long-tail SEO landing with hero animation, hover CTAs, and conversion form.</p>',
+        ctaLabel: 'Book tour',
+        image: IMG.office,
+      }),
     ],
   },
   {
@@ -336,16 +415,17 @@ export const BATTLE_PROJECTS = [
         sections: [
           stackSection('Nav', [menuNav(), btn('View cart', '#')]),
           stackSection('Hero', [
-            heading({ text: 'Built for conversion testing', tag: 'h1' }),
+            heroHeading('Built for conversion testing'),
             richText('<p>Carousel, product repeater, and lead capture in one flow.</p>'),
+            ctaButton('Shop now', '#'),
           ]),
           stackSection('Carousel', [carouselBlock()]),
           stackSection('Products', [
             heading({ text: 'Popular picks', tag: 'h2' }),
-            cmsRepeater('products', 8, [
+            cmsRepeater('products', 4, [
               heading({ text: '{{item.title}}', tag: 'h3' }),
               richText('<p>{{item.data.category}} · ${{item.data.price}}</p>'),
-              imageBlock('{{item.data.image}}', '{{item.title}}'),
+              imageBlock('{{item.data.image}}', '{{item.title}}', { imageHeightPx: 200, aspectRatio: '4 / 3' }),
               {
                 nodeType: 'button',
                 displayName: 'View product',
@@ -386,11 +466,21 @@ export const BATTLE_PROJECTS = [
           stackSection('Product hero', [
             heading({ text: '{{item.title}}', tag: 'h1' }),
             richText('<p>{{item.data.category}} · ${{item.data.price}}</p>'),
-            imageBlock('{{item.data.image}}', '{{item.title}}'),
+            imageBlock('{{item.data.image}}', '{{item.title}}', { imageHeightPx: 360, aspectRatio: '4 / 3' }),
             btn('Add to cart', '#'),
           ]),
         ],
       },
+      seoLandingPage({
+        slug: 'summer-sale',
+        title: 'Summer sale',
+        seoTitle: 'Summer sale — Battle Shop',
+        seoDescription: 'Campaign landing page for seasonal ecommerce SEO and PDP deep links.',
+        heroTitle: 'Summer sale — up to 40% off',
+        heroHtml: '<p>Test seasonal landing pages with product grid links and newsletter signup.</p>',
+        ctaLabel: 'View deals',
+        image: IMG.shop,
+      }),
     ],
   },
   {
@@ -442,14 +532,14 @@ export const BATTLE_PROJECTS = [
         sections: [
           stackSection('Nav', [menuNav(), btn('Open portal', '#')]),
           stackSection('Hero', [
-            heading({ text: 'Freight visibility without guesswork', tag: 'h1' }),
+            heroHeading('Freight visibility without guesswork'),
             richText('<p>Repeater tuned for operational density and mobile wrapping.</p>'),
-            imageBlock(IMG.truck, 'Freight truck'),
+            imageBlock(IMG.truck, 'Freight truck', { imageHeightPx: 400, aspectRatio: '16 / 9' }),
+            ctaButton('Track shipment', '#'),
           ]),
-          stackSection('Carousel', [carouselBlock()]),
           stackSection('Shipments', [
             heading({ text: 'Active shipments', tag: 'h2' }),
-            cmsRepeater('shipments', 12, [
+            cmsRepeater('shipments', 6, [
               heading({ text: '{{item.title}}', tag: 'h3' }),
               richText('<p>Tracking: {{item.data.tracking}} — {{item.data.status}} (ETA {{item.data.eta}})</p>'),
             ]),
@@ -463,6 +553,16 @@ export const BATTLE_PROJECTS = [
           ]),
         ],
       },
+      seoLandingPage({
+        slug: 'cross-border-freight',
+        title: 'Cross-border freight',
+        seoTitle: 'Cross-border freight — Battle Logistics',
+        seoDescription: 'SEO landing for international freight quotes and operational lead forms.',
+        heroTitle: 'Cross-border freight without delays',
+        heroHtml: '<p>Validate logistics SEO pages, dense repeaters on home, and quote forms on landing URLs.</p>',
+        ctaLabel: 'Get quote',
+        image: IMG.truck,
+      }),
     ],
   },
   {
@@ -525,10 +625,10 @@ export const BATTLE_PROJECTS = [
           stackSection('Carousel', [carouselBlock()]),
           stackSection('Latest posts', [
             heading({ text: 'From the blog', tag: 'h2' }),
-            cmsRepeater('blog', 6, [
+            cmsRepeater('blog', 4, [
               heading({ text: '{{item.title}}', tag: 'h3' }),
               richText('<p>{{item.data.summary}}</p>'),
-              imageBlock('{{item.data.cover}}', '{{item.title}}'),
+              imageBlock('{{item.data.cover}}', '{{item.title}}', { imageHeightPx: 180, aspectRatio: '16 / 9' }),
             ]),
           ]),
           stackSection('Demo request', [
@@ -547,7 +647,7 @@ export const BATTLE_PROJECTS = [
           stackSection('Article', [
             heading({ text: '{{item.title}}', tag: 'h1' }),
             richText('<p>{{item.data.summary}}</p>'),
-            imageBlock('{{item.data.cover}}', '{{item.title}}'),
+            imageBlock('{{item.data.cover}}', '{{item.title}}', { imageHeightPx: 360, aspectRatio: '16 / 9' }),
           ]),
         ],
       },

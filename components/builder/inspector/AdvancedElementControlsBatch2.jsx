@@ -1,5 +1,7 @@
 'use client';
 
+import { InspectorNumField, inspectorNumStringChange } from '@/components/builder/inspector/InspectorNumeric';
+
 /** Inspector fields for advanced elements batch 2. */
 
 export default function AdvancedElementControlsBatch2({ selectedNode, form, onChange, jsonErrors = {} }) {
@@ -25,8 +27,8 @@ export default function AdvancedElementControlsBatch2({ selectedNode, form, onCh
     return (
       <>
         <div className="bld-field-grid">
-          <div className="bld-field"><label className="bld-label">Columns</label><input type="number" min={1} max={6} className="bld-input" value={form.gridColumns ?? 3} onChange={(e) => onChange('gridColumns', e.target.value)} /></div>
-          <div className="bld-field"><label className="bld-label">Gap (px)</label><input type="number" min={0} max={48} className="bld-input" value={form.gridGapPx ?? 16} onChange={(e) => onChange('gridGapPx', e.target.value)} /></div>
+          <InspectorNumField id="grid-cols" label="Columns" min={1} max={6} value={form.gridColumns ?? 3} onChange={inspectorNumStringChange(onChange, 'gridColumns')} />
+          <InspectorNumField id="grid-gap" label="Gap (px)" min={0} max={48} value={form.gridGapPx ?? 16} onChange={inspectorNumStringChange(onChange, 'gridGapPx')} />
         </div>
         <div className="bld-field"><label className="bld-label"><input type="checkbox" checked={Boolean(form.gridMobileStack)} onChange={(e) => onChange('gridMobileStack', e.target.checked)} /> Stack on mobile</label></div>
         <div className="bld-field"><label className="bld-label">Items JSON</label><textarea className="bld-input bld-textarea" rows={8} value={form.gridItemsJson || '[]'} onChange={(e) => onChange('gridItemsJson', e.target.value)} />{jsonErrors.gridItemsJson ? <p className="bld-field-error">{jsonErrors.gridItemsJson}</p> : null}</div>
@@ -76,7 +78,7 @@ export default function AdvancedElementControlsBatch2({ selectedNode, form, onCh
     return (
       <>
         <div className="bld-field"><label className="bld-label">Label</label><input className="bld-input" value={form.progressLabel || ''} onChange={(e) => onChange('progressLabel', e.target.value)} /></div>
-        <div className="bld-field"><label className="bld-label">Percentage</label><input type="number" min={0} max={100} className="bld-input" value={form.progressPercentage ?? 0} onChange={(e) => onChange('progressPercentage', e.target.value)} /></div>
+        <InspectorNumField id="progress-pct" label="Percentage" min={0} max={100} value={form.progressPercentage ?? 0} onChange={inspectorNumStringChange(onChange, 'progressPercentage')} />
         <div className="bld-field"><label className="bld-label">Helper text</label><input className="bld-input" value={form.progressHelper || ''} onChange={(e) => onChange('progressHelper', e.target.value)} /></div>
       </>
     );
@@ -86,8 +88,8 @@ export default function AdvancedElementControlsBatch2({ selectedNode, form, onCh
     return (
       <>
         <div className="bld-field-grid">
-          <div className="bld-field"><label className="bld-label">Rating</label><input type="number" step="0.1" min={0} max={10} className="bld-input" value={form.ratingValue ?? 5} onChange={(e) => onChange('ratingValue', e.target.value)} /></div>
-          <div className="bld-field"><label className="bld-label">Max stars</label><input type="number" min={1} max={10} className="bld-input" value={form.ratingMaxStars ?? 5} onChange={(e) => onChange('ratingMaxStars', e.target.value)} /></div>
+          <InspectorNumField id="rating-val" label="Rating" step={0.1} min={0} max={10} value={form.ratingValue ?? 5} onChange={inspectorNumStringChange(onChange, 'ratingValue')} />
+          <InspectorNumField id="rating-max" label="Max stars" min={1} max={10} value={form.ratingMaxStars ?? 5} onChange={inspectorNumStringChange(onChange, 'ratingMaxStars')} />
         </div>
         <div className="bld-field"><label className="bld-label">Review text</label><input className="bld-input" value={form.ratingReviewText || ''} onChange={(e) => onChange('ratingReviewText', e.target.value)} /></div>
       </>
@@ -101,7 +103,7 @@ export default function AdvancedElementControlsBatch2({ selectedNode, form, onCh
         <div className="bld-field"><label className="bld-label">Role</label><input className="bld-input" value={form.testimonialRole || ''} onChange={(e) => onChange('testimonialRole', e.target.value)} /></div>
         <div className="bld-field"><label className="bld-label">Message</label><textarea className="bld-input bld-textarea" rows={4} value={form.testimonialMessage || ''} onChange={(e) => onChange('testimonialMessage', e.target.value)} /></div>
         <div className="bld-field"><label className="bld-label">Avatar URL</label><input className="bld-input" value={form.testimonialAvatar || ''} onChange={(e) => onChange('testimonialAvatar', e.target.value)} /></div>
-        <div className="bld-field"><label className="bld-label">Rating (0-5)</label><input type="number" min={0} max={5} className="bld-input" value={form.testimonialRating ?? 5} onChange={(e) => onChange('testimonialRating', e.target.value)} /></div>
+        <InspectorNumField id="testimonial-rating" label="Rating (0-5)" min={0} max={5} value={form.testimonialRating ?? 5} onChange={inspectorNumStringChange(onChange, 'testimonialRating')} />
       </>
     );
   }
@@ -179,8 +181,8 @@ export default function AdvancedElementControlsBatch2({ selectedNode, form, onCh
       <>
         <div className="bld-field"><label className="bld-label">Lottie JSON URL</label><input className="bld-input" value={form.lottieJsonUrl || ''} onChange={(e) => onChange('lottieJsonUrl', e.target.value)} /></div>
         <div className="bld-field-grid">
-          <div className="bld-field"><label className="bld-label">Width</label><input type="number" min={80} max={640} className="bld-input" value={form.lottieWidthPx ?? 240} onChange={(e) => onChange('lottieWidthPx', e.target.value)} /></div>
-          <div className="bld-field"><label className="bld-label">Height</label><input type="number" min={80} max={640} className="bld-input" value={form.lottieHeightPx ?? 240} onChange={(e) => onChange('lottieHeightPx', e.target.value)} /></div>
+          <InspectorNumField id="lottie-w" label="Width" min={80} max={640} value={form.lottieWidthPx ?? 240} onChange={inspectorNumStringChange(onChange, 'lottieWidthPx')} />
+          <InspectorNumField id="lottie-h" label="Height" min={80} max={640} value={form.lottieHeightPx ?? 240} onChange={inspectorNumStringChange(onChange, 'lottieHeightPx')} />
         </div>
         <div className="bld-field"><label className="bld-label">Alt text</label><input className="bld-input" value={form.lottieAlt || ''} onChange={(e) => onChange('lottieAlt', e.target.value)} /></div>
       </>
@@ -193,7 +195,7 @@ export default function AdvancedElementControlsBatch2({ selectedNode, form, onCh
         <div className="bld-field"><label className="bld-label">Image URL</label><input className="bld-input" value={form.logoSrc || ''} onChange={(e) => onChange('logoSrc', e.target.value)} /></div>
         <div className="bld-field"><label className="bld-label">Alt text</label><input className="bld-input" value={form.logoAlt || ''} onChange={(e) => onChange('logoAlt', e.target.value)} /></div>
         <div className="bld-field"><label className="bld-label">Link URL</label><input className="bld-input" value={form.logoHref || ''} onChange={(e) => onChange('logoHref', e.target.value)} /></div>
-        <div className="bld-field"><label className="bld-label">Width (px)</label><input type="number" min={48} max={400} className="bld-input" value={form.logoWidthPx ?? 160} onChange={(e) => onChange('logoWidthPx', e.target.value)} /></div>
+        <InspectorNumField id="logo-w" label="Width (px)" min={48} max={400} value={form.logoWidthPx ?? 160} onChange={inspectorNumStringChange(onChange, 'logoWidthPx')} />
       </>
     );
   }
@@ -210,7 +212,7 @@ export default function AdvancedElementControlsBatch2({ selectedNode, form, onCh
   if (t === 'table_pro') {
     return (
       <>
-        <div className="bld-field"><label className="bld-label">Highlight column (1-based)</label><input type="number" min={0} max={6} className="bld-input" value={form.tableProHighlightColumn ?? 0} onChange={(e) => onChange('tableProHighlightColumn', e.target.value)} /></div>
+        <InspectorNumField id="table-hl-col" label="Highlight column (1-based)" min={0} max={6} value={form.tableProHighlightColumn ?? 0} onChange={inspectorNumStringChange(onChange, 'tableProHighlightColumn')} />
         <div className="bld-field"><label className="bld-label">Headers JSON</label><textarea className="bld-input bld-textarea" rows={3} value={form.tableProHeadersJson || '[]'} onChange={(e) => onChange('tableProHeadersJson', e.target.value)} />{jsonErrors.tableProHeadersJson ? <p className="bld-field-error">{jsonErrors.tableProHeadersJson}</p> : null}</div>
         <div className="bld-field"><label className="bld-label">Rows JSON</label><textarea className="bld-input bld-textarea" rows={8} value={form.tableProRowsJson || '[]'} onChange={(e) => onChange('tableProRowsJson', e.target.value)} />{jsonErrors.tableProRowsJson ? <p className="bld-field-error">{jsonErrors.tableProRowsJson}</p> : null}</div>
       </>

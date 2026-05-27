@@ -125,6 +125,25 @@ test('pruneInteractions normalizes legacy animation preset on save', () => {
   assert.equal(out.animation.preset, 'zoom-in');
 });
 
+test('pruneInteractions drops invalid animation duration and opacity', () => {
+  const out = pruneInteractions({
+    hover: { opacity: 'bad', scale: '1.05' },
+    animation: { preset: 'fade', duration: 'x', delay: NaN, trigger: 'on-load' },
+  });
+  assert.equal(out.hover.opacity, undefined);
+  assert.equal(out.hover.scale, '1.05');
+  assert.equal(out.animation.duration, undefined);
+  assert.equal(out.animation.delay, undefined);
+});
+
+test('interactionInlineStyleVars skips non-finite animation timing', () => {
+  const vars = interactionInlineStyleVars({
+    interactions: { animation: { preset: 'fade', duration: NaN, delay: 'nope' } },
+  });
+  assert.equal(vars['--node-anim-duration'], undefined);
+  assert.equal(vars['--node-anim-delay'], undefined);
+});
+
 test('animationCssFromInteractions only inlines animation for on-load', () => {
   const onLoad = animationCssFromInteractions({
     interactions: { animation: { preset: 'fade', trigger: 'on-load' } },
