@@ -1,4 +1,4 @@
-import { getPublishedPage } from '@/services/site/publishedPageService';
+import { getPublishedPageForPublic } from '@/services/site/publishedPageService';
 import PublishedLiveTree from '@/components/live/PublishedLiveTree';
 import { getPageVarsBucket, livePageCssVarOverrides, resolveBodyLayout, resolveContentMaxWidthPx } from '@/lib/livePageCssVars';
 import { normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesignTheme';
@@ -33,7 +33,7 @@ export async function generateMetadata({ params }) {
   if (!isPublicSlug(projectSlug) || !isPublicSlug(pageSlug)) {
     return {};
   }
-  const page = await getPublishedPage(projectSlug, pageSlug);
+  const page = await getPublishedPageForPublic(projectSlug, pageSlug);
   if (!page) return {};
 
   const currentPath = `/${projectSlug}/${pageSlug}`;
@@ -56,25 +56,40 @@ export default async function PublicSitePage({ params, searchParams }) {
   const sp = searchParams ? await Promise.resolve(searchParams) : null;
   const pageParam = typeof sp?.page === 'string' ? Number(sp.page) : 0;
   const pageContext = Number.isInteger(pageParam) && pageParam > 0 ? { cms: { page: pageParam } } : null;
-  const page = await getPublishedPage(projectSlug, pageSlug, pageContext);
+  const page = await getPublishedPageForPublic(projectSlug, pageSlug, pageContext);
 
   if (!page) {
-    return <div style={{ padding: 40 }}>Page not found</div>;
+    return (
+      <div style={{ padding: 40, maxWidth: 480, margin: '0 auto', textAlign: 'center' }}>
+        <h1 style={{ fontSize: 20, marginBottom: 8 }}>Page not published</h1>
+        <p style={{ color: '#64748b', margin: 0 }}>
+          This page has no published snapshot yet. Publish it from the builder to make it live.
+        </p>
+      </div>
+    );
   }
 
   if (!page.snapshot_json) {
-    return <div style={{ padding: 40 }}>Page not published</div>;
+    return (
+      <div style={{ padding: 40, maxWidth: 480, margin: '0 auto', textAlign: 'center' }}>
+        <h1 style={{ fontSize: 20, marginBottom: 8 }}>Page not published</h1>
+        <p style={{ color: '#64748b', margin: 0 }}>
+          Published version exists but has no valid snapshot. Re-publish from the builder.
+        </p>
+      </div>
+    );
   }
 
   if (!Array.isArray(page.snapshot_json) || page.snapshot_json.length === 0) {
     return <div style={{ padding: 40 }}>Published page is empty</div>;
   }
 
-  const globalHeader = page.projectConfig?.globalSections?.header
-    ? cloneGlobalNode(page.projectConfig.globalSections.header, 'global-header')
+  const frozenGlobals = page.publishedGlobalSections || {};
+  const globalHeader = frozenGlobals.header
+    ? cloneGlobalNode(frozenGlobals.header, 'global-header')
     : null;
-  const globalFooter = page.projectConfig?.globalSections?.footer
-    ? cloneGlobalNode(page.projectConfig.globalSections.footer, 'global-footer')
+  const globalFooter = frozenGlobals.footer
+    ? cloneGlobalNode(frozenGlobals.footer, 'global-footer')
     : null;
   const renderNodes = buildRenderNodesWithGlobals(
     page.snapshot_json,

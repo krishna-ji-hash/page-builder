@@ -7,7 +7,7 @@ import { expandCms } from '@/lib/cms/cmsExpand';
 import { getGlobalComponentsByIds } from '@/services/builder/globalComponentsService';
 import * as cmsService from '@/services/builder/cmsService';
 import LiveDoc from '@/components/live/LiveDoc';
-import { getBuilderState } from '@/services/builder/builderService';
+import { getDraftPageForBuilder } from '@/services/builder/builderService';
 import '@/styles/live/live-site.css';
 import '@/styles/shared/menu.css';
 import '@/styles/shared/button.css';
@@ -32,7 +32,7 @@ export default async function DraftPreviewView({ pageId }) {
     return <div style={{ padding: 40 }}>Invalid preview URL.</div>;
   }
 
-  const state = await getBuilderState(pid);
+  const state = await getDraftPageForBuilder(pid);
   if (!state?.page) {
     return <div style={{ padding: 40 }}>Page not found.</div>;
   }

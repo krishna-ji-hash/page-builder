@@ -31,6 +31,28 @@ test('rejects non-array children when key present', () => {
   assert.equal(r.ok, false);
 });
 
+test('parses frozen globalSections from published snapshot', () => {
+  const raw = {
+    nodes: [{ nodeType: 'row', children: [] }],
+    globalSections: {
+      header: { nodeType: 'row', displayName: 'H', props: { meta: { isHeader: true } }, children: [] },
+      footer: null,
+    },
+  };
+  const r = parsePublishedSnapshot(raw);
+  assert.equal(r.ok, true);
+  assert.equal(r.globalSections.header.nodeType, 'row');
+  assert.equal(r.globalSections.header.props.meta.isHeader, true);
+  assert.equal(r.globalSections.footer, null);
+});
+
+test('missing globalSections yields empty frozen globals', () => {
+  const r = parsePublishedSnapshot({ nodes: [{ nodeType: 'row', children: [] }] });
+  assert.equal(r.ok, true);
+  assert.equal(r.globalSections.header, null);
+  assert.equal(r.globalSections.footer, null);
+});
+
 test('preserves style_json, dataJson, and actionsJson for live runtime', () => {
   const raw = {
     nodes: [

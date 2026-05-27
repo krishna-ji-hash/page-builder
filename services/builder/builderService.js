@@ -12,6 +12,7 @@ import { normalizeResponsiveStyle } from '@/lib/styleNormalizer';
 import { DEFAULT_SITE_THEME, themeSpacingPx } from '@/lib/siteDesignTheme';
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
 import { isSectionLockedFlagValue, metaRepresentsExplicitSectionUnlock } from '@/lib/rowLayoutMeta';
+import { freezeGlobalSectionsForPublish } from '@/lib/globalSectionSnapshot';
 
 function parseSnapshot(value) {
   if (!value) return null;
@@ -518,6 +519,11 @@ async function createDraftFromVersion(pageId, sourceVersion, connection) {
   return getVersionById(newVersionId, connection);
 }
 
+/** Admin builder + draft preview only (mutable draft `builder_nodes`). */
+export async function getDraftPageForBuilder(pageId) {
+  return getBuilderState(pageId);
+}
+
 export async function getBuilderState(pageId) {
   noStore();
   const page = await getPageById(pageId);
@@ -560,7 +566,29 @@ export async function getBuilderState(pageId) {
   };
 }
 
+/** Draft-only: never rebuild snapshot_json on a published (live) version row. */
+async function assertVersionMutableForDraftWrites(connection, versionId) {
+  const [rows] = await connection.query(
+    `SELECT status FROM page_versions WHERE id = ? LIMIT 1`,
+    [versionId]
+  );
+  if (rows[0]?.status === 'published') {
+    throw new Error(
+      'Published version snapshot is immutable. Edit the draft in the builder, then use Publish / Update Live.'
+    );
+  }
+}
+
+async function getNextPageVersionNumber(pageId, connection) {
+  const [rows] = await connection.query(
+    `SELECT COALESCE(MAX(version_number), 0) AS max_v FROM page_versions WHERE page_id = ?`,
+    [pageId]
+  );
+  return Number(rows[0]?.max_v || 0) + 1;
+}
+
 async function refreshVersionSnapshot(versionId, connection) {
+  await assertVersionMutableForDraftWrites(connection, versionId);
   const [nodes] = await connection.query(
     `SELECT id, page_id, version_id, parent_node_id, node_type, display_name, props_json, position_index, data_json, actions_json
      FROM builder_nodes
@@ -582,7 +610,16 @@ async function ensureDraftVersionTx(pageId, connection) {
   const page = await getPageById(pageId, connection);
   if (!page) throw new Error('Page not found');
 
-  const existingDraft = await getLatestDraftVersion(pageId, connection);
+  let existingDraft = await getLatestDraftVersion(pageId, connection);
+  // Legacy publish aliased draft id → live pointer; never mutate that row as draft.
+  if (
+    existingDraft &&
+    page.published_version_id &&
+    Number(existingDraft.id) === Number(page.published_version_id)
+  ) {
+    const publishedVersion = await getVersionById(page.published_version_id, connection);
+    return createDraftFromVersion(pageId, publishedVersion, connection);
+  }
   if (existingDraft) return existingDraft;
 
   const sourceVersionId = page.published_version_id;
@@ -1194,6 +1231,11 @@ export async function syncDraftSnapshot(pageId, clientRoots = null) {
   });
 }
 
+/** Save draft snapshot only — does not update `pages.published_version_id` or live. */
+export async function saveDraftPage(pageId, nodes) {
+  return saveDraftSnapshotFromClient(pageId, nodes);
+}
+
 export async function saveDraftSnapshotFromClient(pageId, nodes) {
   const pid = Number(pageId);
   if (!Number.isInteger(pid) || pid <= 0) {
@@ -1205,6 +1247,7 @@ export async function saveDraftSnapshotFromClient(pageId, nodes) {
 
   return withTransaction(async (connection) => {
     const draft = await ensureDraftVersionTx(pid, connection);
+    await assertVersionMutableForDraftWrites(connection, draft.id);
     const safeSnapshot = { nodes };
     await connection.query(
       `UPDATE page_versions
@@ -1696,49 +1739,61 @@ export async function getPageIdByProjectAndPageSlug(projectSlug, pageSlug, conne
   return Number.isInteger(id) && id > 0 ? id : null;
 }
 
+/**
+ * Publish / Update Live: copy current draft tree into a new immutable published version.
+ * Draft row stays draft; live reads only `pages.published_version_id` → frozen snapshot_json.
+ */
+export async function publishDraftToSnapshot(pageId) {
+  return publishPage(pageId);
+}
+
 export async function publishPage(pageId) {
   return withTransaction(async (connection) => {
     const page = await getPageById(pageId, connection);
     if (!page) return null;
 
     const draft = await ensureDraftVersionTx(pageId, connection);
-    // Ensure publish always uses latest authoritative node tree (prevents stale snapshot drift).
+    // Build snapshot from authoritative draft nodes (never mutate the published row in place).
     await refreshVersionSnapshot(draft.id, connection);
     const [versionRows] = await connection.query(
-      `SELECT id, page_id, version_number, status, snapshot_json
-       FROM page_versions
-       WHERE id = ?`,
+      `SELECT snapshot_json FROM page_versions WHERE id = ? LIMIT 1`,
       [draft.id]
     );
-    const fullDraft = versionRows[0];
-    const snapshot = parseSnapshot(fullDraft.snapshot_json) || { nodes: [] };
+    const draftSnapshot = parseSnapshot(versionRows[0]?.snapshot_json) || { nodes: [] };
+    const publishSnapshot = {
+      nodes: Array.isArray(draftSnapshot.nodes) ? draftSnapshot.nodes : [],
+      globalSections: freezeGlobalSectionsForPublish(page.projectConfig),
+    };
+    const snapshotJson = JSON.stringify(publishSnapshot);
+    const nextVersionNumber = await getNextPageVersionNumber(pageId, connection);
 
-    await connection.query(
-      `UPDATE page_versions
-       SET status = 'published'
-       WHERE id = ?`,
-      [fullDraft.id]
+    const [insertPublished] = await connection.query(
+      `INSERT INTO page_versions (page_id, version_number, status, snapshot_json)
+       VALUES (?, ?, 'published', ?)`,
+      [pageId, nextVersionNumber, snapshotJson]
     );
+    const publishedVersionId = insertPublished.insertId;
 
     await connection.query(
       `UPDATE page_versions
        SET status = 'archived'
-       WHERE page_id = ? AND id <> ? AND status = 'published'`,
-      [pageId, fullDraft.id]
+       WHERE page_id = ? AND status = 'published' AND id <> ?`,
+      [pageId, publishedVersionId]
     );
 
     await connection.query(
       `UPDATE pages
        SET published_version_id = ?, status = 'published', updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
-      [fullDraft.id, pageId]
+      [publishedVersionId, pageId]
     );
 
     return {
       pageId,
-      publishedVersionId: fullDraft.id,
-      versionNumber: fullDraft.version_number,
-      snapshot,
+      publishedVersionId,
+      versionNumber: nextVersionNumber,
+      draftVersionId: draft.id,
+      snapshot: publishSnapshot,
     };
   });
 }

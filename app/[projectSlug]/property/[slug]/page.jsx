@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { getPublishedPage } from '@/services/site/publishedPageService';
+import { getPublishedPageForPublic } from '@/services/site/publishedPageService';
 import PublishedLiveTree from '@/components/live/PublishedLiveTree';
 import { normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesignTheme';
 import { resolveMaybeAsyncParams, isPublicSlug } from '@/lib/routeParams';
@@ -22,7 +22,7 @@ export async function generateMetadata({ params }) {
   const slug = String(resolved.slug || '');
   if (!isPublicSlug(projectSlug) || !isPublicSlug(slug)) return {};
 
-  const page = await getPublishedPage(projectSlug, 'property-detail');
+  const page = await getPublishedPageForPublic(projectSlug, 'property-detail');
   if (!page) return {};
   const item = await getItemBySlug(page.projectId, 'properties', slug, { status: 'published' });
   if (!item) return {};
@@ -45,7 +45,7 @@ export default async function PropertyRoute({ params }) {
   if (!isPublicSlug(projectSlug) || !isPublicSlug(slug)) notFound();
 
   // Convention: project should have a published "property-detail" page used as the template.
-  const page = await getPublishedPage(projectSlug, 'property-detail');
+  const page = await getPublishedPageForPublic(projectSlug, 'property-detail');
   if (!page?.snapshot_json) notFound();
 
   const item = await getItemBySlug(page.projectId, 'properties', slug, { status: 'published' });

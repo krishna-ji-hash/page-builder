@@ -1,6 +1,6 @@
 import { fail, ok, parseJsonBody } from '@/lib/api';
 import { resolveMaybeAsyncParams } from '@/lib/routeParams';
-import { saveDraftSnapshotFromClient } from '@/services/builder/builderService';
+import { saveDraftPage } from '@/services/builder/builderService';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,7 +18,7 @@ export async function PUT(request, { params }) {
   }
 
   try {
-    const result = await saveDraftSnapshotFromClient(pageId, body.nodes);
+    const result = await saveDraftPage(pageId, body.nodes);
     return ok(result);
   } catch (error) {
     return fail('Failed to save draft snapshot', 500, error.message);
