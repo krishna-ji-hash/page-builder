@@ -1,39 +1,15 @@
 'use client';
 
-import { useState } from 'react';
 import TypographyControls from './TypographyControls';
 import ColorControls from './ColorControls';
 import SpacingControls from './SpacingControls';
 import BorderControls from './BorderControls';
-import LayoutControls from './LayoutControls';
 import MenuControls from './MenuControls';
-import SizeControls from './SizeControls';
 import BackgroundControls from './BackgroundControls';
-import ResponsiveVisibilityControls from './ResponsiveVisibilityControls';
 import EffectsControls from './EffectsControls';
-import InspectorTipChips from '@/components/builder/inspector/InspectorTipChips';
-import { isFooterRowNode, isHeaderRowNode } from '@/lib/rowLayoutMeta';
-import { isRootPageRow } from '@/lib/liveDocSectionSpacing';
-import { resolveHeaderLayoutMode } from '@/lib/headerLayoutMode';
-import { resolveRootStripLayout, resolveSectionWidthMode } from '@/lib/livePageCssVars';
-import { SECTION_WIDTH_MODES } from '@/lib/liveContentContainer';
-import { isGetInTouchSectionRow } from '@/lib/getInTouchSection';
-import FormSpacingControls from '@/components/builder/inspector/FormSpacingControls';
-import SectionLayoutControls from '@/components/builder/inspector/SectionLayoutControls';
-import { sectionRowHasLayoutControls } from '@/lib/sectionLayout';
-
-function Section({ title, defaultOpen = true, children }) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="bld-style-section">
-      <button type="button" className="bld-style-section__head" onClick={() => setOpen((p) => !p)}>
-        <span className="bld-style-section__title">{title}</span>
-        <span className="bld-style-section__toggle" aria-hidden>{open ? '▾' : '▸'}</span>
-      </button>
-      {open ? <div className="bld-style-section__body">{children}</div> : null}
-    </div>
-  );
-}
+import TransformEffectsControls from './TransformEffectsControls';
+import StylePresetsPanel from './StylePresetsPanel';
+import { InspectorPanel, InspectorSection } from './InspectorUi';
 
 export default function StylePanel({
   selectedNode,
@@ -45,20 +21,7 @@ export default function StylePanel({
   onCommitStylePatch,
   onClearPreviewStyle,
   onActiveSpacingEdit,
-  deviceLabel = 'Desktop',
-  visibilityByDevice = { desktop: false, tablet: false, mobile: false },
-  onVisibilityForDevice,
-  onApplyFlexPreset,
-  onResetLayoutKeys,
-  onRowLayoutLockedChange,
-  onHeaderLayoutQuickAction,
-  onContentChange,
-  pageTree = null,
-  /** Nearest section row for strip width (may differ from `selectedNode` when a child widget is selected). */
-  stripLayoutTargetRow = null,
-  onPatchRootStripLayout = null,
-  /** Header row: spread (full width) | boxed (content column). */
-  onPatchHeaderLayoutMode = null,
+  onApplyPreset,
 }) {
   if (!selectedNode) {
     return (
@@ -68,253 +31,36 @@ export default function StylePanel({
     );
   }
 
-  const layoutHint = `Layout, gap, and width below apply to the ${deviceLabel} breakpoint (same as the device switcher above). They do not overwrite other breakpoints unless you change those devices too.`;
-  const isHeaderSection = selectedNode?.nodeType === 'row' && isHeaderRowNode(selectedNode);
-  const stripRow = stripLayoutTargetRow?.nodeType === 'row' ? stripLayoutTargetRow : null;
-  const isRootStripRow =
-    stripRow &&
-    Array.isArray(pageTree) &&
-    pageTree.length > 0 &&
-    isRootPageRow(pageTree, stripRow);
-  const stripRowIsHeader = stripRow ? isHeaderRowNode(stripRow) : false;
-  const stripRowIsFooter = stripRow ? isFooterRowNode(stripRow) : false;
-  const stripRowIsLandmark = stripRowIsHeader || stripRowIsFooter;
-  const stripMeta = stripRow?.props?.meta || {};
-  const resolvedStrip = stripRow
-    ? resolveRootStripLayout(stripMeta, {
-        isLiveDocRootRow: Boolean(isRootStripRow),
-        isHeaderRow: stripRowIsHeader,
-        isFooterRow: stripRowIsFooter,
-        isRootContentRow: Boolean(isRootStripRow && !stripRowIsLandmark),
-      })
-    : '';
-  const sectionWidthMode = stripRow
-    ? resolveSectionWidthMode(stripMeta, {
-        isLiveDocRootRow: Boolean(isRootStripRow),
-        isHeaderRow: stripRowIsHeader,
-        isFooterRow: stripRowIsFooter,
-        isRootContentRow: Boolean(isRootStripRow && !stripRowIsLandmark),
-      })
-    : '';
-  const stripSelectValue =
-    sectionWidthMode === SECTION_WIDTH_MODES.BOXED
-      ? 'contained'
-      : sectionWidthMode === SECTION_WIDTH_MODES.FULL_WIDTH
-        ? 'fullBleed'
-        : sectionWidthMode === SECTION_WIDTH_MODES.FULL_WIDTH_CONTENT_BOXED
-          ? 'full'
-          : resolvedStrip === 'full'
-            ? 'full'
-            : 'contained';
-  const headerLayoutMode =
-    stripRow && stripRowIsHeader ? resolveHeaderLayoutMode(stripRow.props?.meta || {}) : 'boxed';
-  const stripSelectionIsRow = selectedNode?.nodeType === 'row' && stripRow && selectedNode.id === stripRow.id;
-
   const isFeatureTabs = selectedNode?.nodeType === 'tabs';
-  const isForm = selectedNode?.nodeType === 'form';
-  const showManualSpacingGuide =
-    stripRow && isRootStripRow && !stripRowIsHeader && !stripRowIsFooter;
-  const showSectionLayout =
-    stripRow && sectionRowHasLayoutControls(stripRow.props?.meta) && typeof onPatchSectionLayout === 'function';
 
   return (
-    <div className="bld-panel">
-      <div className="bld-panel__head">Style</div>
-      {showManualSpacingGuide ? (
-        <div
-          className="bld-manual-guide"
-          style={{
-            marginBottom: 12,
-            padding: '10px 12px',
-            border: '1px solid var(--bld-border)',
-            borderRadius: 8,
-            fontSize: 12,
-            lineHeight: 1.55,
-          }}
-        >
-          <strong>Manual spacing — aap control karte ho</strong>
-          <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
-            <li>
-              <strong>Spacing</strong> (neeche) → Padding: andar top / bottom / left / right
-            </li>
-            <li>
-              <strong>Theme</strong> tab → is section select → <strong>Gap to strip below</strong> (footer se pehle
-              gap)
-            </li>
-            <li>
-              <strong>Layout (responsive)</strong> → Align items: <strong>Flex start</strong> (form card niche na
-              khinche)
-            </li>
-            <li>
-              Section toolbar <strong>Pad+ / Pad−</strong> bhi padding badhata/ghatata hai
-            </li>
-          </ul>
-          {isGetInTouchSectionRow(stripRow) ? (
-            <p className="bld-field-note" style={{ margin: '8px 0 0' }}>
-              Get in Touch par koi auto padding lock nahi — jo values yahan set karoge wahi live par jayengi (Publish
-              ke baad).
-            </p>
-          ) : null}
-        </div>
-      ) : null}
+    <InspectorPanel title="Style">
+      <StylePresetsPanel selectedNode={selectedNode} onApplyPreset={onApplyPreset} />
+
       {isFeatureTabs ? (
-        <p className="bld-field-note" style={{ marginTop: 0, marginBottom: 12 }}>
-          <strong>Block size & position:</strong> use <strong>Size</strong> (width, max width), <strong>Spacing</strong>{' '}
-          (margin/padding), <strong>Layout</strong> (align in column), and <strong>Background</strong> below. Tab text,
-          images, and alignment are under the <strong>Content</strong> tab.
+        <p className="bld-field-note" style={{ margin: '0 0 12px' }}>
+          Tab content and images: <strong>Content</strong> tab. Size and colors here apply to the Feature tabs block.
         </p>
       ) : null}
-      {showSectionLayout ? (
-        <Section title="Layout direction" defaultOpen>
-          <SectionLayoutControls sectionRow={stripRow} onApplyLayout={onPatchSectionLayout} />
-        </Section>
-      ) : null}
-      {isForm && typeof onContentChange === 'function' ? (
-        <Section title="Form spacing" defaultOpen>
-          <FormSpacingControls selectedNode={selectedNode} onChange={onContentChange} />
-        </Section>
-      ) : null}
-      {stripRow && typeof onPatchRootStripLayout === 'function' ? (
-        <Section title="Section width (this strip)" defaultOpen>
-          {!stripSelectionIsRow ? (
-            <p className="bld-field-note" style={{ marginTop: 0, marginBottom: 8 }}>
-              You have a <strong>widget or column</strong> selected; width below applies to the{' '}
-              <strong>section row</strong> that wraps it. Click the section’s top bar on the canvas to select the row
-              directly.
-            </p>
-          ) : null}
-          <p className="bld-field-note" style={{ marginTop: 0 }}>
-            {isRootStripRow && stripRowIsHeader ? (
-              <>
-                <strong>Top-level strip</strong> (header): <strong>Full width (screen)</strong> spans the viewport;
-                <strong> Contained</strong> keeps logo / menu / buttons in the page content column.
-              </>
-            ) : isRootStripRow && stripRowIsFooter ? (
-              <>
-                <strong>Footer</strong> background spans the full screen. Use <strong>Layout → Content width</strong> to
-                narrow the inner content.
-              </>
-            ) : isRootStripRow ? (
-              <>
-                <strong>Top-level strip</strong> (hero, sections): <strong>Full width background</strong> keeps the
-                background edge-to-edge with content in a centered column (default). <strong>Edge to edge</strong>{' '}
-                stretches content across the viewport. <strong>Contained</strong> caps the whole section.
-              </>
-            ) : (
-              <>
-                <strong>Nested row</strong> inside a column or stack: full width spans that parent; contained keeps the
-                row within the usual content width for that level.
-              </>
-            )}
-          </p>
-          <div className="bld-field">
-            <label className="bld-label" htmlFor="root-strip-layout">
-              Width
-            </label>
-            {isRootStripRow && stripRowIsHeader && typeof onPatchHeaderLayoutMode === 'function' ? (
-              <select
-                id="root-strip-layout"
-                className="bld-input"
-                value={headerLayoutMode === 'spread' ? 'full' : 'contained'}
-                onChange={(e) =>
-                  onPatchHeaderLayoutMode(e.target.value === 'full' ? 'spread' : 'boxed')
-                }
-              >
-                <option value="contained">Contained</option>
-                <option value="full">Full width (screen)</option>
-              </select>
-            ) : isRootStripRow && stripRowIsFooter ? (
-              <select id="root-strip-layout" className="bld-input" value="full" disabled aria-readonly>
-                <option value="full">Full width (screen)</option>
-              </select>
-            ) : (
-              <select
-                id="root-strip-layout"
-                className="bld-input"
-                value={stripSelectValue}
-                onChange={(e) => onPatchRootStripLayout(e.target.value)}
-              >
-                {isRootStripRow ? (
-                  <>
-                    <option value="full">Full width background (boxed content)</option>
-                    <option value="fullBleed">Full width (edge to edge)</option>
-                    <option value="contained">Contained</option>
-                  </>
-                ) : (
-                  <>
-                    <option value="contained">Contained</option>
-                    <option value="full">Full width (parent)</option>
-                  </>
-                )}
-              </select>
-            )}
-            <InspectorTipChips
-              size="xs"
-              style={{ marginTop: 4 }}
-              chips={
-                isRootStripRow
-                  ? ['Header / hero → Full width (screen)', 'Body strips → Often contained', 'Global header: same control']
-                  : ['Full width = column edge to edge', 'Contained = theme max width (capped by parent)']
-              }
-            />
-          </div>
-        </Section>
-      ) : null}
-      {stripRow ? (
-        <InspectorTipChips
-          chips={[
-            'Reduce padding',
-            'Top + bottom',
-            'Then height',
-            'Zero = auto',
-            'Still tall?',
-            'Pick column',
-            'Or image',
-            'Size / Content',
-            'Check min-height',
-          ]}
-        />
-      ) : null}
-      <Section title="Visibility by breakpoint" defaultOpen>
-        <ResponsiveVisibilityControls
-          desktopHidden={visibilityByDevice.desktop}
-          tabletHidden={visibilityByDevice.tablet}
-          mobileHidden={visibilityByDevice.mobile}
-          disabled={!onVisibilityForDevice}
-          onChange={(targetDevice, visible) => onVisibilityForDevice?.(targetDevice, visible)}
-        />
-      </Section>
-      <p className="bld-field-note" style={{ margin: '0 0 12px' }}>
-        Space between page sections (default or one strip): <strong>Theme</strong> tab →{' '}
-        <strong>Page spacing (this page)</strong>.
-      </p>
-      <Section title="Typography">
+
+      <InspectorSection title="Typography" defaultOpen keywords="font size weight line height text">
         <TypographyControls form={form} onUpdate={onChange} selectedNodeType={selectedNode?.nodeType || ''} />
-      </Section>
-      <Section title="Colors">
+      </InspectorSection>
+
+      <InspectorSection title="Colors" keywords="text background fill">
         <ColorControls form={form} onUpdate={onChange} showBackground={false} />
-      </Section>
-      <Section title="Background">
+      </InspectorSection>
+
+      <InspectorSection title="Background" keywords="image gradient overlay">
         <BackgroundControls form={form} onUpdate={onChange} projectId={projectId} selectedNode={selectedNode} />
-      </Section>
-      <Section title="Spacing" defaultOpen={selectedNode?.nodeType === 'row'}>
+      </InspectorSection>
+
+      <InspectorSection title="Spacing" defaultOpen={selectedNode?.nodeType === 'row'} keywords="margin padding box">
         {selectedNode?.nodeType === 'row' ? (
           <p className="bld-field-note" style={{ marginTop: 0, marginBottom: 10 }}>
-            <strong>Padding → Bottom</strong> = space under text &amp; form inside this section. Set the same number as
-            Top (e.g. 56) for equal top/bottom. Changes apply on blur in each box.
+            Padding controls inner section space. Use linked sides or drag values in the box model.
           </p>
         ) : null}
-        <InspectorTipChips
-          chips={[
-            'Vertical space',
-            'Padding inside',
-            'Margin outside',
-            'Per-side values',
-            'Blur to save',
-            'New line: pre-wrap',
-            'Or multiline Content',
-          ]}
-        />
         <SpacingControls
           form={form}
           onUpdate={onChange}
@@ -325,53 +71,23 @@ export default function StylePanel({
           onActiveSpacingEdit={onActiveSpacingEdit}
           selectedNodeId={selectedNode?.id}
         />
-      </Section>
-      <Section title="Border">
+      </InspectorSection>
+
+      <InspectorSection title="Border" keywords="radius width color outline">
         <BorderControls form={form} onUpdate={onChange} />
-      </Section>
-      <Section title="Shadow & opacity">
+      </InspectorSection>
+
+      <InspectorSection title="Shadow & opacity" keywords="box shadow opacity">
         <EffectsControls form={form} onUpdate={onChange} selectedNode={selectedNode} />
-      </Section>
-      <Section title="Layout (responsive)">
-        <p className="bld-field-note" style={{ marginBottom: 10 }}>
-          {layoutHint}
-        </p>
-        {isHeaderSection && typeof onHeaderLayoutQuickAction === 'function' ? (
-          <div className="bld-field" style={{ marginBottom: 12 }}>
-            <label className="bld-label">Header placement</label>
-            <p className="bld-field-note" style={{ marginTop: 0 }}>
-              Use <strong>Layout</strong> below for bar width and columns. <strong>Advanced</strong> tab sets position
-              (fixed / absolute / offsets). Quick presets:
-            </p>
-            <div className="bld-field-grid" style={{ marginTop: 8 }}>
-              <button type="button" className="bld-chip" onClick={() => onHeaderLayoutQuickAction('sticky')}>
-                Sticky on scroll
-              </button>
-              <button type="button" className="bld-chip" onClick={() => onHeaderLayoutQuickAction('static')}>
-                Normal flow (not sticky)
-              </button>
-            </div>
-          </div>
-        ) : null}
-        <LayoutControls
-          selectedNode={selectedNode}
-          form={form}
-          onUpdate={onChange}
-          hideSize
-          breakpointLabel={deviceLabel}
-          onApplyFlexPreset={onApplyFlexPreset}
-          onResetLayoutKeys={onResetLayoutKeys}
-          onRowLayoutLockedChange={onRowLayoutLockedChange}
-        />
-      </Section>
-      <Section title="Size">
-        <SizeControls selectedNode={selectedNode} form={form} onUpdate={onChange} />
-      </Section>
+      </InspectorSection>
+
+      <TransformEffectsControls form={form} onUpdate={onChange} />
+
       {selectedNode.nodeType === 'menu' ? (
-        <Section title="Menu">
+        <InspectorSection title="Menu" keywords="navigation links">
           <MenuControls form={form} onUpdate={onChange} />
-        </Section>
+        </InspectorSection>
       ) : null}
-    </div>
+    </InspectorPanel>
   );
 }

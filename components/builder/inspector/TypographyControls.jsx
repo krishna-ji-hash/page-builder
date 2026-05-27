@@ -60,6 +60,19 @@ export default function TypographyControls({ form, onUpdate, selectedNodeType = 
           <input className="bld-input" value={form.letterSpacingPx} onChange={(e) => onUpdate('letterSpacingPx', e.target.value)} />
         </div>
       </div>
+      <div className="bld-field">
+        <label className="bld-label">Text align</label>
+        <select
+          className="bld-input"
+          value={form.alignment || form.textAlign || 'left'}
+          onChange={(e) => onUpdate('alignment', e.target.value)}
+        >
+          <option value="left">Left</option>
+          <option value="center">Center</option>
+          <option value="right">Right</option>
+          <option value="justify">Justify</option>
+        </select>
+      </div>
       <div className="bld-field-grid">
         <div className="bld-field">
           <label className="bld-label">Text Transform</label>

@@ -1,48 +1,34 @@
 'use client';
 
+const TABS = [
+  { id: 'content', label: 'Content', icon: '✎' },
+  { id: 'layout', label: 'Layout', icon: '▦' },
+  { id: 'style', label: 'Style', icon: '◐' },
+  { id: 'interactions', label: 'Interactions', icon: '↯' },
+  { id: 'advanced', label: 'Advanced', icon: '⚙' },
+  { id: 'seo', label: 'SEO/CMS', icon: '◎' },
+  { id: 'theme', label: 'Theme', icon: '◆' },
+];
+
 export default function InspectorTabs({ activeTab, onChange }) {
   return (
-    <div className="bld-inspector-tabs" role="tablist" aria-label="Inspector tabs">
-      <button
-        type="button"
-        role="tab"
-        aria-selected={activeTab === 'content'}
-        className={`bld-inspector-tabs__tab ${activeTab === 'content' ? 'is-active' : ''}`}
-        onClick={() => onChange('content')}
-      >
-        <span className="bld-inspector-tabs__icon" aria-hidden>✎</span>
-        <span>Content</span>
-      </button>
-      <button
-        type="button"
-        role="tab"
-        aria-selected={activeTab === 'style'}
-        className={`bld-inspector-tabs__tab ${activeTab === 'style' ? 'is-active' : ''}`}
-        onClick={() => onChange('style')}
-      >
-        <span className="bld-inspector-tabs__icon" aria-hidden>◐</span>
-        <span>Style</span>
-      </button>
-      <button
-        type="button"
-        role="tab"
-        aria-selected={activeTab === 'theme'}
-        className={`bld-inspector-tabs__tab ${activeTab === 'theme' ? 'is-active' : ''}`}
-        onClick={() => onChange('theme')}
-      >
-        <span className="bld-inspector-tabs__icon" aria-hidden>◆</span>
-        <span>Theme</span>
-      </button>
-      <button
-        type="button"
-        role="tab"
-        aria-selected={activeTab === 'advanced'}
-        className={`bld-inspector-tabs__tab ${activeTab === 'advanced' ? 'is-active' : ''}`}
-        onClick={() => onChange('advanced')}
-      >
-        <span className="bld-inspector-tabs__icon" aria-hidden>⚙</span>
-        <span>Advanced</span>
-      </button>
+    <div className="bld-inspector-tabs bld-inspector-tabs--pro" role="tablist" aria-label="Inspector tabs">
+      {TABS.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          role="tab"
+          aria-selected={activeTab === tab.id}
+          className={`bld-inspector-tabs__tab ${activeTab === tab.id ? 'is-active' : ''}`}
+          onClick={() => onChange(tab.id)}
+          title={tab.label}
+        >
+          <span className="bld-inspector-tabs__icon" aria-hidden>
+            {tab.icon}
+          </span>
+          <span className="bld-inspector-tabs__label">{tab.label}</span>
+        </button>
+      ))}
     </div>
   );
 }

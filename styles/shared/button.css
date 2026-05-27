@@ -44,9 +44,26 @@
 }
 
 .bld-btn:active {
+  background: var(--btn-bg-press, var(--btn-bg-hover, var(--btn-bg, var(--node-bg, transparent))));
+  color: var(--btn-text-press, var(--btn-text-hover, var(--btn-text, var(--node-text, inherit))));
+  border-color: var(--btn-border-press, var(--btn-border-hover, var(--node-border-color, color-mix(in srgb, currentColor 24%, transparent))));
   transform: translateY(var(--press-y));
   box-shadow: var(--btn-shadow-press, var(--shadow-press));
   filter: saturate(0.98);
+}
+
+/* style_json.interactions — win over default button motion when custom tokens are set */
+.live-node--ix.bld-btn[style*='--node-hover-scale']:hover,
+.live-node--ix.bld-btn[style*='--node-hover-translate-y']:hover {
+  transform: scale(var(--node-hover-scale, 1)) translateY(var(--node-hover-translate-y, 0));
+}
+
+.live-node--ix.bld-btn[style*='--node-active-scale']:active {
+  transform: scale(var(--node-active-scale));
+}
+
+.live-node--ix.bld-btn[style*='--node-active-opacity']:active {
+  opacity: var(--node-active-opacity);
 }
 
 .bld-btn:focus-visible {

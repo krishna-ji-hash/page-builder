@@ -1,10 +1,22 @@
+'use client';
+
+import { useEffect, useRef } from 'react';
+import { bindInteractionScrollObservers } from '@/lib/interactionScrollRuntime';
+
 /**
  * Published / preview document root. suppressHydrationWarning avoids dev-only noise when
  * hot-reloaded client bundles briefly diverge from the server render during hydration.
  */
 export default function LiveDoc({ children }) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!ref.current) return undefined;
+    return bindInteractionScrollObservers(ref.current);
+  }, []);
+
   return (
-    <div className="live-doc" suppressHydrationWarning>
+    <div ref={ref} className="live-doc" suppressHydrationWarning>
       {children}
     </div>
   );

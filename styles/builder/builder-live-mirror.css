@@ -132,6 +132,27 @@
   color: var(--color-text, #0f172a);
 }
 
+/* style_json hover/click must win over editor-only row lift in builder-canvas.css */
+.bld-builder-root .bld-canvas__page .live-node.live-node--ix[style*='--node-hover-scale']:not(.bld-selected):hover,
+.bld-builder-root .bld-canvas__page .live-node.live-node--ix[style*='--node-hover-translate-y']:not(.bld-selected):hover,
+.bld-builder-root .bld-canvas__page .bld-node.live-node--ix[style*='--node-hover-scale']:not(.bld-selected):hover,
+.bld-builder-root .bld-canvas__page .bld-node.live-node--ix[style*='--node-hover-translate-y']:not(.bld-selected):hover {
+  transform: scale(var(--node-hover-scale, 1)) translateY(var(--node-hover-translate-y, 0));
+}
+
+.bld-builder-root .bld-canvas__page .bld-node.bld-node__shell.live-node--ix[style*='--node-hover-scale']:not(.bld-selected):hover,
+.bld-builder-root .bld-canvas__page .bld-node.bld-node__shell.live-node--ix[style*='--node-hover-translate-y']:not(.bld-selected):hover,
+.bld-builder-root .bld-canvas__page .live-node.live-node--ix[style*='--node-hover-scale']:not(.bld-selected):hover,
+.bld-builder-root .bld-canvas__page .live-node.live-node--ix[style*='--node-hover-translate-y']:not(.bld-selected):hover {
+  transform: scale(var(--node-hover-scale, 1)) translateY(var(--node-hover-translate-y, 0)) !important;
+}
+
+.bld-builder-root .bld-canvas__page .bld-node.bld-node__shell.live-node--ix[style*='--node-hover-scale']:not(.bld-selected):hover,
+.bld-builder-root .bld-canvas__page .bld-node.bld-node__shell.live-node--ix[style*='--node-hover-translate-y']:not(.bld-selected):hover {
+  /* Disable default editor shell lift when interaction transform is set */
+  translate: none;
+}
+
 /* Match published live: content bands + header/nested hero (parity with live-site.css). */
 .bld-builder-root .bld-canvas__live-mirror .live-doc > :where(section.live-node.bld-row, main.live-node.bld-row):not([data-site-header='true']):not([data-site-footer='true']):not([data-section-template]),
 .bld-builder-root .bld-canvas__live-mirror .live-doc > :is(header.live-node, [data-site-header='true']) > .live-node.bld-row {

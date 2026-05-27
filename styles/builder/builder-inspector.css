@@ -296,14 +296,61 @@
 }
 
 .bld-inspector-tabs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: nowrap;
   gap: 0;
+  overflow-x: auto;
   border-bottom: 1px solid var(--bld-border);
   background: var(--bld-surface);
   position: sticky;
   top: 0;
   z-index: 2;
+  scrollbar-width: thin;
+}
+
+.bld-inspector-tabs--pro .bld-inspector-tabs__tab {
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 8px 8px 7px;
+}
+
+.bld-inspector-tabs--pro .bld-inspector-tabs__label {
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.bld-inspector-pro__search {
+  margin-bottom: 10px;
+}
+
+.bld-inspector-pro__search-input {
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
+.bld-inspector-pro__override-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--bld-primary);
+  vertical-align: middle;
+}
+
+.bld-inspector-pro__reset {
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 6px;
+}
+
+.bld-inspector-pro__chips {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.bld-inspector-pro__field.is-disabled {
+  opacity: 0.55;
 }
 
 .bld-inspector-tabs__tab {

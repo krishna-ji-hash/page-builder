@@ -10,6 +10,12 @@ const BREAKPOINTS = [
   { id: 'mobile', label: 'Mobile ≤767px' },
 ];
 
+function numFieldDisplayValue(value) {
+  if (value === '' || value == null) return '';
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : '';
+}
+
 function NumField({ id, label, value, onChange, placeholder, min = 0, max = 2560 }) {
   return (
     <div className="bld-field">
@@ -24,10 +30,16 @@ function NumField({ id, label, value, onChange, placeholder, min = 0, max = 2560
         max={max}
         step={1}
         placeholder={placeholder}
-        value={value === '' || value == null ? '' : value}
+        value={numFieldDisplayValue(value)}
         onChange={(e) => {
           const raw = e.target.value;
-          onChange(raw === '' ? null : Math.max(min, Math.min(max, Number(raw) || 0)));
+          if (raw === '') {
+            onChange(null);
+            return;
+          }
+          const n = Number(raw);
+          if (!Number.isFinite(n)) return;
+          onChange(Math.max(min, Math.min(max, n)));
         }}
       />
     </div>
@@ -105,9 +117,7 @@ export default function PageResponsivePanel({
             id={`page-bp-${bpTab}-gap`}
             label="Section gap between strips"
             placeholder="Uses desktop if empty"
-            value={
-              Number.isFinite(Number(activeBp.sectionGapPx)) ? Number(activeBp.sectionGapPx) : ''
-            }
+            value={activeBp.sectionGapPx}
             onChange={(v) => patchBreakpointVar(bpTab, 'sectionGapPx', v)}
             min={0}
             max={120}
@@ -116,11 +126,7 @@ export default function PageResponsivePanel({
             id={`page-bp-${bpTab}-pad`}
             label="Default padding below each strip"
             placeholder="Uses desktop if empty"
-            value={
-              Number.isFinite(Number(activeBp.sectionPadBottomPx))
-                ? Number(activeBp.sectionPadBottomPx)
-                : ''
-            }
+            value={activeBp.sectionPadBottomPx}
             onChange={(v) => patchBreakpointVar(bpTab, 'sectionPadBottomPx', v)}
             min={0}
             max={120}
@@ -129,11 +135,7 @@ export default function PageResponsivePanel({
             id={`page-bp-${bpTab}-width`}
             label="Max content width (px)"
             placeholder={bpTab === 'mobile' ? 'Empty = full width' : '960 suggested'}
-            value={
-              activeBp.contentMaxWidthPx === null || activeBp.contentMaxWidthPx === ''
-                ? ''
-                : Number(activeBp.contentMaxWidthPx)
-            }
+            value={activeBp.contentMaxWidthPx}
             onChange={(v) => patchBreakpointVar(bpTab, 'contentMaxWidthPx', v)}
             min={320}
             max={2560}

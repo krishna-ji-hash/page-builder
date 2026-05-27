@@ -2294,3 +2294,191 @@
   width: 100%;
   max-width: 100%;
 }
+
+/* style_json.interactions — builder + live parity via CSS variables */
+
+/*
+ * Published/draft leaves: inline style has --node-hover-* vars; class is required for
+ * :hover rules. Fallback for any leaf that has vars but missed live-node--ix (legacy snapshots).
+ */
+.live-doc [style*='--node-hover-text']:hover,
+.live-doc [style*='--node-hover-text']:hover * {
+  color: var(--node-hover-text) !important;
+}
+
+.live-doc [style*='--node-hover-bg']:hover {
+  background-color: var(--node-hover-bg) !important;
+}
+
+.live-node--ix {
+  transition:
+    background-color var(--node-anim-duration, 0.2s) var(--node-anim-easing, ease),
+    color var(--node-anim-duration, 0.2s) var(--node-anim-easing, ease),
+    box-shadow var(--node-anim-duration, 0.2s) var(--node-anim-easing, ease),
+    transform var(--node-anim-duration, 0.2s) var(--node-anim-easing, ease),
+    opacity var(--node-anim-duration, 0.2s) var(--node-anim-easing, ease),
+    border-color var(--node-anim-duration, 0.2s) var(--node-anim-easing, ease);
+}
+
+/* !important beats inline typography colors from styleToCss on headings/text/buttons */
+.live-node--ix[style*='--node-hover-bg']:hover {
+  background-color: var(--node-hover-bg) !important;
+}
+
+.live-node--ix[style*='--node-hover-text']:hover,
+.live-node--ix[style*='--node-hover-text']:hover * {
+  color: var(--node-hover-text) !important;
+}
+
+.live-node--ix[style*='--node-hover-border']:hover {
+  border-color: var(--node-hover-border) !important;
+}
+
+.live-node--ix[style*='--node-hover-shadow']:hover {
+  box-shadow: var(--node-hover-shadow) !important;
+}
+
+.live-node--ix[style*='--node-hover-opacity']:hover {
+  opacity: var(--node-hover-opacity) !important;
+}
+
+.live-node--ix[style*='--node-hover-scale']:hover,
+.live-node--ix[style*='--node-hover-translate-y']:hover {
+  transform: scale(var(--node-hover-scale, 1)) translateY(var(--node-hover-translate-y, 0)) !important;
+}
+
+.live-node--ix[style*='--node-active-bg']:active {
+  background-color: var(--node-active-bg) !important;
+}
+
+.live-node--ix[style*='--node-active-text']:active,
+.live-node--ix[style*='--node-active-text']:active * {
+  color: var(--node-active-text) !important;
+}
+
+.live-node--ix[style*='--node-active-border']:active {
+  border-color: var(--node-active-border) !important;
+}
+
+.live-node--ix[style*='--node-active-shadow']:active {
+  box-shadow: var(--node-active-shadow) !important;
+}
+
+.live-node--ix[style*='--node-active-opacity']:active {
+  opacity: var(--node-active-opacity);
+}
+
+.live-node--ix[style*='--node-active-scale']:active {
+  transform: scale(var(--node-active-scale));
+}
+
+/* Animation triggers (on-load uses inline animation from styleToCss) */
+.live-node--ix-trigger-on-hover:hover {
+  animation-name: var(--node-anim-name);
+  animation-duration: var(--node-anim-duration, 0.6s);
+  animation-delay: var(--node-anim-delay, 0s);
+  animation-timing-function: var(--node-anim-easing, ease);
+  animation-iteration-count: var(--node-anim-iteration, 1);
+  animation-fill-mode: both;
+}
+
+.live-node--ix-trigger-on-scroll:not(.live-node--ix-inview) {
+  opacity: 0;
+}
+
+.live-node--ix-trigger-on-scroll.live-node--ix-inview {
+  animation-name: var(--node-anim-name);
+  animation-duration: var(--node-anim-duration, 0.6s);
+  animation-delay: var(--node-anim-delay, 0s);
+  animation-timing-function: var(--node-anim-easing, ease);
+  animation-iteration-count: var(--node-anim-iteration, 1);
+  animation-fill-mode: both;
+  opacity: 1;
+}
+
+.live-node--ix:focus-visible {
+  outline: var(--node-focus-outline, 2px solid var(--node-focus-ring, #6366f1));
+  outline-offset: 2px;
+}
+
+@keyframes bld-ix-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes bld-ix-pop {
+  from { opacity: 0; transform: scale(0.88); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes bld-ix-bounce-in {
+  0% { opacity: 0; transform: translateY(20px) scale(0.96); }
+  60% { opacity: 1; transform: translateY(-6px) scale(1.02); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes bld-ix-slide-from-top {
+  from { opacity: 0; transform: translateY(-28px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes bld-ix-slide-from-bottom {
+  from { opacity: 0; transform: translateY(28px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Legacy alias */
+@keyframes bld-ix-slide-up {
+  from { opacity: 0; transform: translateY(28px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes bld-ix-slide-from-left {
+  from { opacity: 0; transform: translateX(-32px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes bld-ix-slide-from-right {
+  from { opacity: 0; transform: translateX(32px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes bld-ix-zoom-in {
+  from { opacity: 0; transform: scale(0.88); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Legacy alias */
+@keyframes bld-ix-zoom {
+  from { opacity: 0; transform: scale(0.88); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes bld-ix-zoom-out {
+  from { opacity: 0; transform: scale(1.14); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes bld-ix-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+
+@keyframes bld-ix-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes bld-ix-glow {
+  0%, 100% { box-shadow: 0 0 0 rgba(99, 102, 241, 0); }
+  50% { box-shadow: 0 0 24px rgba(99, 102, 241, 0.45); }
+}
+
+@keyframes bld-ix-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.live-node--ix-anim-shimmer {
+  background-size: 200% 100%;
+}

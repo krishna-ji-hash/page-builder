@@ -36,7 +36,10 @@ import InspectorTabs from './inspector/InspectorTabs';
 import LineToolsPanel from './inspector/LineToolsPanel';
 import InspectorResponsiveBar from './inspector/InspectorResponsiveBar';
 import ContentPanel from './inspector/ContentPanel';
+import LayoutPanel from './inspector/LayoutPanel';
 import StylePanel from './inspector/StylePanel';
+import InteractionsPanel from './inspector/InteractionsPanel';
+import SeoCmsPanel from './inspector/SeoCmsPanel';
 import AdvancedPanel from './inspector/AdvancedPanel';
 import ThemePanel from './inspector/ThemePanel';
 import OverflowSuggestions from './inspector/OverflowSuggestions';
@@ -55,6 +58,26 @@ import {
   dividerSizePatchForThickness,
 } from '@/lib/dividerDefaults';
 import { boxSideDisplayValue, parseBoxShorthand } from '@/lib/parseBoxShorthand';
+import { buildInspectorStylePatch, parsePxValue as parsePxFromPatch } from '@/lib/inspectorStylePatch';
+import {
+  clearInteractionGroup,
+  interactionsForForm,
+  patchInteractionGroup,
+  pruneInteractions,
+} from '@/lib/interactionInspectorUtils';
+
+const IX_PREVIEW_MS = 48;
+const IX_SAVE_MS = 420;
+const IX_SAVE_IMMEDIATE_KEYS = new Set([
+  'preset',
+  'trigger',
+  'loop',
+  'background',
+  'textColor',
+  'borderColor',
+  'ringColor',
+]);
+const IX_PREVIEW_IMMEDIATE_KEYS = new Set(['background', 'textColor', 'borderColor', 'ringColor', 'scale', 'translateY', 'opacity']);
 
 function inspectorRoleLabel(node) {
   if (!node?.nodeType) return '';
@@ -92,15 +115,13 @@ function inspectorRoleLabel(node) {
   return 'Widget';
 }
 
-function getSelectedDeviceStyle(selectedNode, device, siteTheme) {
-  const nt = selectedNode?.nodeType ?? null;
-  const normalized = normalizeResponsiveStyle(selectedNode?.style_json || {}, { nodeType: nt, siteTheme });
-  return getDeviceStyle(normalized, device);
+function getSelectedDeviceStyle(selectedNode, device) {
+  return getDeviceStyle(selectedNode?.style_json || {}, device);
 }
 
 /** Resolved style for the active breakpoint: theme merge + type/menu defaults (matches canvas / liveRenderer). */
 function getInspectorResolvedStyle(selectedNode, device, siteTheme) {
-  const raw = getSelectedDeviceStyle(selectedNode, device, siteTheme);
+  const raw = getSelectedDeviceStyle(selectedNode, device);
   const nt = selectedNode?.nodeType;
   if (!nt) return mergeNodeStyleWithSiteTheme(raw, siteTheme, null);
   const themed = withResolvedLayoutGap(mergeNodeStyleWithSiteTheme(raw, siteTheme, nt), siteTheme);
@@ -141,7 +162,18 @@ function mergeStyleForDevice(selectedNode, device, patch, siteTheme, styleJsonOv
     effects: { ...(currentDevice.effects || {}), ...(patch.effects || {}) },
     border: { ...(currentDevice.border || {}), ...(patch.border || {}) },
     menu: { ...(currentDevice.menu || {}), ...(patch.menu || {}) },
+    transform: { ...(currentDevice.transform || {}), ...(patch.transform || {}) },
   };
+  if (Object.prototype.hasOwnProperty.call(patch, 'interactions')) {
+    const ix = patch.interactions;
+    if (ix && typeof ix === 'object' && Object.keys(ix).length > 0) {
+      merged.interactions = { ...ix };
+    } else {
+      delete merged.interactions;
+    }
+  } else if (currentDevice.interactions) {
+    merged.interactions = { ...(currentDevice.interactions || {}) };
+  }
   if (merged.spacing && typeof merged.spacing === 'object' && Object.keys(merged.spacing).length === 0) {
     delete merged.spacing;
   }
@@ -174,6 +206,8 @@ function mergeStyleForDevice(selectedNode, device, patch, siteTheme, styleJsonOv
     effects: buildOverride(desktopBase.effects, merged.effects),
     border: buildOverride(desktopBase.border, merged.border),
     menu: buildOverride(desktopBase.menu, merged.menu),
+    interactions: buildOverride(desktopBase.interactions, merged.interactions),
+    transform: buildOverride(desktopBase.transform, merged.transform),
   };
 
   Object.keys(next[device]).forEach((group) => {
@@ -313,6 +347,17 @@ export default function BuilderInspector({
   const activeTab = activeTabProp || internalTab;
   const setActiveTab = onActiveTabChange || setInternalTab;
   const { siteTheme } = useBuilderTheme();
+  const ixPreviewTimerRef = useRef(null);
+  const ixSaveTimerRef = useRef(null);
+  const ixPendingIxRef = useRef(null);
+  const selectedNodeRef = useRef(selectedNode);
+  const deviceRef = useRef(device);
+  const siteThemeRef = useRef(siteTheme);
+  const onUpdateNodeRef = useRef(onUpdateNode);
+  selectedNodeRef.current = selectedNode;
+  deviceRef.current = device;
+  siteThemeRef.current = siteTheme;
+  onUpdateNodeRef.current = onUpdateNode;
 
   useEffect(() => {
     if (selectedNode?.nodeType === 'tabs' || selectedNode?.nodeType === 'accordion') {
@@ -756,6 +801,32 @@ export default function BuilderInspector({
       right: style?.layout?.right ?? '',
       bottom: style?.layout?.bottom ?? '',
       zIndex: style?.layout?.zIndex ?? '',
+      layoutDisplay: style?.layout?.display || '',
+      layoutOverflow: style?.layout?.overflow || '',
+      layoutAlignSelf: style?.layout?.alignSelf || '',
+      layoutOrder: style?.layout?.order ?? '',
+      layoutFlexGrow: style?.layout?.flexGrow ?? '',
+      layoutFlexShrink: style?.layout?.flexShrink ?? '',
+      layoutFlexBasis: style?.layout?.flexBasis ?? '',
+      sizeMinWidth: style?.size?.minWidth || style?.layout?.minWidth || '',
+      sizeMaxWidth: style?.size?.maxWidth || style?.layout?.maxWidth || '',
+      sizeMinHeight: style?.size?.minHeight || '',
+      sizeMaxHeight: style?.size?.maxHeight || '',
+      transformRotate: style?.transform?.rotate ?? '',
+      transformScale: style?.transform?.scale ?? '',
+      transformTranslateX: style?.transform?.translateX ?? '',
+      transformTranslateY: style?.transform?.translateY ?? '',
+      transformSkewX: style?.transform?.skewX ?? '',
+      transformSkewY: style?.transform?.skewY ?? '',
+      effectBlur: style?.effects?.blur ?? '',
+      effectBackdropBlur: style?.effects?.backdropFilter?.replace(/^blur\(/i, '').replace(/\)$/, '') ?? '',
+      effectBrightness: style?.effects?.brightness ?? '',
+      effectContrast: style?.effects?.contrast ?? '',
+      effectSaturation: style?.effects?.saturate ?? '',
+      effectGrayscale: style?.effects?.grayscale ?? '',
+      effectBlendMode: style?.effects?.blendMode || style?.background?.blendMode || '',
+      textShadow: style?.typography?.textShadow || style?.effects?.textShadow || '',
+      interactions: interactionsForForm(style?.interactions),
       dataSourceResource: selectedNode.dataJson?.source?.resource || 'users',
       tableColumnsJson: JSON.stringify(selectedNode.props?.columns || [], null, 2),
       formFieldsJson: JSON.stringify(selectedNode.props?.fields || [], null, 2),
@@ -1184,9 +1255,46 @@ export default function BuilderInspector({
           effects: { ...(desktopBase.effects || {}) },
           border: { ...(desktopBase.border || {}) },
           menu: { ...(desktopBase.menu || {}) },
+          interactions: { ...(desktopBase.interactions || {}) },
+          transform: { ...(desktopBase.transform || {}) },
         },
       },
     });
+  };
+
+  const flushInteractionSave = useCallback(async () => {
+    if (ixSaveTimerRef.current) {
+      clearTimeout(ixSaveTimerRef.current);
+      ixSaveTimerRef.current = null;
+    }
+    const nextIx = ixPendingIxRef.current;
+    const node = selectedNodeRef.current;
+    if (!nextIx || !node?.id || !onUpdateNodeRef.current) return;
+    ixPendingIxRef.current = null;
+    await onUpdateNodeRef.current({
+      nodeId: node.id,
+      payload: {
+        style_json: mergeStyleForDevice(
+          node,
+          deviceRef.current,
+          { interactions: nextIx },
+          siteThemeRef.current
+        ),
+      },
+    });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (ixPreviewTimerRef.current) clearTimeout(ixPreviewTimerRef.current);
+      void flushInteractionSave();
+    };
+  }, [selectedNode?.id, flushInteractionSave]);
+
+  const handleApplyStylePreset = async (presetPatch) => {
+    if (!selectedNode || !presetPatch) return;
+    if (editingDisabledBySectionLock) return;
+    await updateStyle(presetPatch);
   };
 
   const handleVisibilityForDevice = async (targetDevice, visible) => {
@@ -2041,23 +2149,34 @@ export default function BuilderInspector({
       nextForm = { ...nextForm, layoutGapScale: '' };
     }
     setForm(nextForm);
-    const isLayoutNode =
-      selectedNode?.nodeType === 'row' ||
-      selectedNode?.nodeType === 'column' ||
-      selectedNode?.nodeType === 'stack' ||
-      selectedNode?.nodeType === 'menu';
+
+    const built = buildInspectorStylePatch(key, nextForm, {
+      selectedNode,
+      siteTheme,
+      pageTree,
+      device,
+    });
+    if (!built?.patch || Object.keys(built.patch).length === 0) return;
+
     const isFlexLayoutContainer =
       selectedNode?.nodeType === 'row' ||
       selectedNode?.nodeType === 'column' ||
       selectedNode?.nodeType === 'stack';
-
-    if (key === 'menuTextColor' && selectedNode?.nodeType === 'menu') {
-      await updateStyle({
-        typography: { color: value },
-        colors: { textColor: value },
-      });
-      return;
+    const gapScaleSel = String(nextForm.layoutGapScale || '').trim();
+    const useGapScale = GAP_SCALE_IDS.includes(gapScaleSel);
+    let baseJsonOverride = built.baseJsonOverride;
+    if (isFlexLayoutContainer && !useGapScale && (key === 'layoutGapPx' || key === 'layoutGapScale')) {
+      baseJsonOverride = stripDeviceLayoutKeysInStyleJson(
+        selectedNode.style_json,
+        device,
+        ['gapScale'],
+        selectedNode.nodeType,
+        siteTheme
+      );
     }
+
+    previewStylePatch(built.patch);
+    await updateStyle(built.patch, baseJsonOverride);
 
     const isRow = selectedNode?.nodeType === 'row';
     const isRootLandmarkRow =
@@ -2068,153 +2187,9 @@ export default function BuilderInspector({
       (isHeaderRowNode(selectedNode) || isFooterRowNode(selectedNode));
     const rawMode = isRow ? String(nextForm.containerWidthMode || 'full') : 'full';
     const containerMode = rawMode === 'custom' ? 'boxed' : rawMode;
-    const containerPx = Math.max(320, Math.min(2400, parsePxValue(nextForm.containerWidthPx, 1200)));
-    const rowWidthPct = Math.min(100, Math.max(10, Number(nextForm.rowWidthPercent) || 100));
-    const isBoxed = isRow && containerMode === 'boxed';
-    const fullRowNarrow = isRow && containerMode === 'full' && rowWidthPct < 100;
-    const needsHorizontalCenter = isRow && !isRootLandmarkRow && (isBoxed || fullRowNarrow);
-    const nextMargin = needsHorizontalCenter
-      ? `${parsePxValue(nextForm.marginTop)}px auto ${parsePxValue(nextForm.marginBottom)}px auto`
-      : `${parsePxValue(nextForm.marginTop)}px ${parsePxValue(nextForm.marginRight)}px ${parsePxValue(nextForm.marginBottom)}px ${parsePxValue(nextForm.marginLeft)}px`;
+    const containerPx = Math.max(320, Math.min(2400, parsePxFromPatch(nextForm.containerWidthPx, 1200)));
 
-    const rowLayoutMaxWidth = !isRow
-      ? {}
-      : isRootLandmarkRow
-        ? { maxWidth: '100%' }
-        : containerMode === 'boxed'
-          ? { maxWidth: `${containerPx}px` }
-          : { maxWidth: `${rowWidthPct}%` };
-
-    const flexGapPx = parsePxValue(nextForm.layoutGapPx, 0);
-    const flexWrapVal = String(nextForm.layoutFlexWrap || 'nowrap').trim() || 'nowrap';
-    const gapScaleSel = String(nextForm.layoutGapScale || '').trim();
-    const useGapScale = GAP_SCALE_IDS.includes(gapScaleSel);
-    const baseJsonOverride =
-      isFlexLayoutContainer && !useGapScale
-        ? stripDeviceLayoutKeysInStyleJson(selectedNode.style_json, device, ['gapScale'], selectedNode.nodeType, siteTheme)
-        : undefined;
-
-    const flexLayoutCore = isFlexLayoutContainer
-      ? {
-          flexDirection:
-            nextForm.layoutDirection || (selectedNode?.nodeType === 'row' ? 'row' : 'column'),
-          flexWrap: flexWrapVal,
-          alignItems: nextForm.layoutAlign || 'stretch',
-          justifyContent: nextForm.layoutJustify || 'flex-start',
-          alignContent: nextForm.layoutAlignContent || 'stretch',
-          ...rowLayoutMaxWidth,
-          ...(useGapScale
-            ? { gapScale: gapScaleSel, gap: themeSpacingPx(siteTheme, gapScaleSel) }
-            : { gap: flexGapPx }),
-        }
-      : {};
-
-    const sideUnset = (v) => v === '' || v == null;
-    const marginAllUnset =
-      !isRow &&
-      ['marginTop', 'marginRight', 'marginBottom', 'marginLeft'].every((k) => sideUnset(nextForm[k]));
-    const paddingAllUnset = ['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft'].every((k) =>
-      sideUnset(nextForm[k])
-    );
-    const nextPaddingStr = `${parsePxValue(nextForm.paddingTop)}px ${parsePxValue(nextForm.paddingRight)}px ${parsePxValue(nextForm.paddingBottom)}px ${parsePxValue(nextForm.paddingLeft)}px`;
-
-    const spacingPatch = {
-      ...(isFlexLayoutContainer ? {} : { gap: `${flexGapPx}px` }),
-    };
-    if (isRow) {
-      spacingPatch.margin = nextMargin;
-    } else if (!marginAllUnset) {
-      spacingPatch.margin = nextMargin;
-    } else {
-      spacingPatch.margin = null;
-    }
-    if (!paddingAllUnset) {
-      spacingPatch.padding = nextPaddingStr;
-    } else {
-      spacingPatch.padding = null;
-    }
-
-    const stylePatch = {
-      layout: flexLayoutCore,
-      typography: {
-        fontFamily: nextForm.fontFamily,
-        fontSize: `${parsePxValue(nextForm.fontSizePx, 16)}px`,
-        fontWeight: nextForm.fontWeight,
-        lineHeight: String(nextForm.lineHeight || '1.4'),
-        letterSpacing: `${parsePxValue(nextForm.letterSpacingPx, 0)}px`,
-        textTransform: nextForm.textTransform,
-        textDecoration: nextForm.textDecoration,
-        whiteSpace: nextForm.whiteSpace ?? (selectedNode?.nodeType === 'text' ? 'pre-wrap' : 'normal'),
-        color: nextForm.textColor,
-      },
-      colors: {
-        textColor: nextForm.textColor,
-        backgroundColor: nextForm.bgColor,
-      },
-      background: (() => {
-        const hasBg = Boolean(nextForm.bgImageUrl && String(nextForm.bgImageUrl).trim());
-        return {
-          backgroundColor: nextForm.bgColor,
-          backgroundImage: hasBg ? String(nextForm.bgImageUrl) : undefined,
-          backgroundSize: hasBg ? String(nextForm.bgSize || 'cover') : undefined,
-          backgroundPosition: hasBg ? String(nextForm.bgPosition || 'center center') : undefined,
-          backgroundRepeat: hasBg ? String(nextForm.bgRepeat || 'no-repeat') : undefined,
-          meta: hasBg
-            ? {
-                altText: String(nextForm.bgImageAlt || ''),
-                title: String(nextForm.bgImageTitle || ''),
-              }
-            : undefined,
-        };
-      })(),
-      spacing: spacingPatch,
-      size: {
-        width: isRow
-          ? '100%'
-          : nextForm.widthMode === 'full'
-            ? '100%'
-            : nextForm.widthMode === 'px'
-              ? `${parsePxValue(nextForm.widthPx, 320)}px`
-              : 'auto',
-        height: parsePxValue(nextForm.heightPx, 0) > 0 ? `${parsePxValue(nextForm.heightPx, 0)}px` : 'auto',
-      },
-      border: {
-        radius: `${parsePxValue(nextForm.borderRadiusPx)}px`,
-        width: `${parsePxValue(nextForm.borderWidthPx)}px`,
-        color: nextForm.borderColor,
-        style: 'solid',
-      },
-      effects: {
-        borderRadius: `${parsePxValue(nextForm.borderRadiusPx)}px`,
-        boxShadow: (() => {
-          const raw = String(nextForm.boxShadow ?? '').trim();
-          if (!raw) return 'none';
-          return raw;
-        })(),
-        opacity: (() => {
-          const n = parseFloat(String(nextForm.opacity ?? '1'));
-          if (!Number.isFinite(n)) return '1';
-          return String(Math.max(0, Math.min(1, n)));
-        })(),
-      },
-      menu:
-        selectedNode?.nodeType === 'menu'
-          ? {
-              gap: parsePxValue(nextForm.menuGapPx, 12),
-              itemPadding: String(nextForm.menuItemPadding || '6px 12px'),
-              borderRadius: String(nextForm.menuBorderRadius || '20px'),
-              hoverColor: String(nextForm.menuHoverColor || '#6366f1'),
-              hoverBg: String(nextForm.menuHoverBg || '#f1f5ff'),
-            }
-          : {},
-    };
-
-    await updateStyle(stylePatch, baseJsonOverride);
-
-    if (
-      onUpdateNode &&
-      (key === 'containerWidthMode' || key === 'containerWidthPx' || key === 'sectionWidthMode')
-    ) {
+    if (onUpdateNode && built.needsRowMeta) {
       const prevMeta =
         selectedNode.props?.meta &&
         typeof selectedNode.props.meta === 'object' &&
@@ -2360,6 +2335,59 @@ export default function BuilderInspector({
       onSetPreviewCssForNode?.(selectedNode.id, css);
     },
     [selectedNode, device, siteTheme, onSetPreviewCssForNode, editingDisabledBySectionLock]
+  );
+
+  const scheduleInteractionPreview = useCallback(
+    (nextIx) => {
+      if (ixPreviewTimerRef.current) clearTimeout(ixPreviewTimerRef.current);
+      ixPreviewTimerRef.current = setTimeout(() => {
+        ixPreviewTimerRef.current = null;
+        previewStylePatch({ interactions: nextIx });
+      }, IX_PREVIEW_MS);
+    },
+    [previewStylePatch]
+  );
+
+  const handleInteractionChange = useCallback(
+    (group, key, value) => {
+      const node = selectedNodeRef.current;
+      if (!node) return;
+      if (editingDisabledBySectionLock) return;
+      const currentStyle = getDeviceStyle(node.style_json || {}, deviceRef.current) || {};
+      const nextIx = patchInteractionGroup(currentStyle.interactions, group, key, value);
+      setForm((f) => ({ ...f, interactions: nextIx }));
+      ixPendingIxRef.current = nextIx;
+      if (IX_PREVIEW_IMMEDIATE_KEYS.has(key)) {
+        if (ixPreviewTimerRef.current) clearTimeout(ixPreviewTimerRef.current);
+        previewStylePatch({ interactions: nextIx });
+      } else {
+        scheduleInteractionPreview(nextIx);
+      }
+
+      if (ixSaveTimerRef.current) clearTimeout(ixSaveTimerRef.current);
+      const saveDelay = IX_SAVE_IMMEDIATE_KEYS.has(key) ? 80 : IX_SAVE_MS;
+      ixSaveTimerRef.current = setTimeout(() => {
+        ixSaveTimerRef.current = null;
+        void flushInteractionSave();
+      }, saveDelay);
+    },
+    [editingDisabledBySectionLock, scheduleInteractionPreview, flushInteractionSave]
+  );
+
+  const handleInteractionClearGroup = useCallback(
+    (group) => {
+      const node = selectedNodeRef.current;
+      if (!node || editingDisabledBySectionLock) return;
+      const currentStyle = getDeviceStyle(node.style_json || {}, deviceRef.current) || {};
+      const nextIx = clearInteractionGroup(currentStyle.interactions, group);
+      setForm((f) => ({ ...f, interactions: nextIx }));
+      ixPendingIxRef.current = nextIx;
+      if (ixPreviewTimerRef.current) clearTimeout(ixPreviewTimerRef.current);
+      previewStylePatch({ interactions: nextIx });
+      if (ixSaveTimerRef.current) clearTimeout(ixSaveTimerRef.current);
+      void flushInteractionSave();
+    },
+    [editingDisabledBySectionLock, previewStylePatch, flushInteractionSave]
   );
 
   const commitStylePatch = async (patch) => {
@@ -2540,18 +2568,12 @@ export default function BuilderInspector({
           pageId={pageId}
         />
       ) : null}
-      {activeTab === 'style' ? (
-        <StylePanel
+      {activeTab === 'layout' ? (
+        <LayoutPanel
           selectedNode={selectedNode}
           form={form}
           onChange={handleStyleChange}
           onContentChange={handleContentChange}
-          onPatchForm={patchForm}
-          projectId={projectId}
-          onPreviewStylePatch={previewStylePatch}
-          onCommitStylePatch={commitStylePatch}
-          onClearPreviewStyle={clearPreviewCss}
-          onActiveSpacingEdit={onSetActiveSpacingEdit}
           deviceLabel={deviceLabel}
           visibilityByDevice={visibilityByDevice}
           onVisibilityForDevice={handleVisibilityForDevice}
@@ -2566,7 +2588,7 @@ export default function BuilderInspector({
           onPatchSectionLayout={patchSectionLayout}
         />
       ) : null}
-      {activeTab === 'style' ? (
+      {activeTab === 'layout' ? (
         <div className="bld-panel" style={{ paddingTop: 0 }}>
           <OverflowSuggestions
             selectedNode={selectedNode}
@@ -2578,6 +2600,37 @@ export default function BuilderInspector({
             }}
           />
         </div>
+      ) : null}
+      {activeTab === 'style' ? (
+        <StylePanel
+          selectedNode={selectedNode}
+          form={form}
+          onChange={handleStyleChange}
+          onPatchForm={patchForm}
+          projectId={projectId}
+          onPreviewStylePatch={previewStylePatch}
+          onCommitStylePatch={commitStylePatch}
+          onClearPreviewStyle={clearPreviewCss}
+          onActiveSpacingEdit={onSetActiveSpacingEdit}
+          onApplyPreset={handleApplyStylePreset}
+        />
+      ) : null}
+      {activeTab === 'interactions' ? (
+        <InteractionsPanel
+          form={form}
+          onInteractionChange={handleInteractionChange}
+          onInteractionClearGroup={handleInteractionClearGroup}
+          disabled={editingDisabledBySectionLock}
+          selectedNodeId={selectedNode?.id}
+        />
+      ) : null}
+      {activeTab === 'seo' ? (
+        <SeoCmsPanel
+          selectedNode={selectedNode}
+          projectId={projectId}
+          pageId={pageId}
+          onChange={handleContentChange}
+        />
       ) : null}
       {activeTab === 'advanced' ? (
         <AdvancedPanel
