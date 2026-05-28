@@ -46,7 +46,8 @@ test('styleToCss exposes --node-* vars and flex gap from layout.gap', () => {
     border: { radius: '6px' },
   });
   assert.equal(css['--node-gap'], '20px');
-  assert.equal(css.gap, '20px');
+  assert.equal(css.rowGap, '20px');
+  assert.equal(css.columnGap, '20px');
   assert.equal(css['--node-text'], '#222');
   assert.equal(css['--node-bg'], '#eee');
   assert.ok(css['--node-pad']);
@@ -78,19 +79,21 @@ test('sanitizeInlineMarginCss drops shorthand when longhands exist', () => {
   assert.equal(out.marginBottom, '12px');
 });
 
-test('sanitizeGapShorthandConflict drops gap when columnGap or rowGap is set', () => {
+test('sanitizeGapShorthandConflict expands gap to rowGap/columnGap', () => {
   const out = sanitizeGapShorthandConflict({
     display: 'grid',
     gap: '16px',
     columnGap: '10px',
   });
   assert.equal(out.gap, undefined);
+  assert.equal(out.rowGap, '16px');
   assert.equal(out.columnGap, '10px');
 });
 
 test('sanitizeInlineMarginCss also sanitizes gap vs columnGap', () => {
   const out = sanitizeInlineMarginCss({ gap: '24px', columnGap: '8px' });
   assert.equal(out.gap, undefined);
+  assert.equal(out.rowGap, '24px');
   assert.equal(out.columnGap, '8px');
 });
 

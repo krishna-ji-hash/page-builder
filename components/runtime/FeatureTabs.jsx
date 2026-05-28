@@ -42,10 +42,13 @@ export default function FeatureTabs({
   const controlled = typeof onActiveTabChange === 'function';
   const [activeId, setActiveId] = useState(() => initialActive || tabs[0]?.id || '');
   const [editingTabLabelId, setEditingTabLabelId] = useState(null);
+  const [navDragging, setNavDragging] = useState(false);
+  const navWrapRef = useRef(null);
   const navId = useId();
   const lastPropActiveRef = useRef(initialActive || tabs[0]?.id || '');
   const imageInputRef = useRef(null);
   const bulletsListRef = useRef(null);
+  const navDragRef = useRef({ active: false, startX: 0, startScrollLeft: 0, didDrag: false, pointerId: null });
   const tabIdsSignature = useMemo(() => tabs.map((t) => t.id).join('|'), [tabs]);
 
   /** Tab ids changed (add/remove/reorder) — reset to saved active or first tab. */
@@ -79,6 +82,10 @@ export default function FeatureTabs({
 
   const onSelect = useCallback(
     (id, event) => {
+      if (navDragRef.current?.didDrag) {
+        navDragRef.current.didDrag = false;
+        return;
+      }
       if (event) {
         event.preventDefault();
         if (builderMode) event.stopPropagation();
@@ -93,6 +100,56 @@ export default function FeatureTabs({
     },
     [activeId, builderMode, onActiveTabChange]
   );
+
+  const onNavPointerDown = useCallback((event) => {
+    if (event.pointerType !== 'mouse') return;
+    if (event.button !== 0) return;
+    const el = navWrapRef.current;
+    if (!el) return;
+    navDragRef.current = {
+      active: true,
+      startX: event.clientX,
+      startScrollLeft: el.scrollLeft,
+      didDrag: false,
+      pointerId: event.pointerId,
+    };
+    setNavDragging(true);
+  }, []);
+
+  const onNavPointerMove = useCallback((event) => {
+    const el = navWrapRef.current;
+    const st = navDragRef.current;
+    if (!el || !st?.active) return;
+    if (st.pointerId != null && event.pointerId !== st.pointerId) return;
+    const dx = event.clientX - st.startX;
+    if (!st.didDrag && Math.abs(dx) > 4) {
+      st.didDrag = true;
+      // Only capture once we are actually dragging; otherwise it breaks normal button clicks.
+      try {
+        el.setPointerCapture?.(event.pointerId);
+      } catch {
+        // ignore
+      }
+    }
+    if (st.didDrag) {
+      event.preventDefault();
+      el.scrollLeft = st.startScrollLeft - dx;
+    }
+  }, []);
+
+  const onNavPointerUpOrCancel = useCallback((event) => {
+    const el = navWrapRef.current;
+    const st = navDragRef.current;
+    if (!st?.active) return;
+    if (st.pointerId != null && event.pointerId !== st.pointerId) return;
+    st.active = false;
+    setNavDragging(false);
+    try {
+      el?.releasePointerCapture?.(event.pointerId);
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const stopCanvasBubble = builderMode
     ? (event) => {
@@ -152,7 +209,14 @@ export default function FeatureTabs({
         </p>
       ) : null}
 
-      <div className="live-feature-tabs__nav-wrap">
+      <div
+        ref={navWrapRef}
+        className={`live-feature-tabs__nav-wrap${navDragging ? ' is-dragging' : ''}`}
+        onPointerDown={onNavPointerDown}
+        onPointerMove={onNavPointerMove}
+        onPointerUp={onNavPointerUpOrCancel}
+        onPointerCancel={onNavPointerUpOrCancel}
+      >
         <div className="live-feature-tabs__nav" role="tablist" aria-labelledby={navId}>
           {tabs.map((tab) => {
             const isActive = tab.id === activeId;
