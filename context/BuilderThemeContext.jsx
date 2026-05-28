@@ -16,6 +16,8 @@ import {
   SITE_THEME_PRESETS,
   siteThemeToCssVariableStyle,
 } from '@/lib/siteDesignTheme';
+import { DEFAULT_THEME_TOKENS, normalizeThemeTokens, themeTokensToCssVariableStyle } from '@/lib/themeTokens';
+import { DEFAULT_STYLE_PRESETS, normalizeStylePresets } from '@/lib/stylePresetsStore';
 
 const BuilderThemeContext = createContext(null);
 
@@ -53,17 +55,31 @@ export function BuilderThemeProvider({ children, persistence = null, persistFlus
   const [theme, setTheme] = useState('dark');
   const [siteTheme, setSiteThemeState] = useState(() => DEFAULT_SITE_THEME);
   const [siteThemePersist, setSiteThemePersist] = useState({ status: 'idle', error: '' });
+  const [themeTokens, setThemeTokensState] = useState(() => DEFAULT_THEME_TOKENS);
+  const [themeTokensPersist, setThemeTokensPersist] = useState({ status: 'idle', error: '' });
+  const [stylePresets, setStylePresetsState] = useState(() => DEFAULT_STYLE_PRESETS);
+  const [stylePresetsPersist, setStylePresetsPersist] = useState({ status: 'idle', error: '' });
   const lastHydrateSigRef = useRef(null);
   const lastSavedJsonRef = useRef('');
+  const lastSavedTokensJsonRef = useRef('');
+  const lastSavedPresetsJsonRef = useRef('');
   const persistenceRef = useRef(persistence);
   persistenceRef.current = persistence;
   const themeRef = useRef(theme);
   themeRef.current = theme;
   const siteThemeRef = useRef(siteTheme);
   siteThemeRef.current = siteTheme;
+  const themeTokensRef = useRef(themeTokens);
+  themeTokensRef.current = themeTokens;
   const persistDebounceTimerRef = useRef(null);
   const persistDebounceAbortRef = useRef(null);
   const persistInFlightRef = useRef(null);
+  const persistTokensDebounceTimerRef = useRef(null);
+  const persistTokensDebounceAbortRef = useRef(null);
+  const persistTokensInFlightRef = useRef(null);
+  const persistPresetsDebounceTimerRef = useRef(null);
+  const persistPresetsDebounceAbortRef = useRef(null);
+  const persistPresetsInFlightRef = useRef(null);
 
   useEffect(() => {
     const saved = window.localStorage.getItem(STORAGE_UI);
@@ -78,6 +94,132 @@ export function BuilderThemeProvider({ children, persistence = null, persistFlus
 
   const projectId = persistence?.projectId;
   const currentPageSlug = persistence?.pageSlug;
+
+  const runPersistThemeTokens = useCallback(async (payload, signal) => {
+    const prev = persistTokensInFlightRef.current;
+    if (prev) {
+      try {
+        await prev;
+      } catch {
+        // ignore
+      }
+    }
+    const pid = persistenceRef.current?.projectId;
+    if (!pid) return;
+    const payloadJson = JSON.stringify(payload);
+    if (payloadJson === lastSavedTokensJsonRef.current) {
+      setThemeTokensPersist({ status: 'idle', error: '' });
+      return;
+    }
+    const job = (async () => {
+      try {
+        const response = await fetch(`/api/projects/${pid}/theme-tokens`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            themeTokens: payload,
+            ifRevision: payload.revision,
+          }),
+          signal,
+        });
+        const data = await response.json().catch(() => ({}));
+        if (response.status === 409) {
+          try {
+            await persistenceRef.current?.onRevisionConflict?.();
+            setThemeTokensPersist({ status: 'idle', error: '' });
+          } catch (reloadErr) {
+            const msg = reloadErr instanceof Error ? reloadErr.message : String(reloadErr);
+            setThemeTokensPersist({ status: 'error', error: msg });
+            persistenceRef.current?.onPersistError?.(msg);
+          }
+          return;
+        }
+        if (!response.ok) {
+          const err = data?.error || `Save failed (${response.status})`;
+          throw new Error(err);
+        }
+        const normalized = normalizeThemeTokens(data?.themeTokens ?? payload);
+        lastSavedTokensJsonRef.current = JSON.stringify(normalized);
+        setThemeTokensPersist({ status: 'saved', error: '' });
+      } catch (e) {
+        if (e?.name === 'AbortError') return;
+        const message = e instanceof Error ? e.message : String(e);
+        setThemeTokensPersist({ status: 'error', error: message });
+        persistenceRef.current?.onPersistError?.(message);
+      }
+    })();
+    persistTokensInFlightRef.current = job;
+    try {
+      await job;
+    } finally {
+      if (persistTokensInFlightRef.current === job) {
+        persistTokensInFlightRef.current = null;
+      }
+    }
+  }, []);
+
+  const runPersistStylePresets = useCallback(async (payload, signal) => {
+    const prev = persistPresetsInFlightRef.current;
+    if (prev) {
+      try {
+        await prev;
+      } catch {
+        // ignore
+      }
+    }
+    const pid = persistenceRef.current?.projectId;
+    if (!pid) return;
+    const payloadJson = JSON.stringify(payload);
+    if (payloadJson === lastSavedPresetsJsonRef.current) {
+      setStylePresetsPersist({ status: 'idle', error: '' });
+      return;
+    }
+    const job = (async () => {
+      try {
+        const response = await fetch(`/api/projects/${pid}/style-presets`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            stylePresets: payload,
+            ifRevision: payload.revision,
+          }),
+          signal,
+        });
+        const data = await response.json().catch(() => ({}));
+        if (response.status === 409) {
+          try {
+            await persistenceRef.current?.onRevisionConflict?.();
+            setStylePresetsPersist({ status: 'idle', error: '' });
+          } catch (reloadErr) {
+            const msg = reloadErr instanceof Error ? reloadErr.message : String(reloadErr);
+            setStylePresetsPersist({ status: 'error', error: msg });
+            persistenceRef.current?.onPersistError?.(msg);
+          }
+          return;
+        }
+        if (!response.ok) {
+          const err = data?.error || `Save failed (${response.status})`;
+          throw new Error(err);
+        }
+        const normalized = normalizeStylePresets(data?.stylePresets ?? payload);
+        lastSavedPresetsJsonRef.current = JSON.stringify(normalized);
+        setStylePresetsPersist({ status: 'saved', error: '' });
+      } catch (e) {
+        if (e?.name === 'AbortError') return;
+        const message = e instanceof Error ? e.message : String(e);
+        setStylePresetsPersist({ status: 'error', error: message });
+        persistenceRef.current?.onPersistError?.(message);
+      }
+    })();
+    persistPresetsInFlightRef.current = job;
+    try {
+      await job;
+    } finally {
+      if (persistPresetsInFlightRef.current === job) {
+        persistPresetsInFlightRef.current = null;
+      }
+    }
+  }, []);
 
   const runPersistSiteTheme = useCallback(async (payload, signal) => {
     const prev = persistInFlightRef.current;
@@ -168,7 +310,9 @@ export function BuilderThemeProvider({ children, persistence = null, persistFlus
   useLayoutEffect(() => {
     if (!projectId) return;
     const fromDb = persistence?.initialSiteTheme;
-    const sig = `${projectId}:${JSON.stringify(fromDb ?? null)}`;
+    const fromDbTokens = persistence?.initialThemeTokens;
+    const fromDbPresets = persistence?.initialStylePresets;
+    const sig = `${projectId}:${JSON.stringify(fromDb ?? null)}:${JSON.stringify(fromDbTokens ?? null)}:${JSON.stringify(fromDbPresets ?? null)}`;
     if (lastHydrateSigRef.current === sig) return;
     lastHydrateSigRef.current = sig;
     const next = normalizeSiteTheme(fromDb ?? undefined);
@@ -177,7 +321,17 @@ export function BuilderThemeProvider({ children, persistence = null, persistFlus
     lastSavedJsonRef.current = json;
     writeSiteThemeCache(projectId, next);
     setSiteThemePersist({ status: 'idle', error: '' });
-  }, [projectId, persistence?.initialSiteTheme]);
+
+    const nextTokens = normalizeThemeTokens(fromDbTokens ?? undefined);
+    setThemeTokensState(nextTokens);
+    lastSavedTokensJsonRef.current = JSON.stringify(nextTokens);
+    setThemeTokensPersist({ status: 'idle', error: '' });
+
+    const nextPresets = normalizeStylePresets(fromDbPresets ?? undefined);
+    setStylePresetsState(nextPresets);
+    lastSavedPresetsJsonRef.current = JSON.stringify(nextPresets);
+    setStylePresetsPersist({ status: 'idle', error: '' });
+  }, [projectId, persistence?.initialSiteTheme, persistence?.initialThemeTokens, persistence?.initialStylePresets]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -217,10 +371,104 @@ export function BuilderThemeProvider({ children, persistence = null, persistFlus
     };
   }, [siteTheme, projectId, runPersistSiteTheme]);
 
+  useEffect(() => {
+    if (!projectId) return;
+    const json = JSON.stringify(themeTokens);
+    if (json === lastSavedTokensJsonRef.current) return;
+
+    if (persistTokensDebounceTimerRef.current != null) {
+      clearTimeout(persistTokensDebounceTimerRef.current);
+      persistTokensDebounceTimerRef.current = null;
+    }
+    if (persistTokensDebounceAbortRef.current) {
+      persistTokensDebounceAbortRef.current.abort();
+      persistTokensDebounceAbortRef.current = null;
+    }
+
+    const controller = new AbortController();
+    persistTokensDebounceAbortRef.current = controller;
+    persistTokensDebounceTimerRef.current = setTimeout(() => {
+      persistTokensDebounceTimerRef.current = null;
+      void runPersistThemeTokens(themeTokens, controller.signal).finally(() => {
+        if (persistTokensDebounceAbortRef.current === controller) {
+          persistTokensDebounceAbortRef.current = null;
+        }
+      });
+    }, 550);
+
+    return () => {
+      if (persistTokensDebounceTimerRef.current != null) {
+        clearTimeout(persistTokensDebounceTimerRef.current);
+        persistTokensDebounceTimerRef.current = null;
+      }
+      controller.abort();
+      if (persistTokensDebounceAbortRef.current === controller) {
+        persistTokensDebounceAbortRef.current = null;
+      }
+    };
+  }, [themeTokens, projectId, runPersistThemeTokens]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    const json = JSON.stringify(stylePresets);
+    if (json === lastSavedPresetsJsonRef.current) return;
+
+    if (persistPresetsDebounceTimerRef.current != null) {
+      clearTimeout(persistPresetsDebounceTimerRef.current);
+      persistPresetsDebounceTimerRef.current = null;
+    }
+    if (persistPresetsDebounceAbortRef.current) {
+      persistPresetsDebounceAbortRef.current.abort();
+      persistPresetsDebounceAbortRef.current = null;
+    }
+
+    const controller = new AbortController();
+    persistPresetsDebounceAbortRef.current = controller;
+    persistPresetsDebounceTimerRef.current = setTimeout(() => {
+      persistPresetsDebounceTimerRef.current = null;
+      void runPersistStylePresets(stylePresets, controller.signal).finally(() => {
+        if (persistPresetsDebounceAbortRef.current === controller) {
+          persistPresetsDebounceAbortRef.current = null;
+        }
+      });
+    }, 550);
+
+    return () => {
+      if (persistPresetsDebounceTimerRef.current != null) {
+        clearTimeout(persistPresetsDebounceTimerRef.current);
+        persistPresetsDebounceTimerRef.current = null;
+      }
+      controller.abort();
+      if (persistPresetsDebounceAbortRef.current === controller) {
+        persistPresetsDebounceAbortRef.current = null;
+      }
+    };
+  }, [stylePresets, projectId, runPersistStylePresets]);
+
   const setSiteTheme = useCallback((next) => {
     setSiteThemeState((prev) => {
       const raw = typeof next === 'function' ? next(prev) : next;
       return normalizeSiteTheme(raw, {
+        defaultRevision: prev.revision,
+        defaultSchemaVersion: prev.schemaVersion,
+      });
+    });
+  }, []);
+
+  const setThemeTokens = useCallback((next) => {
+    setThemeTokensState((prev) => {
+      const raw = typeof next === 'function' ? next(prev) : next;
+      return normalizeThemeTokens(raw, {
+        defaultRevision: prev.revision,
+        defaultSchemaVersion: prev.schemaVersion,
+      });
+    });
+  }, []);
+
+  const setStylePresets = useCallback((next) => {
+    setStylePresetsState((prev) => {
+      const raw = typeof next === 'function' ? next(prev) : next;
+      return normalizeStylePresets(raw, {
         defaultRevision: prev.revision,
         defaultSchemaVersion: prev.schemaVersion,
       });
@@ -285,6 +533,7 @@ export function BuilderThemeProvider({ children, persistence = null, persistFlus
   }, []);
 
   const cssVarStyle = useMemo(() => siteThemeToCssVariableStyle(siteTheme), [siteTheme]);
+  const tokenVarStyle = useMemo(() => themeTokensToCssVariableStyle(themeTokens), [themeTokens]);
 
   const value = useMemo(
     () => ({
@@ -292,14 +541,36 @@ export function BuilderThemeProvider({ children, persistence = null, persistFlus
       setTheme,
       siteTheme,
       setSiteTheme,
+      themeTokens,
+      setThemeTokens,
+      stylePresets,
+      setStylePresets,
       applySitePreset,
       tokens,
       setTokens,
       siteThemePersist,
+      themeTokensPersist,
+      stylePresetsPersist,
       currentPageSlug,
       toggleTheme,
     }),
-    [theme, siteTheme, setSiteTheme, applySitePreset, toggleTheme, tokens, setTokens, siteThemePersist, currentPageSlug]
+    [
+      theme,
+      siteTheme,
+      setSiteTheme,
+      themeTokens,
+      setThemeTokens,
+      stylePresets,
+      setStylePresets,
+      applySitePreset,
+      toggleTheme,
+      tokens,
+      setTokens,
+      siteThemePersist,
+      themeTokensPersist,
+      stylePresetsPersist,
+      currentPageSlug,
+    ]
   );
 
   return (
@@ -309,6 +580,7 @@ export function BuilderThemeProvider({ children, persistence = null, persistFlus
         data-builder-theme={theme}
         style={{
           ...cssVarStyle,
+          ...tokenVarStyle,
           fontFamily: siteTheme.typography.fontFamily,
         }}
       >

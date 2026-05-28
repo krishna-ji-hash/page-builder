@@ -21,11 +21,15 @@ if (mig.status !== 0) {
   process.exit(mig.status ?? 1);
 }
 
-// Defensive: Next 15 + webpack dev can occasionally leave a corrupt `.next/server/vendor-chunks/*` map on Windows.
-// Wiping `.next` before starting keeps dev stable across restarts.
+// Defensive: Next 15 + webpack dev can leave corrupt `.next/server/vendor-chunks/*` on Windows
+// (`Cannot find module './vendor-chunks/@dnd-kit.js'`, `__webpack_modules__[moduleId] is not a function`).
 try {
   if (fs.existsSync(nextDir)) {
     fs.rmSync(nextDir, { recursive: true, force: true });
+  }
+  const webpackCache = path.join(root, 'node_modules', '.cache');
+  if (fs.existsSync(webpackCache)) {
+    fs.rmSync(webpackCache, { recursive: true, force: true });
   }
 } catch {
   // ignore

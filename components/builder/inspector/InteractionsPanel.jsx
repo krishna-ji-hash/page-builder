@@ -32,14 +32,14 @@ export default function InteractionsPanel({
 }) {
   const ix = readIx(form);
   const hover = ix.hover || {};
-  const active = ix.active || {};
+  const pressed = ix.pressed || ix.active || {};
   const focus = ix.focus || {};
   const anim = ix.animation || {};
   const animPreset = normalizeAnimationPreset(anim.preset);
   const animEnabled = animPreset !== 'none';
 
   const patchHover = (key, value) => onInteractionChange?.('hover', key, value);
-  const patchActive = (key, value) => onInteractionChange?.('active', key, value);
+  const patchPressed = (key, value) => onInteractionChange?.('pressed', key, value);
   const patchFocus = (key, value) => onInteractionChange?.('focus', key, value);
   const patchAnim = (key, value) => onInteractionChange?.('animation', key, value);
 
@@ -56,7 +56,7 @@ export default function InteractionsPanel({
   return (
     <InspectorPanel title="Interactions">
       <p className="bld-field-note" style={{ marginTop: 0 }}>
-        <strong>Mouse hover</strong> and <strong>mouse click</strong> styles apply instantly on the canvas.{' '}
+        <strong>Mouse hover</strong> and <strong>pressed</strong> styles apply instantly on the canvas.{' '}
         <strong>Animation</strong> uses the trigger you pick (load, hover, or scroll into view).
       </p>
 
@@ -141,51 +141,51 @@ export default function InteractionsPanel({
       </InspectorSection>
 
       <InspectorSection
-        key={selectedNodeId ? `ix-click-${selectedNodeId}` : 'ix-click'}
-        title="Mouse click"
+        key={selectedNodeId ? `ix-pressed-${selectedNodeId}` : 'ix-pressed'}
+        title="Pressed"
         defaultOpen
-        keywords="mouse click active pressed pointer down"
+        keywords="pressed active click pointer down"
       >
         <div className="bld-field" style={{ marginBottom: 8 }}>
-          <button type="button" className="bld-chip" disabled={disabled} onClick={() => clearGroup('active')}>
-            Clear click styles
+          <button type="button" className="bld-chip" disabled={disabled} onClick={() => clearGroup('pressed')}>
+            Clear pressed styles
           </button>
         </div>
         <div className="bld-field-grid">
           <InspectorField label="Scale" hint="e.g. 0.98" disabled={disabled}>
             <input
               className="bld-input"
-              value={active.scale ?? ''}
+              value={pressed.scale ?? ''}
               disabled={disabled}
               placeholder="0.98"
-              onChange={(e) => patchActive('scale', e.target.value)}
+              onChange={(e) => patchPressed('scale', e.target.value)}
             />
           </InspectorField>
           <InspectorField label="Background" disabled={disabled}>
             <input
               className="bld-input"
               type="color"
-              value={colorInputValue(active.background, '#4f46e5')}
+              value={colorInputValue(pressed.background, '#4f46e5')}
               disabled={disabled}
-              onChange={(e) => patchActive('background', sanitizeCssColor(e.target.value))}
+              onChange={(e) => patchPressed('background', sanitizeCssColor(e.target.value))}
             />
           </InspectorField>
           <InspectorField label="Text color" disabled={disabled}>
             <input
               className="bld-input"
               type="color"
-              value={colorInputValue(active.textColor, '#ffffff')}
+              value={colorInputValue(pressed.textColor, '#ffffff')}
               disabled={disabled}
-              onChange={(e) => patchActive('textColor', sanitizeCssColor(e.target.value))}
+              onChange={(e) => patchPressed('textColor', sanitizeCssColor(e.target.value))}
             />
           </InspectorField>
           <InspectorField label="Border color" disabled={disabled}>
             <input
               className="bld-input"
               type="color"
-              value={colorInputValue(active.borderColor, '#4338ca')}
+              value={colorInputValue(pressed.borderColor, '#4338ca')}
               disabled={disabled}
-              onChange={(e) => patchActive('borderColor', sanitizeCssColor(e.target.value))}
+              onChange={(e) => patchPressed('borderColor', sanitizeCssColor(e.target.value))}
             />
           </InspectorField>
           <InspectorField label="Opacity" disabled={disabled}>
@@ -193,20 +193,20 @@ export default function InteractionsPanel({
               min={0}
               max={1}
               step={0.05}
-              value={active.opacity ?? ''}
+              value={pressed.opacity ?? ''}
               disabled={disabled}
               placeholder="1"
-              onChange={(n) => patchActive('opacity', n == null ? '' : String(n))}
+              onChange={(n) => patchPressed('opacity', n == null ? '' : String(n))}
             />
           </InspectorField>
         </div>
         <InspectorField label="Shadow" disabled={disabled}>
           <input
             className="bld-input"
-            value={active.boxShadow ?? ''}
+            value={pressed.boxShadow ?? ''}
             disabled={disabled}
             placeholder="none"
-            onChange={(e) => patchActive('boxShadow', e.target.value)}
+            onChange={(e) => patchPressed('boxShadow', e.target.value)}
           />
         </InspectorField>
       </InspectorSection>

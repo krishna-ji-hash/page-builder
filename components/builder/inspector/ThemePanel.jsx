@@ -6,6 +6,7 @@ import { isRootPageRow } from '@/lib/liveDocSectionSpacing';
 import InspectorTipChips from '@/components/builder/inspector/InspectorTipChips';
 import PageResponsivePanel from '@/components/builder/inspector/PageResponsivePanel';
 import { InspectorNumField } from '@/components/builder/inspector/InspectorNumeric';
+import { DEFAULT_STYLE_PRESETS, normalizeStylePresets } from '@/lib/stylePresetsStore';
 
 function Section({ title, children }) {
   return (
@@ -79,8 +80,41 @@ export default function ThemePanel({
   onApplyResponsiveToPage,
   isApplyingResponsive = false,
 }) {
-  const { siteTheme, setSiteTheme, applySitePreset, siteThemePersist, currentPageSlug } = useBuilderTheme();
+  const {
+    siteTheme,
+    setSiteTheme,
+    applySitePreset,
+    siteThemePersist,
+    currentPageSlug,
+    themeTokens,
+    setThemeTokens,
+    themeTokensPersist,
+    stylePresets,
+    setStylePresets,
+    stylePresetsPersist,
+  } = useBuilderTheme();
   const { colors, typography, spacing } = siteTheme;
+  const tokenColors = themeTokens?.colors || {};
+  const tokenSpacing = themeTokens?.spacing || {};
+  const tokenRadius = themeTokens?.radius || {};
+  const tokenShadows = themeTokens?.shadows || {};
+  const tokenMotion = themeTokens?.motion || {};
+
+  const presetsNorm = useMemo(() => normalizeStylePresets(stylePresets || DEFAULT_STYLE_PRESETS), [stylePresets]);
+  const presetsList = presetsNorm.presets || [];
+  const [activePresetId, setActivePresetId] = useState('');
+  const activePreset = useMemo(
+    () => presetsList.find((p) => p.id === activePresetId) || null,
+    [presetsList, activePresetId]
+  );
+  const [presetDraftJson, setPresetDraftJson] = useState('');
+  useEffect(() => {
+    if (!activePreset) {
+      setPresetDraftJson('');
+      return;
+    }
+    setPresetDraftJson(JSON.stringify(activePreset.style_json || {}, null, 2));
+  }, [activePresetId]);
 
   const patchColors = (key, val) => {
     setSiteTheme((prev) => ({ ...prev, colors: { ...prev.colors, [key]: val } }));
@@ -174,6 +208,40 @@ export default function ThemePanel({
                 : null}
         </p>
       ) : null}
+      {themeTokensPersist?.status !== 'idle' ? (
+        <p
+          className="bld-field-note"
+          style={{
+            marginTop: 4,
+            color: themeTokensPersist.status === 'error' ? '#ef4444' : undefined,
+          }}
+        >
+          {themeTokensPersist.status === 'saving'
+            ? 'Saving theme tokens…'
+            : themeTokensPersist.status === 'saved'
+              ? 'Theme tokens saved.'
+              : themeTokensPersist.status === 'error'
+                ? `Theme tokens save failed: ${themeTokensPersist.error || 'Unknown error'}`
+                : null}
+        </p>
+      ) : null}
+      {stylePresetsPersist?.status !== 'idle' ? (
+        <p
+          className="bld-field-note"
+          style={{
+            marginTop: 4,
+            color: stylePresetsPersist.status === 'error' ? '#ef4444' : undefined,
+          }}
+        >
+          {stylePresetsPersist.status === 'saving'
+            ? 'Saving style presets…'
+            : stylePresetsPersist.status === 'saved'
+              ? 'Style presets saved.'
+              : stylePresetsPersist.status === 'error'
+                ? `Style presets save failed: ${stylePresetsPersist.error || 'Unknown error'}`
+                : null}
+        </p>
+      ) : null}
       <div className="bld-tiny-toggle" style={{ marginBottom: 12 }}>
         <button
           type="button"
@@ -199,6 +267,292 @@ export default function ThemePanel({
         <ColorRow fieldId="theme-c-surface" label="Surface" value={colors.surface} onChange={(v) => patchColors('surface', v)} />
         <ColorRow fieldId="theme-c-border" label="Border" value={colors.border} onChange={(v) => patchColors('border', v)} />
       </Section>
+
+      <details className="bld-acc" style={{ marginTop: 10 }}>
+        <summary>Design tokens (global)</summary>
+        <div className="bld-acc__body">
+          <p className="bld-field-note" style={{ marginTop: 0 }}>
+            Tokens are stored on <strong>projects.config_json.themeTokens</strong> and exposed as CSS vars like{' '}
+            <code>--token-color-primary</code>. You can reference them in any style field using{' '}
+            <code>token-color-primary</code> or <code>var(--token-color-primary)</code>.
+          </p>
+
+          <Section title="Token colors">
+            <ColorRow
+              fieldId="tok-c-primary"
+              label="Primary"
+              value={tokenColors.primary}
+              onChange={(v) => setThemeTokens((p) => ({ ...p, colors: { ...(p.colors || {}), primary: v } }))}
+            />
+            <ColorRow
+              fieldId="tok-c-secondary"
+              label="Secondary"
+              value={tokenColors.secondary}
+              onChange={(v) => setThemeTokens((p) => ({ ...p, colors: { ...(p.colors || {}), secondary: v } }))}
+            />
+            <ColorRow
+              fieldId="tok-c-accent"
+              label="Accent"
+              value={tokenColors.accent}
+              onChange={(v) => setThemeTokens((p) => ({ ...p, colors: { ...(p.colors || {}), accent: v } }))}
+            />
+            <ColorRow
+              fieldId="tok-c-bg"
+              label="Background"
+              value={tokenColors.background}
+              onChange={(v) => setThemeTokens((p) => ({ ...p, colors: { ...(p.colors || {}), background: v } }))}
+            />
+            <ColorRow
+              fieldId="tok-c-surface"
+              label="Surface"
+              value={tokenColors.surface}
+              onChange={(v) => setThemeTokens((p) => ({ ...p, colors: { ...(p.colors || {}), surface: v } }))}
+            />
+            <ColorRow
+              fieldId="tok-c-text"
+              label="Text"
+              value={tokenColors.text}
+              onChange={(v) => setThemeTokens((p) => ({ ...p, colors: { ...(p.colors || {}), text: v } }))}
+            />
+            <ColorRow
+              fieldId="tok-c-border"
+              label="Border"
+              value={tokenColors.border}
+              onChange={(v) => setThemeTokens((p) => ({ ...p, colors: { ...(p.colors || {}), border: v } }))}
+            />
+          </Section>
+
+          <Section title="Token spacing">
+            <div className="bld-field-grid">
+              <TextRow fieldId="tok-sp-xs" label="XS" value={tokenSpacing.xs} placeholder="4px" onChange={(v) => setThemeTokens((p) => ({ ...p, spacing: { ...(p.spacing || {}), xs: v } }))} />
+              <TextRow fieldId="tok-sp-sm" label="SM" value={tokenSpacing.sm} placeholder="8px" onChange={(v) => setThemeTokens((p) => ({ ...p, spacing: { ...(p.spacing || {}), sm: v } }))} />
+              <TextRow fieldId="tok-sp-md" label="MD" value={tokenSpacing.md} placeholder="16px" onChange={(v) => setThemeTokens((p) => ({ ...p, spacing: { ...(p.spacing || {}), md: v } }))} />
+              <TextRow fieldId="tok-sp-lg" label="LG" value={tokenSpacing.lg} placeholder="24px" onChange={(v) => setThemeTokens((p) => ({ ...p, spacing: { ...(p.spacing || {}), lg: v } }))} />
+              <TextRow fieldId="tok-sp-xl" label="XL" value={tokenSpacing.xl} placeholder="32px" onChange={(v) => setThemeTokens((p) => ({ ...p, spacing: { ...(p.spacing || {}), xl: v } }))} />
+            </div>
+          </Section>
+
+          <Section title="Token radius">
+            <div className="bld-field-grid">
+              <TextRow fieldId="tok-r-sm" label="SM" value={tokenRadius.sm} placeholder="8px" onChange={(v) => setThemeTokens((p) => ({ ...p, radius: { ...(p.radius || {}), sm: v } }))} />
+              <TextRow fieldId="tok-r-md" label="MD" value={tokenRadius.md} placeholder="12px" onChange={(v) => setThemeTokens((p) => ({ ...p, radius: { ...(p.radius || {}), md: v } }))} />
+              <TextRow fieldId="tok-r-lg" label="LG" value={tokenRadius.lg} placeholder="16px" onChange={(v) => setThemeTokens((p) => ({ ...p, radius: { ...(p.radius || {}), lg: v } }))} />
+              <TextRow fieldId="tok-r-pill" label="Pill" value={tokenRadius.pill} placeholder="999px" onChange={(v) => setThemeTokens((p) => ({ ...p, radius: { ...(p.radius || {}), pill: v } }))} />
+            </div>
+          </Section>
+
+          <Section title="Token shadows">
+            <TextRow fieldId="tok-sh-sm" label="Shadow sm" value={tokenShadows.sm} placeholder="0 2px 8px rgba(15,23,42,0.10)" onChange={(v) => setThemeTokens((p) => ({ ...p, shadows: { ...(p.shadows || {}), sm: v } }))} />
+            <TextRow fieldId="tok-sh-md" label="Shadow md" value={tokenShadows.md} placeholder="0 10px 24px rgba(15,23,42,0.14)" onChange={(v) => setThemeTokens((p) => ({ ...p, shadows: { ...(p.shadows || {}), md: v } }))} />
+            <TextRow fieldId="tok-sh-lg" label="Shadow lg" value={tokenShadows.lg} placeholder="0 18px 42px rgba(15,23,42,0.16)" onChange={(v) => setThemeTokens((p) => ({ ...p, shadows: { ...(p.shadows || {}), lg: v } }))} />
+          </Section>
+
+          <Section title="Token motion">
+            <div className="bld-field-grid">
+              <TextRow fieldId="tok-m-fast" label="Fast" value={tokenMotion.fast} placeholder="140ms" onChange={(v) => setThemeTokens((p) => ({ ...p, motion: { ...(p.motion || {}), fast: v } }))} />
+              <TextRow fieldId="tok-m-base" label="Base" value={tokenMotion.base} placeholder="200ms" onChange={(v) => setThemeTokens((p) => ({ ...p, motion: { ...(p.motion || {}), base: v } }))} />
+              <TextRow fieldId="tok-m-slow" label="Slow" value={tokenMotion.slow} placeholder="320ms" onChange={(v) => setThemeTokens((p) => ({ ...p, motion: { ...(p.motion || {}), slow: v } }))} />
+            </div>
+            <TextRow fieldId="tok-m-easing" label="Easing" value={tokenMotion.easing} placeholder="cubic-bezier(0.16, 1, 0.3, 1)" onChange={(v) => setThemeTokens((p) => ({ ...p, motion: { ...(p.motion || {}), easing: v } }))} />
+          </Section>
+        </div>
+      </details>
+
+      <details className="bld-acc" style={{ marginTop: 10 }}>
+        <summary>Component presets &amp; variants</summary>
+        <div className="bld-acc__body">
+          <p className="bld-field-note" style={{ marginTop: 0 }}>
+            Presets are stored on <strong>projects.config_json.stylePresets</strong>. Nodes can attach via{' '}
+            <code>props.presetId</code> or by using a style variant (where supported).
+          </p>
+
+          <div className="bld-field-grid">
+            <div className="bld-field">
+              <label className="bld-label">Preset</label>
+              <select
+                className="bld-input"
+                value={activePresetId || ''}
+                onChange={(e) => setActivePresetId(e.target.value)}
+              >
+                <option value="">— Select preset —</option>
+                {presetsList.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name || p.id}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="bld-field">
+              <label className="bld-label">Create</label>
+              <button
+                type="button"
+                className="bld-btn bld-btn--primary"
+                onClick={() => {
+                  const id = `custom.${Date.now()}`;
+                  const next = normalizeStylePresets({
+                    ...presetsNorm,
+                    presets: [
+                      ...(presetsNorm.presets || []),
+                      {
+                        id,
+                        category: 'custom',
+                        nodeType: 'button',
+                        variant: 'custom',
+                        name: 'Custom preset',
+                        style_json: { desktop: {} },
+                      },
+                    ],
+                  });
+                  setStylePresets(next);
+                  setActivePresetId(id);
+                }}
+              >
+                New preset
+              </button>
+            </div>
+          </div>
+
+          {activePreset ? (
+            <>
+              <div className="bld-field-grid" style={{ marginTop: 10 }}>
+                <TextRow
+                  fieldId="preset-name"
+                  label="Name"
+                  value={activePreset.name || ''}
+                  onChange={(v) =>
+                    setStylePresets((prev) => {
+                      const cur = normalizeStylePresets(prev);
+                      return {
+                        ...cur,
+                        presets: (cur.presets || []).map((p) => (p.id === activePreset.id ? { ...p, name: v } : p)),
+                      };
+                    })
+                  }
+                />
+                <TextRow
+                  fieldId="preset-category"
+                  label="Category"
+                  value={activePreset.category || ''}
+                  placeholder="button / card / section / text / form ..."
+                  onChange={(v) =>
+                    setStylePresets((prev) => {
+                      const cur = normalizeStylePresets(prev);
+                      return {
+                        ...cur,
+                        presets: (cur.presets || []).map((p) =>
+                          p.id === activePreset.id ? { ...p, category: v } : p
+                        ),
+                      };
+                    })
+                  }
+                />
+                <TextRow
+                  fieldId="preset-node-type"
+                  label="Node type"
+                  value={activePreset.nodeType || ''}
+                  placeholder="button / row / content_card / heading ..."
+                  onChange={(v) =>
+                    setStylePresets((prev) => {
+                      const cur = normalizeStylePresets(prev);
+                      return {
+                        ...cur,
+                        presets: (cur.presets || []).map((p) =>
+                          p.id === activePreset.id ? { ...p, nodeType: v } : p
+                        ),
+                      };
+                    })
+                  }
+                />
+                <TextRow
+                  fieldId="preset-variant"
+                  label="Variant"
+                  value={activePreset.variant || ''}
+                  placeholder="primary / secondary / glass ..."
+                  onChange={(v) =>
+                    setStylePresets((prev) => {
+                      const cur = normalizeStylePresets(prev);
+                      return {
+                        ...cur,
+                        presets: (cur.presets || []).map((p) =>
+                          p.id === activePreset.id ? { ...p, variant: v } : p
+                        ),
+                      };
+                    })
+                  }
+                />
+              </div>
+
+              <div className="bld-field" style={{ marginTop: 10 }}>
+                <label className="bld-label">Preset style_json (responsive)</label>
+                <textarea
+                  className="bld-input"
+                  style={{ minHeight: 180, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}
+                  value={presetDraftJson}
+                  onChange={(e) => setPresetDraftJson(e.target.value)}
+                  placeholder='{"desktop": {"colors": {"backgroundColor": "token-color-primary"}}}'
+                />
+                <div className="bld-field-grid" style={{ marginTop: 8 }}>
+                  <button
+                    type="button"
+                    className="bld-chip"
+                    onClick={() => {
+                      try {
+                        const nextJson = JSON.parse(presetDraftJson || '{}');
+                        setStylePresets((prev) => {
+                          const cur = normalizeStylePresets(prev);
+                          return {
+                            ...cur,
+                            presets: (cur.presets || []).map((p) =>
+                              p.id === activePreset.id ? { ...p, style_json: nextJson } : p
+                            ),
+                          };
+                        });
+                      } catch {
+                        // ignore invalid JSON; keep draft
+                      }
+                    }}
+                  >
+                    Apply JSON
+                  </button>
+                  <button
+                    type="button"
+                    className="bld-chip"
+                    onClick={() => {
+                      const id = `copy.${Date.now()}`;
+                      setStylePresets((prev) => {
+                        const cur = normalizeStylePresets(prev);
+                        const src = cur.presets.find((p) => p.id === activePreset.id);
+                        if (!src) return cur;
+                        return {
+                          ...cur,
+                          presets: [...cur.presets, { ...src, id, name: `${src.name || src.id} (copy)` }],
+                        };
+                      });
+                      setActivePresetId(id);
+                    }}
+                  >
+                    Duplicate
+                  </button>
+                  <button
+                    type="button"
+                    className="bld-chip"
+                    onClick={() => {
+                      setStylePresets((prev) => {
+                        const cur = normalizeStylePresets(prev);
+                        return { ...cur, presets: (cur.presets || []).filter((p) => p.id !== activePreset.id) };
+                      });
+                      setActivePresetId('');
+                    }}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : null}
+        </div>
+      </details>
+
       <Section title="Typography">
         <TextRow fieldId="theme-ff-body" label="Body font" value={typography.fontFamily} onChange={(v) => patchTypo('fontFamily', v)} />
         <TextRow

@@ -60,6 +60,8 @@ import {
 } from '@/lib/dividerDefaults';
 import { boxSideDisplayValue, parseBoxShorthand } from '@/lib/parseBoxShorthand';
 import { buildInspectorStylePatch, parsePxValue as parsePxFromPatch } from '@/lib/inspectorStylePatch';
+import { getNodeCapabilities, inspectorTabsForNode } from '@/lib/nodeCapabilities';
+import { getInspectorExtensions } from '@/lib/pluginInspectorRegistry';
 import {
   clearInteractionGroup,
   interactionsForForm,
@@ -351,6 +353,30 @@ export default function BuilderInspector({
   const [internalTab, setInternalTab] = useState('content');
   const activeTab = activeTabProp || internalTab;
   const setActiveTab = onActiveTabChange || setInternalTab;
+
+  const availableTabs = useMemo(() => {
+    const nt = selectedNode?.nodeType || 'widget';
+    return inspectorTabsForNode(nt, { isTheme: activeTab === 'theme' });
+  }, [selectedNode?.nodeType, activeTab]);
+
+  const nodeCaps = useMemo(() => {
+    const nt = selectedNode?.nodeType || 'widget';
+    return getNodeCapabilities(nt, { selectedNode });
+  }, [selectedNode]);
+
+  const pluginPanelsForTab = useMemo(() => {
+    const exts = getInspectorExtensions();
+    const list = Array.isArray(exts?.inspectorPanels) ? exts.inspectorPanels : [];
+    return list.filter((p) => p && typeof p === 'object' && String(p.tabId || '') === String(activeTab || ''));
+  }, [activeTab]);
+
+  // Keep activeTab valid as selection changes (prevents rendering empty panels).
+  useEffect(() => {
+    const ids = new Set((availableTabs || []).map((t) => t.id));
+    if (!ids.has(activeTab)) {
+      setActiveTab(ids.has('content') ? 'content' : (availableTabs?.[0]?.id || 'content'));
+    }
+  }, [activeTab, availableTabs, setActiveTab]);
   const { siteTheme } = useBuilderTheme();
   const ixPreviewTimerRef = useRef(null);
   const ixSaveTimerRef = useRef(null);
@@ -631,6 +657,8 @@ export default function BuilderInspector({
     menuDdNestedDefaultOpen: false,
     menuUseProjectPages: false,
     menuVariant: 'pill',
+    stylePresetId: '',
+    styleVariant: '',
     menuAlign: 'center',
     menuMegaEnabled: false,
     menuMegaColumns: 2,
@@ -916,6 +944,11 @@ export default function BuilderInspector({
       menuDdNestedDefaultOpen: Boolean(style?.menu?.dropdown?.nestedDefaultOpen),
       menuUseProjectPages: Boolean(selectedNode.props?.useProjectPages),
       menuVariant: normalizeMenuVariant(selectedNode.props?.variant),
+      stylePresetId: selectedNode.props?.presetId || '',
+      styleVariant:
+        selectedNode.nodeType !== 'menu' && selectedNode.nodeType !== 'carousel'
+          ? String(selectedNode.props?.variant || '')
+          : '',
       menuAlign: normalizeMenuAlign(selectedNode.props?.align),
       menuMegaEnabled: Boolean(selectedNode.props?.mega?.enabled),
       menuMegaColumns: Number(selectedNode.props?.mega?.columns ?? 2),
@@ -1480,6 +1513,17 @@ export default function BuilderInspector({
     }
     if (key === 'menuVariant' && selectedNode.nodeType === 'menu') {
       await updateProps({ variant: normalizeMenuVariant(value) });
+    }
+    if (key === 'stylePresetId') {
+      const pid = String(value || '').trim();
+      await updateProps({ presetId: pid });
+      return;
+    }
+    if (key === 'styleVariant') {
+      // Only use `props.variant` as a style variant for node types that don't already use it for behavior.
+      if (selectedNode.nodeType === 'menu' || selectedNode.nodeType === 'carousel') return;
+      await updateProps({ variant: String(value || '').trim() });
+      return;
     }
     if (key === 'menuAlign' && selectedNode.nodeType === 'menu') {
       await updateProps({ align: normalizeMenuAlign(value) });
@@ -2542,7 +2586,7 @@ export default function BuilderInspector({
             disabled={Boolean(selectedNode && editingDisabledBySectionLock)}
           />
         ) : null}
-        <InspectorTabs activeTab={activeTab} onChange={setActiveTab} />
+        <InspectorTabs activeTab={activeTab} onChange={setActiveTab} tabs={availableTabs} />
         {nestedFeatureTabsNode && typeof onSelectNode === 'function' ? (
           <div className="bld-panel" style={{ paddingTop: 10, paddingBottom: 10 }}>
             <p className="bld-field-note" style={{ margin: '0 0 10px' }}>
@@ -2648,6 +2692,7 @@ export default function BuilderInspector({
       {activeTab === 'style' ? (
         <StylePanel
           selectedNode={selectedNode}
+          capabilities={nodeCaps}
           form={form}
           onChange={handleStyleChange}
           onPatchForm={patchForm}
@@ -2696,6 +2741,31 @@ export default function BuilderInspector({
           isApplyingResponsive={isApplyingResponsive}
         />
       ) : null}
+
+      {pluginPanelsForTab.length
+        ? pluginPanelsForTab
+            .filter((p) => {
+              try {
+                return typeof p.shouldRender === 'function'
+                  ? Boolean(p.shouldRender(selectedNode, { capabilities: nodeCaps, activeTab }))
+                  : true;
+              } catch {
+                return false;
+              }
+            })
+            .map((p) => {
+              try {
+                return p.render({
+                  selectedNode,
+                  form,
+                  capabilities: nodeCaps,
+                  activeTab,
+                });
+              } catch {
+                return null;
+              }
+            })
+        : null}
       </div>
     </div>
   );

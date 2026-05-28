@@ -354,9 +354,8 @@ function dropCollisionDetection(args) {
   return closestCenter(args);
 }
 
-function renderNodeContent(
-  node,
-  {
+function renderNodeContent(node, renderOpts = {}) {
+  const {
     isInlineEditing,
     inlineDraftText,
     onInlineDraftChange,
@@ -386,8 +385,8 @@ function renderNodeContent(
     insideSiteHeaderRow = false,
     builderPageId = null,
     builderProjectId = null,
-  }
-) {
+  } = renderOpts;
+  const liveStylePresets = renderOpts.stylePresets ?? null;
   const bind = (s) => (cmsBindingContext ? applyBindingsToString(String(s || ''), cmsBindingContext) : s);
 
   const builderCanvasHooks =
@@ -418,6 +417,7 @@ function renderNodeContent(
   const liveRenderOptions = buildBuilderLiveRenderOptions({
     device: device || 'desktop',
     siteTheme,
+    stylePresets: liveStylePresets,
     insideSiteHeaderRow,
     builderCanvas: builderCanvasHooks,
     pageId: builderPageId,
@@ -1162,7 +1162,7 @@ function NodeRenderer({
   const inlineEditWrapRef = useRef(null);
   const [floatingToolbarPos, setFloatingToolbarPos] = useState(null);
   const [quickTextToolbarPos, setQuickTextToolbarPos] = useState(null);
-  const { siteTheme, theme } = useBuilderTheme();
+  const { siteTheme, theme, stylePresets } = useBuilderTheme();
   /** Persist stripping only for dark *site* preset so light sites are not rewritten when only builder UI is dark. */
   const neutralizeBodyColorsPersist = normalizeSiteTheme(siteTheme).presetId === 'dark';
   /** Preview: dark site or dark builder chrome — pasted inline neutrals must not disappear on dark surfaces. */
@@ -3475,6 +3475,7 @@ function NodeRenderer({
                   onFaqAccordionPatch: faqAccordionPatchHandler,
                   onFaqAccordionAddItem: faqAccordionAddItemHandler,
                   siteTheme,
+                  stylePresets,
                   insideSiteHeaderRow,
                   builderPageId,
                   builderProjectId,
@@ -3508,6 +3509,7 @@ function NodeRenderer({
                 onFaqAccordionPatch: faqAccordionPatchHandler,
                 onFaqAccordionAddItem: faqAccordionAddItemHandler,
                 siteTheme,
+                stylePresets,
                 insideSiteHeaderRow,
                 builderPageId,
                 builderProjectId,

@@ -2,6 +2,7 @@
 
 import { useContext } from 'react';
 import { RuntimeDataContext, RuntimeProvider } from './RuntimeProvider';
+import { CartProvider } from './CartProvider';
 
 /**
  * Ensures runtime context for a single client leaf (form, table, action button)
@@ -9,6 +10,10 @@ import { RuntimeDataContext, RuntimeProvider } from './RuntimeProvider';
  */
 export function RuntimeLeafProvider({ children }) {
   const ctx = useContext(RuntimeDataContext);
-  if (ctx) return children;
-  return <RuntimeProvider>{children}</RuntimeProvider>;
+  if (ctx) return <CartProvider>{children}</CartProvider>;
+  return (
+    <RuntimeProvider>
+      <CartProvider>{children}</CartProvider>
+    </RuntimeProvider>
+  );
 }

@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
-import BuilderShell from '@/components/builder/BuilderShell';
+import BuilderShellClient from './BuilderShellClient';
 import { adminBuilderPagePath } from '@/lib/builder/adminBuilderRoutes';
 import { isPublicSlug, resolveMaybeAsyncParams } from '@/lib/routeParams';
 import { getPageIdByProjectAndPageSlug, getPageRoutingInfo } from '@/services/builder/builderService';
@@ -46,5 +46,5 @@ export default async function AdminBuilderEditorPage({ params }) {
     notFound();
   }
 
-  return <BuilderShell pageId={pageId} />;
+  return <BuilderShellClient pageId={pageId} />;
 }

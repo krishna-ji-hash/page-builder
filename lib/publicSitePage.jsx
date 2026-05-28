@@ -5,6 +5,7 @@ import { getPublishedPageForPublic } from '@/services/site/publishedPageService'
 import PublishedLiveTree from '@/components/live/PublishedLiveTree';
 import { getPageVarsBucket, livePageCssVarOverridesForPage, resolveBodyLayout } from '@/lib/livePageCssVars';
 import { normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesignTheme';
+import { normalizeThemeTokens, themeTokensToCssVariableStyle } from '@/lib/themeTokens';
 import { buildRenderNodesWithGlobals } from '@/lib/globalSectionMerge';
 import { isPublicSlug } from '@/lib/routeParams';
 import { publicPagePathForSeo } from '@/lib/publicSiteUrls';
@@ -96,6 +97,8 @@ export default async function PublicSitePageView({ projectSlug, pageSlug, search
   const currentPath = publicPagePathForSeo(projectSlug, pageSlug);
   const siteTheme = normalizeSiteTheme(page.projectConfig?.siteTheme);
   const siteCssVars = siteThemeToCssVariableStyle(siteTheme);
+  const themeTokens = normalizeThemeTokens(page.projectConfig?.themeTokens);
+  const tokenVars = themeTokensToCssVariableStyle(themeTokens);
   const pageVars = getPageVarsBucket(siteTheme, pageSlug);
   const stickyHeader = Boolean(pageVars?.stickyHeader);
   const bodyLayout = resolveBodyLayout(siteTheme, pageSlug);
@@ -122,6 +125,7 @@ export default async function PublicSitePageView({ projectSlug, pageSlug, search
       data-live-body-layout={bodyLayout}
       style={{
         ...siteCssVars,
+        ...tokenVars,
         ...livePageCssVarOverridesForPage(siteTheme, pageSlug),
         fontFamily: siteTheme.typography.fontFamily,
       }}

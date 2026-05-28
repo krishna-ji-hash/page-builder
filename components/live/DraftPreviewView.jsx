@@ -1,6 +1,7 @@
 import PublishedLiveTree from '@/components/live/PublishedLiveTree';
 import { getPageVarsBucket, livePageCssVarOverridesForPage, resolveBodyLayout } from '@/lib/livePageCssVars';
 import { normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesignTheme';
+import { normalizeThemeTokens, themeTokensToCssVariableStyle } from '@/lib/themeTokens';
 import { buildRenderNodesWithGlobals } from '@/lib/globalSectionMerge';
 import { expandLinkedGlobalComponents } from '@/lib/globalComponentExpand';
 import { expandCms } from '@/lib/cms/cmsExpand';
@@ -76,6 +77,8 @@ export default async function DraftPreviewView({ pageId }) {
   }));
   const siteTheme = normalizeSiteTheme(state.page?.projectConfig?.siteTheme);
   const siteCssVars = siteThemeToCssVariableStyle(siteTheme);
+  const themeTokens = normalizeThemeTokens(state.page?.projectConfig?.themeTokens);
+  const tokenVars = themeTokensToCssVariableStyle(themeTokens);
   const pageSlug = state.page.slug;
   const pageVars = getPageVarsBucket(siteTheme, pageSlug);
   const stickyHeader = Boolean(pageVars?.stickyHeader);
@@ -91,6 +94,7 @@ export default async function DraftPreviewView({ pageId }) {
       data-live-body-layout={bodyLayout}
       style={{
         ...siteCssVars,
+        ...tokenVars,
         ...livePageCssVarOverridesForPage(siteTheme, pageSlug),
         fontFamily: siteTheme.typography.fontFamily,
       }}

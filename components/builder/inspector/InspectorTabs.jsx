@@ -1,6 +1,6 @@
 'use client';
 
-const TABS = [
+const DEFAULT_TABS = [
   { id: 'content', label: 'Content', icon: '✎' },
   { id: 'layout', label: 'Layout', icon: '▦' },
   { id: 'style', label: 'Style', icon: '◐' },
@@ -10,10 +10,10 @@ const TABS = [
   { id: 'theme', label: 'Theme', icon: '◆' },
 ];
 
-export default function InspectorTabs({ activeTab, onChange }) {
+export default function InspectorTabs({ activeTab, onChange, tabs = DEFAULT_TABS }) {
   return (
     <div className="bld-inspector-tabs bld-inspector-tabs--pro" role="tablist" aria-label="Inspector tabs">
-      {TABS.map((tab) => (
+      {(Array.isArray(tabs) ? tabs : DEFAULT_TABS).map((tab) => (
         <button
           key={tab.id}
           type="button"

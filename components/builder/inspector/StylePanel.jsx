@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import TypographyControls from './TypographyControls';
 import ColorControls from './ColorControls';
 import SpacingControls from './SpacingControls';
@@ -10,9 +11,12 @@ import EffectsControls from './EffectsControls';
 import TransformEffectsControls from './TransformEffectsControls';
 import StylePresetsPanel from './StylePresetsPanel';
 import { InspectorPanel, InspectorSection } from './InspectorUi';
+import { useBuilderTheme } from '@/context/BuilderThemeContext';
+import { normalizeStylePresets } from '@/lib/stylePresetsStore';
 
 export default function StylePanel({
   selectedNode,
+  capabilities,
   form,
   onChange,
   onPatchForm,
@@ -32,6 +36,18 @@ export default function StylePanel({
   }
 
   const isFeatureTabs = selectedNode?.nodeType === 'tabs';
+  const caps = capabilities || {};
+  const { stylePresets } = useBuilderTheme();
+  const presets = useMemo(() => normalizeStylePresets(stylePresets).presets || [], [stylePresets]);
+  const presetOptions = useMemo(
+    () => presets.filter((p) => p.nodeType === selectedNode?.nodeType),
+    [presets, selectedNode?.nodeType]
+  );
+  const showPresetUi =
+    selectedNode?.nodeType &&
+    selectedNode.nodeType !== 'menu' &&
+    selectedNode.nodeType !== 'carousel' &&
+    (presetOptions.length > 0 || String(form.stylePresetId || '').trim() !== '' || String(form.styleVariant || '').trim() !== '');
 
   return (
     <InspectorPanel title="Style">
@@ -43,19 +59,67 @@ export default function StylePanel({
         </p>
       ) : null}
 
-      <InspectorSection title="Typography" defaultOpen keywords="font size weight line height text">
-        <TypographyControls form={form} onUpdate={onChange} selectedNodeType={selectedNode?.nodeType || ''} />
-      </InspectorSection>
+      {showPresetUi ? (
+        <InspectorSection title="Preset & variant" defaultOpen keywords="preset variant reusable styles">
+          <div className="bld-field-grid">
+            <div className="bld-field">
+              <label className="bld-label">Preset</label>
+              <select
+                className="bld-input"
+                value={String(form.stylePresetId || '')}
+                onChange={(e) => onChange('stylePresetId', e.target.value)}
+              >
+                <option value="">— None —</option>
+                {presetOptions.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name || p.id}
+                  </option>
+                ))}
+              </select>
+              <p className="bld-field-note">Attach a global preset via <code>props.presetId</code>.</p>
+            </div>
+            <div className="bld-field">
+              <label className="bld-label">Variant</label>
+              <input
+                className="bld-input"
+                value={String(form.styleVariant || '')}
+                onChange={(e) => onChange('styleVariant', e.target.value)}
+                placeholder="primary / secondary / glass"
+              />
+              <p className="bld-field-note">Uses <code>props.variant</code> for style (not menu/carousel).</p>
+            </div>
+          </div>
+          <div className="bld-field-grid" style={{ marginTop: 8 }}>
+            <button type="button" className="bld-chip" onClick={() => onChange('stylePresetId', '')}>
+              Detach preset
+            </button>
+            <button type="button" className="bld-chip" onClick={() => onChange('styleVariant', '')}>
+              Clear variant
+            </button>
+          </div>
+        </InspectorSection>
+      ) : null}
 
-      <InspectorSection title="Colors" keywords="text background fill">
-        <ColorControls form={form} onUpdate={onChange} showBackground={false} />
-      </InspectorSection>
+      {caps.supportsTypography !== false ? (
+        <InspectorSection title="Typography" defaultOpen keywords="font size weight line height text">
+          <TypographyControls form={form} onUpdate={onChange} selectedNodeType={selectedNode?.nodeType || ''} />
+        </InspectorSection>
+      ) : null}
 
-      <InspectorSection title="Background" keywords="image gradient overlay">
-        <BackgroundControls form={form} onUpdate={onChange} projectId={projectId} selectedNode={selectedNode} />
-      </InspectorSection>
+      {caps.supportsTypography !== false || caps.supportsBackground !== false ? (
+        <InspectorSection title="Colors" keywords="text background fill">
+          <ColorControls form={form} onUpdate={onChange} showBackground={false} />
+        </InspectorSection>
+      ) : null}
 
-      <InspectorSection title="Spacing" defaultOpen={selectedNode?.nodeType === 'row'} keywords="margin padding box">
+      {caps.supportsBackground !== false ? (
+        <InspectorSection title="Background" keywords="image gradient overlay">
+          <BackgroundControls form={form} onUpdate={onChange} projectId={projectId} selectedNode={selectedNode} />
+        </InspectorSection>
+      ) : null}
+
+      {caps.supportsSpacing !== false ? (
+        <InspectorSection title="Spacing" defaultOpen={selectedNode?.nodeType === 'row'} keywords="margin padding box">
         {selectedNode?.nodeType === 'row' ? (
           <p className="bld-field-note" style={{ marginTop: 0, marginBottom: 10 }}>
             Padding controls inner section space. Use linked sides or drag values in the box model.
@@ -71,19 +135,24 @@ export default function StylePanel({
           onActiveSpacingEdit={onActiveSpacingEdit}
           selectedNodeId={selectedNode?.id}
         />
-      </InspectorSection>
+        </InspectorSection>
+      ) : null}
 
-      <InspectorSection title="Border" keywords="radius width color outline">
-        <BorderControls form={form} onUpdate={onChange} />
-      </InspectorSection>
+      {caps.supportsBorder !== false ? (
+        <InspectorSection title="Border" keywords="radius width color outline">
+          <BorderControls form={form} onUpdate={onChange} />
+        </InspectorSection>
+      ) : null}
 
-      <InspectorSection title="Shadow & opacity" keywords="box shadow opacity">
-        <EffectsControls form={form} onUpdate={onChange} selectedNode={selectedNode} />
-      </InspectorSection>
+      {caps.supportsEffects !== false ? (
+        <InspectorSection title="Shadow & opacity" keywords="box shadow opacity">
+          <EffectsControls form={form} onUpdate={onChange} selectedNode={selectedNode} />
+        </InspectorSection>
+      ) : null}
 
-      <TransformEffectsControls form={form} onUpdate={onChange} />
+      {caps.supportsTransform !== false ? <TransformEffectsControls form={form} onUpdate={onChange} /> : null}
 
-      {selectedNode.nodeType === 'menu' ? (
+      {selectedNode.nodeType === 'menu' && caps.supportsMenu !== false ? (
         <InspectorSection title="Menu" keywords="navigation links">
           <MenuControls form={form} onUpdate={onChange} />
         </InspectorSection>

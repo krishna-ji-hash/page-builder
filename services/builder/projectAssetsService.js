@@ -1,5 +1,7 @@
 import { getDbPool } from '@/lib/db';
 import { normalizeSiteTheme, SITE_THEME_SCHEMA_VERSION } from '@/lib/siteDesignTheme';
+import { normalizeThemeTokens, THEME_TOKENS_SCHEMA_VERSION } from '@/lib/themeTokens';
+import { normalizeStylePresets, STYLE_PRESETS_SCHEMA_VERSION } from '@/lib/stylePresetsStore';
 import { getBuilderState } from '@/services/builder/builderService';
 import { autoFixTree, reconcileStructuralParents, validateTree } from '@/lib/builderTree';
 
@@ -271,6 +273,70 @@ export async function saveSiteTheme({ projectId, siteTheme, ifRevision }) {
   const nextConfig = {
     ...(project.config || {}),
     siteTheme: normalized,
+  };
+  await saveProjectConfig(prid, nextConfig);
+  return normalized;
+}
+
+/**
+ * Persist project-wide design tokens on `projects.config_json.themeTokens`.
+ * @param {number} projectId
+ * @param {object} themeTokens
+ * @param {number} [ifRevision]
+ */
+export async function saveThemeTokens({ projectId, themeTokens, ifRevision }) {
+  const prid = Number(projectId);
+  if (!Number.isInteger(prid) || prid <= 0) throw new Error('Invalid projectId');
+  const project = await getProjectConfig(prid);
+  if (!project) throw new Error('Project not found');
+  const current = project.config?.themeTokens;
+  const currentRev =
+    typeof current?.revision === 'number' && Number.isFinite(current.revision)
+      ? Math.max(0, Math.floor(current.revision))
+      : 0;
+  if (ifRevision !== undefined && ifRevision !== null && Number(ifRevision) !== currentRev) {
+    const err = new Error('REVISION_CONFLICT');
+    err.code = 'REVISION_CONFLICT';
+    throw err;
+  }
+  const normalized = normalizeThemeTokens(themeTokens);
+  normalized.revision = currentRev + 1;
+  normalized.schemaVersion = THEME_TOKENS_SCHEMA_VERSION;
+  const nextConfig = {
+    ...(project.config || {}),
+    themeTokens: normalized,
+  };
+  await saveProjectConfig(prid, nextConfig);
+  return normalized;
+}
+
+/**
+ * Persist reusable style presets on `projects.config_json.stylePresets`.
+ * @param {number} projectId
+ * @param {object} stylePresets
+ * @param {number} [ifRevision]
+ */
+export async function saveStylePresets({ projectId, stylePresets, ifRevision }) {
+  const prid = Number(projectId);
+  if (!Number.isInteger(prid) || prid <= 0) throw new Error('Invalid projectId');
+  const project = await getProjectConfig(prid);
+  if (!project) throw new Error('Project not found');
+  const current = project.config?.stylePresets;
+  const currentRev =
+    typeof current?.revision === 'number' && Number.isFinite(current.revision)
+      ? Math.max(0, Math.floor(current.revision))
+      : 0;
+  if (ifRevision !== undefined && ifRevision !== null && Number(ifRevision) !== currentRev) {
+    const err = new Error('REVISION_CONFLICT');
+    err.code = 'REVISION_CONFLICT';
+    throw err;
+  }
+  const normalized = normalizeStylePresets(stylePresets);
+  normalized.revision = currentRev + 1;
+  normalized.schemaVersion = STYLE_PRESETS_SCHEMA_VERSION;
+  const nextConfig = {
+    ...(project.config || {}),
+    stylePresets: normalized,
   };
   await saveProjectConfig(prid, nextConfig);
   return normalized;

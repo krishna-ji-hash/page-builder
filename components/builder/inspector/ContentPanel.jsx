@@ -543,7 +543,7 @@ export default function ContentPanel({
                 <select
                   className="bld-input"
                   value={String(form.menuMobileBreakpointPx ?? 1024)}
-                  onChange={(e) => onChange('menuMobileBreakpointPx', Number(e.target.value))}
+                  onChange={(e) => onChange('menuMobileBreakpointPx', e.target.value)}
                   disabled={!form.menuMobileEnabled}
                 >
                   <option value="768">768px — phone only</option>
