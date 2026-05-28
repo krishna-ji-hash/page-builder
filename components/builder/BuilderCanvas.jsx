@@ -926,7 +926,11 @@ function NodeRenderer({
     const target = event.target;
     const tagName = target?.tagName?.toLowerCase?.() || '';
     const isEditableTarget =
-      target?.isContentEditable || tagName === 'input' || tagName === 'textarea' || tagName === 'select';
+      target?.isContentEditable ||
+      tagName === 'input' ||
+      tagName === 'textarea' ||
+      tagName === 'select' ||
+      tagName === 'option';
     if (isEditableTarget) return;
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();

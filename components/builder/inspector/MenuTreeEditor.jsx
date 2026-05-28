@@ -171,6 +171,76 @@ function SortableRow({ item, depth, collapsed, onToggleCollapse, selectedId, onS
             <input className="bld-input" value={String(item.description || '')} onChange={(e) => onPatch(item.id, { description: e.target.value })} />
           </div>
 
+          <details className="bld-acc" style={{ marginTop: 10 }} open>
+            <summary>Text style</summary>
+            <div className="bld-field-grid" style={{ marginTop: 10 }}>
+              <div className="bld-field">
+                <label className="bld-label">Text color</label>
+                <input
+                  type="color"
+                  className="bld-input"
+                  value={String(item.textStyle?.color || '#0f172a')}
+                  onChange={(e) => onPatch(item.id, { textStyle: { ...(item.textStyle || {}), color: e.target.value } })}
+                />
+              </div>
+              <div className="bld-field">
+                <label className="bld-label">Text wrap</label>
+                <select
+                  className="bld-input"
+                  value={item.textStyle?.noWrap ? 'nowrap' : 'wrap'}
+                  onChange={(e) =>
+                    onPatch(item.id, { textStyle: { ...(item.textStyle || {}), noWrap: e.target.value === 'nowrap' } })
+                  }
+                >
+                  <option value="wrap">Wrap</option>
+                  <option value="nowrap">No wrap</option>
+                </select>
+              </div>
+              <div className="bld-field">
+                <label className="bld-label">Underline</label>
+                <select
+                  className="bld-input"
+                  value={item.textStyle?.underline ? 'yes' : 'no'}
+                  onChange={(e) =>
+                    onPatch(item.id, { textStyle: { ...(item.textStyle || {}), underline: e.target.value === 'yes' } })
+                  }
+                >
+                  <option value="no">No</option>
+                  <option value="yes">Underline</option>
+                </select>
+              </div>
+              <div className="bld-field">
+                <label className="bld-label">Font weight</label>
+                <select
+                  className="bld-input"
+                  value={String(Number(item.textStyle?.fontWeight) || 0)}
+                  onChange={(e) =>
+                    onPatch(item.id, { textStyle: { ...(item.textStyle || {}), fontWeight: Number(e.target.value) || 0 } })
+                  }
+                >
+                  <option value="0">Inherit</option>
+                  <option value="400">Regular</option>
+                  <option value="600">Semi-bold</option>
+                  <option value="700">Bold</option>
+                  <option value="800">Extra-bold</option>
+                </select>
+              </div>
+              <div className="bld-field">
+                <label className="bld-label">Italic</label>
+                <select
+                  className="bld-input"
+                  value={item.textStyle?.italic ? 'yes' : 'no'}
+                  onChange={(e) =>
+                    onPatch(item.id, { textStyle: { ...(item.textStyle || {}), italic: e.target.value === 'yes' } })
+                  }
+                >
+                  <option value="no">No</option>
+                  <option value="yes">Italic</option>
+                </select>
+              </div>
+            </div>
+          </details>
+
           <details className="bld-acc" style={{ marginTop: 10 }}>
             <summary>Mega menu (per item)</summary>
             <div className="bld-field" style={{ marginTop: 10 }}>
@@ -308,9 +378,10 @@ export default function MenuTreeEditor({ value, onChange }) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const emit = (next) => {
-    const normalized = normalizeMenuItems(next).items;
-    setItems(normalized);
-    onChange?.(normalized);
+    // Keep raw edits while typing (esp. trailing spaces) so controlled inputs behave naturally.
+    // Runtime and initial load still normalize for safety.
+    setItems(next);
+    onChange?.(next);
   };
 
   const toggleCollapse = (id) => {

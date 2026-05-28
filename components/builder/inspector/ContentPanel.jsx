@@ -405,6 +405,27 @@ export default function ContentPanel({
             <input className="bld-input" value={form.alt || ''} onChange={(e) => onChange('alt', e.target.value)} />
           </div>
           <div className="bld-field">
+            <label className="bld-label">Link URL (on click)</label>
+            <input
+              className="bld-input"
+              value={form.href || ''}
+              onChange={(e) => onChange('href', e.target.value)}
+              placeholder="https://... or /page"
+            />
+            <div style={{ marginTop: 8, display: 'flex', gap: 10, alignItems: 'center' }}>
+              <input
+                id="image-open-new-tab"
+                type="checkbox"
+                checked={Boolean(form.openInNewTab)}
+                onChange={(e) => onChange('openInNewTab', e.target.checked)}
+              />
+              <label className="bld-label" htmlFor="image-open-new-tab" style={{ margin: 0 }}>
+                Open in new tab
+              </label>
+            </div>
+            <p className="bld-field-note">Leave empty to disable click link.</p>
+          </div>
+          <div className="bld-field">
             <label className="bld-label">Image fit (object-fit)</label>
             <select className="bld-input" value={form.imageFit || 'cover'} onChange={(e) => onChange('imageFit', e.target.value)}>
               <option value="cover">Cover — fills frame, may crop</option>

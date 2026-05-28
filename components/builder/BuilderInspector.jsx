@@ -162,7 +162,11 @@ function mergeStyleForDevice(selectedNode, device, patch, siteTheme, styleJsonOv
     background: { ...(currentDevice.background || {}), ...(patch.background || {}) },
     effects: { ...(currentDevice.effects || {}), ...(patch.effects || {}) },
     border: { ...(currentDevice.border || {}), ...(patch.border || {}) },
-    menu: { ...(currentDevice.menu || {}), ...(patch.menu || {}) },
+    menu: {
+      ...(currentDevice.menu || {}),
+      ...(patch.menu || {}),
+      dropdown: { ...(currentDevice.menu?.dropdown || {}), ...(patch.menu?.dropdown || {}) },
+    },
     transform: { ...(currentDevice.transform || {}), ...(patch.transform || {}) },
   };
   if (Object.prototype.hasOwnProperty.call(patch, 'interactions')) {
@@ -529,6 +533,7 @@ export default function BuilderInspector({
   const [form, setForm] = useState({
     text: '',
     href: '',
+    openInNewTab: false,
     alignment: 'left',
     size: 'medium',
     src: '',
@@ -606,6 +611,24 @@ export default function BuilderInspector({
     menuBorderRadius: '20px',
     menuHoverColor: '#6366f1',
     menuHoverBg: '#f1f5ff',
+    menuDdItemFontSizePx: 0,
+    menuDdItemPadding: '',
+    menuDdWidth: '',
+    menuDdMinWidth: '',
+    menuDdMaxWidth: '',
+    menuDdOverflow: 'visible',
+    menuDdChevronVariant: 'chevron',
+    menuDdChevronSizePx: 0,
+    menuDdChevronGapPx: 0,
+    menuDdShadow: '',
+    menuDdBorderRadiusPx: 0,
+    menuDdItemGapPx: 0,
+    menuDdOffsetXPx: 0,
+    menuDdOffsetYPx: 0,
+    menuDdNestedIndentPx: 0,
+    menuDdNestedGapPx: 0,
+    menuDdNestedMode: 'toggle',
+    menuDdNestedDefaultOpen: false,
     menuUseProjectPages: false,
     menuVariant: 'pill',
     menuAlign: 'center',
@@ -744,6 +767,7 @@ export default function BuilderInspector({
     setForm({
       text: selectedNode.props?.text || '',
       href: selectedNode.props?.href || '',
+      openInNewTab: Boolean(selectedNode.props?.openInNewTab),
       alignment: style?.typography?.textAlign || 'left',
       size: selectedNode.props?.size || 'medium',
       src: selectedNode.props?.src || '',
@@ -872,6 +896,24 @@ export default function BuilderInspector({
       menuBorderRadius: style?.menu?.borderRadius || '20px',
       menuHoverColor: style?.menu?.hoverColor || '#6366f1',
       menuHoverBg: style?.menu?.hoverBg || '#f1f5ff',
+      menuDdItemFontSizePx: Number(style?.menu?.dropdown?.itemFontSizePx || 0),
+      menuDdItemPadding: style?.menu?.dropdown?.itemPadding || '',
+      menuDdWidth: style?.menu?.dropdown?.width || '',
+      menuDdMinWidth: style?.menu?.dropdown?.minWidth || '',
+      menuDdMaxWidth: style?.menu?.dropdown?.maxWidth || '',
+      menuDdOverflow: style?.menu?.dropdown?.overflow || 'visible',
+      menuDdChevronVariant: style?.menu?.dropdown?.chevronVariant || 'chevron',
+      menuDdChevronSizePx: Number(style?.menu?.dropdown?.chevronSizePx || 0),
+      menuDdChevronGapPx: Number(style?.menu?.dropdown?.chevronGapPx || 0),
+      menuDdShadow: style?.menu?.dropdown?.shadow || '',
+      menuDdBorderRadiusPx: Number(style?.menu?.dropdown?.borderRadiusPx || 0),
+      menuDdItemGapPx: Number(style?.menu?.dropdown?.itemGapPx || 0),
+      menuDdOffsetXPx: Number(style?.menu?.dropdown?.offsetXPx || 0),
+      menuDdOffsetYPx: Number(style?.menu?.dropdown?.offsetYPx || 0),
+      menuDdNestedIndentPx: Number(style?.menu?.dropdown?.nestedIndentPx || 0),
+      menuDdNestedGapPx: Number(style?.menu?.dropdown?.nestedGapPx || 0),
+      menuDdNestedMode: style?.menu?.dropdown?.nestedMode || 'toggle',
+      menuDdNestedDefaultOpen: Boolean(style?.menu?.dropdown?.nestedDefaultOpen),
       menuUseProjectPages: Boolean(selectedNode.props?.useProjectPages),
       menuVariant: normalizeMenuVariant(selectedNode.props?.variant),
       menuAlign: normalizeMenuAlign(selectedNode.props?.align),
@@ -1391,6 +1433,7 @@ export default function BuilderInspector({
     }
     if (key === 'text') await updateProps({ text: value });
     if (key === 'href') await updateProps({ href: value });
+    if (key === 'openInNewTab') await updateProps({ openInNewTab: Boolean(value) });
     if (key === 'size') await updateProps({ size: value });
     if (key === 'src') await updateProps({ src: value });
     if (key === 'alt') await updateProps({ alt: value });

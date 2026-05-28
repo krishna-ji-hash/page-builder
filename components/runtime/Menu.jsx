@@ -109,10 +109,22 @@ function trapTab(e, rootEl) {
   }
 }
 
-function Chevron({ open }) {
+function Chevron({ open, variant = 'caret' }) {
+  const v = String(variant || 'caret').trim().toLowerCase();
+  const glyph =
+    v === 'none'
+      ? ''
+      : v === 'triangle'
+        ? '▼'
+        : v === 'chevron'
+          ? '⌄'
+          : v === 'plus'
+            ? '+'
+            : '▾';
+  if (!glyph) return null;
   return (
     <span className={`menu__chev ${open ? 'is-open' : ''}`.trim()} aria-hidden="true">
-      ▾
+      {glyph}
     </span>
   );
 }
@@ -120,6 +132,16 @@ function Chevron({ open }) {
 function MenuLink({ item, currentPath, depth, onNavigate, className }) {
   const active = isActiveMenuTo(item.to, currentPath);
   const rel = item.target === '_blank' ? 'noopener noreferrer' : undefined;
+  const labelStyle =
+    item?.textStyle && typeof item.textStyle === 'object'
+      ? {
+          ...(item.textStyle.color ? { color: item.textStyle.color } : {}),
+          ...(item.textStyle.underline ? { textDecoration: 'underline' } : {}),
+          ...(item.textStyle.noWrap ? { whiteSpace: 'nowrap' } : {}),
+          ...(item.textStyle.italic ? { fontStyle: 'italic' } : {}),
+          ...(Number(item.textStyle.fontWeight) > 0 ? { fontWeight: Number(item.textStyle.fontWeight) } : {}),
+        }
+      : undefined;
   return (
     <a
       href={item.to || '#'}
@@ -135,17 +157,71 @@ function MenuLink({ item, currentPath, depth, onNavigate, className }) {
       }}
     >
       {item.icon ? <span className="menu-item__icon" aria-hidden="true">{item.icon}</span> : null}
-      <span className="menu-item__label">{item.label}</span>
+      <span className="menu-item__label" style={labelStyle}>
+        {item.label}
+      </span>
       {item.description && depth > 1 ? <span className="menu-item__desc">{item.description}</span> : null}
     </a>
   );
 }
 
-function DesktopDropdown({ item, currentPath, onNavigate, preferMega }) {
+function DesktopDropdown({ item, currentPath, onNavigate, preferMega, dropdownStyle = null }) {
   const [open, setOpen] = useState(false);
+  const [alignRight, setAlignRight] = useState(false);
+  const [panelShiftX, setPanelShiftX] = useState(0);
+  const [expanded, setExpanded] = useState({});
+  const alignRightRef = useRef(false);
+  const panelShiftXRef = useRef(0);
+  const closeTimerRef = useRef(0);
   const btnRef = useRef(null);
   const panelRef = useRef(null);
   const isMega = Boolean(preferMega && item.mega?.enabled);
+
+  // Reset nested expansion state each time dropdown opens/closes.
+  useEffect(() => {
+    setExpanded({});
+  }, [open]);
+
+  // Measure + clamp in a layout pass so the rect reflects the applied transform.
+  useEffect(() => {
+    alignRightRef.current = alignRight;
+    panelShiftXRef.current = panelShiftX;
+  }, [alignRight, panelShiftX]);
+
+  useEffect(() => {
+    if (!open) {
+      setAlignRight(false);
+      setPanelShiftX(0);
+      return undefined;
+    }
+    const el = panelRef.current;
+    if (!el || typeof window === 'undefined') return undefined;
+    const pad = 10;
+    let raf = 0;
+
+    const sync = () => {
+      const r = el.getBoundingClientRect();
+      const vw = window.innerWidth || 0;
+      const nextAlignRight = vw > 0 && r.right > vw - pad && r.left > pad;
+
+      let dx = 0;
+      if (vw > 0) {
+        if (r.right > vw - pad) dx -= r.right - (vw - pad);
+        if (r.left + dx < pad) dx += pad - (r.left + dx);
+      }
+      if (Math.abs(panelShiftXRef.current - dx) >= 0.5) setPanelShiftX(dx);
+      if (alignRightRef.current !== nextAlignRight) setAlignRight(nextAlignRight);
+    };
+
+    // Run twice: initial paint + after potential class/transform updates.
+    sync();
+    raf = window.requestAnimationFrame(() => sync());
+    window.addEventListener('resize', sync);
+    return () => {
+      window.removeEventListener('resize', sync);
+      if (raf) window.cancelAnimationFrame(raf);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -159,10 +235,35 @@ function DesktopDropdown({ item, currentPath, onNavigate, preferMega }) {
     return () => document.removeEventListener('mousedown', onDoc);
   }, [open]);
 
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
+    };
+  }, []);
+
+  const clearCloseTimer = () => {
+    if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = 0;
+  };
+
+  const scheduleClose = () => {
+    clearCloseTimer();
+    // Small delay prevents "gap" between trigger and panel from closing early.
+    closeTimerRef.current = window.setTimeout(() => setOpen(false), 140);
+  };
+
   return (
     <div
       className={`menu-dd ${isMega ? 'menu-dd--mega' : ''}`.trim()}
-      onMouseLeave={() => setOpen(false)}
+      onMouseEnter={() => {
+        clearCloseTimer();
+        setOpen(true);
+      }}
+      onMouseLeave={(e) => {
+        const next = e.relatedTarget;
+        if (next && (btnRef.current?.contains(next) || panelRef.current?.contains(next))) return;
+        scheduleClose();
+      }}
     >
       <button
         ref={btnRef}
@@ -170,7 +271,10 @@ function DesktopDropdown({ item, currentPath, onNavigate, preferMega }) {
         className="menu-item menu-item--trigger"
         aria-haspopup="menu"
         aria-expanded={open ? 'true' : 'false'}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          clearCloseTimer();
+          setOpen((v) => !v);
+        }}
         onKeyDown={(e) => {
           if (e.key === 'Escape') setOpen(false);
           if (e.key === 'ArrowDown') setOpen(true);
@@ -178,38 +282,77 @@ function DesktopDropdown({ item, currentPath, onNavigate, preferMega }) {
       >
         {item.icon ? <span className="menu-item__icon" aria-hidden="true">{item.icon}</span> : null}
         <span className="menu-item__label">{item.label}</span>
-        <Chevron open={open} />
+        <Chevron open={open} variant={dropdownStyle?.chevronVariant} />
       </button>
 
       {open ? (
         <div
           ref={panelRef}
-          className="menu-dd__panel"
+          className={`menu-dd__panel${alignRight ? ' menu-dd__panel--right' : ''}`.trim()}
           role="menu"
           aria-label={`${item.label} submenu`}
-          style={
-            isMega
-              ? {
-                  ['--mega-cols']: String(clamp(item.mega?.columns || 2, 1, 6)),
-                }
-              : undefined
-          }
+          onMouseEnter={() => clearCloseTimer()}
+          onMouseLeave={(e) => {
+            const next = e.relatedTarget;
+            if (next && (btnRef.current?.contains(next) || panelRef.current?.contains(next))) return;
+            scheduleClose();
+          }}
+          style={{
+            ...(isMega ? { ['--mega-cols']: String(clamp(item.mega?.columns || 2, 1, 6)) } : null),
+            ...(panelShiftX ? { ['--menu-dd-shift-x']: `${panelShiftX}px` } : null),
+          }}
         >
           <div className={`menu-dd__grid ${isMega ? 'menu-dd__grid--mega' : ''}`.trim()}>
             <div className="menu-dd__items">
-              {(item.children || []).map((c) => (
-                <MenuLink
-                  key={c.id}
-                  item={c}
-                  currentPath={currentPath}
-                  depth={2}
-                  onNavigate={() => {
-                    setOpen(false);
-                    onNavigate?.();
-                  }}
-                  className="menu-item--sub"
-                />
-              ))}
+              {(() => {
+                const nestedMode = String(dropdownStyle?.nestedMode || 'toggle').trim().toLowerCase();
+                const defaultOpen = Boolean(dropdownStyle?.nestedDefaultOpen);
+
+                const renderChild = (node, depth) => {
+                  if (!node) return null;
+                  const kids = Array.isArray(node.children) ? node.children : [];
+                  const hasKids = kids.length > 0;
+                  const key = String(node.id || `${node.label}-${depth}`);
+                  const isOpen =
+                    nestedMode === 'always' ? true : defaultOpen ? expanded?.[key] !== false : Boolean(expanded?.[key]);
+                  return (
+                    <div key={`${node.id}-${depth}`} className={`menu-dd__node menu-dd__node--d${depth}`.trim()}>
+                      <div className="menu-dd__row">
+                        <MenuLink
+                          item={node}
+                          currentPath={currentPath}
+                          depth={Math.min(4, depth)}
+                          onNavigate={() => {
+                            setOpen(false);
+                            onNavigate?.();
+                          }}
+                          className={`menu-item--sub ${depth > 2 ? 'menu-item--sub-nested' : ''}`.trim()}
+                        />
+                        {hasKids && nestedMode === 'toggle' ? (
+                          <button
+                            type="button"
+                            className={`menu-dd__toggle ${isOpen ? 'is-open' : ''}`.trim()}
+                            aria-label={isOpen ? 'Collapse submenu' : 'Expand submenu'}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setExpanded((prev) => ({ ...(prev || {}), [key]: !isOpen }));
+                            }}
+                          >
+                            <Chevron open={isOpen} variant={dropdownStyle?.chevronVariant} />
+                          </button>
+                        ) : null}
+                      </div>
+                      {hasKids && isOpen ? (
+                        <div className="menu-dd__nested">
+                          {kids.map((k) => renderChild(k, depth + 1))}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                };
+                return (item.children || []).map((c) => renderChild(c, 2));
+              })()}
             </div>
             {isMega && item.mega?.featured?.label ? (
               <div className="menu-dd__featured" role="note">
@@ -259,6 +402,7 @@ function MobileDrawer({
   showHeaderActions = false,
   drawerActionsLayout = 'row',
   drawerStyle,
+  dropdownStyle = null,
 }) {
   const rootRef = useRef(null);
   const actionsHostRef = useRef(null);
@@ -333,7 +477,7 @@ function MobileDrawer({
               aria-controls={`menu-m-kids-${node.id}`}
               onClick={() => setExpanded((p) => ({ ...p, [node.id]: !p[node.id] }))}
             >
-              <Chevron open={isOpen} />
+              <Chevron open={isOpen} variant={dropdownStyle?.chevronVariant} />
             </button>
           ) : null}
         </div>
@@ -378,6 +522,7 @@ export default function Menu({
   mobile = {},
   mega = {},
   sticky = {},
+  dropdownStyle = null,
   style,
   className,
 }) {
@@ -482,6 +627,7 @@ export default function Menu({
               currentPath={currentPath || ''}
               preferMega={preferMega}
               onNavigate={() => {}}
+              dropdownStyle={dropdownStyle}
             />
           ) : (
             <MenuLink key={it.id} item={it} currentPath={currentPath || ''} depth={1} />
@@ -500,6 +646,7 @@ export default function Menu({
               showHeaderActions={mobileNavActive && showDrawerActions}
               drawerActionsLayout={drawerActionsLayout}
               drawerStyle={drawerStyle}
+              dropdownStyle={dropdownStyle}
             />,
             document.body
           )

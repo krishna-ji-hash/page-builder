@@ -8,6 +8,7 @@ import { spawn, spawnSync } from 'node:child_process';
 
 const root = process.cwd();
 const envFile = path.join(root, '.env');
+const nextDir = path.join(root, '.next');
 const migrateArgs = fs.existsSync(envFile)
   ? ['--env-file=.env', path.join(root, 'scripts', 'migrate.mjs')]
   : [path.join(root, 'scripts', 'migrate.mjs')];
@@ -18,6 +19,16 @@ if (mig.status !== 0) {
     '\n[dev] Migration step failed. Start DB (e.g. npm run db:up), fix .env (see .env.example), or skip migrate with: npm run dev:simple\n\n'
   );
   process.exit(mig.status ?? 1);
+}
+
+// Defensive: Next 15 + webpack dev can occasionally leave a corrupt `.next/server/vendor-chunks/*` map on Windows.
+// Wiping `.next` before starting keeps dev stable across restarts.
+try {
+  if (fs.existsSync(nextDir)) {
+    fs.rmSync(nextDir, { recursive: true, force: true });
+  }
+} catch {
+  // ignore
 }
 
 const nextBin = path.join(root, 'node_modules', 'next', 'dist', 'bin', 'next');

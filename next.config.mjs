@@ -29,7 +29,8 @@ const nextConfig = {
   // Avoid picking a parent folder when another package-lock.json exists above this project
   outputFileTracingRoot: path.join(__dirname),
   // Keep DOMPurify + jsdom as Node requires — avoids missing `.next/server/vendor-chunks/dompurify.js` after HMR.
-  serverExternalPackages: ['isomorphic-dompurify', 'dompurify', 'jsdom'],
+  // Also externalize `mysql2` to avoid flaky dev vendor-chunks on Windows (`./vendor-chunks/mysql2.js` missing).
+  serverExternalPackages: ['isomorphic-dompurify', 'dompurify', 'jsdom', 'mysql2'],
   experimental: {
     // Work around unstable dev segment explorer manifest errors in Next 15.x
     devtoolSegmentExplorer: false,

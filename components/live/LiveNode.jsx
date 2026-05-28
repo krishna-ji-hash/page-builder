@@ -116,7 +116,7 @@ export default function LiveNode({ node }) {
       Object.assign(css, mergeImageFigureStyleForContain(css));
     }
     const imageHeightPx = Number(props.imageHeightPx || 0);
-    return (
+    const img = (
       <img
         src={src}
         alt={alt}
@@ -127,6 +127,14 @@ export default function LiveNode({ node }) {
         }}
         loading="lazy"
       />
+    );
+    const href = typeof props.href === 'string' ? props.href : '';
+    if (!href) return img;
+    const open = Boolean(props.openInNewTab);
+    return (
+      <a href={href} target={open ? '_blank' : undefined} rel={open ? 'noreferrer noopener' : undefined}>
+        {img}
+      </a>
     );
   }
 

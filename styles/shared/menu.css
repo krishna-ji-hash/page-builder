@@ -3,6 +3,7 @@
   align-items: center;
   flex-wrap: nowrap;
   overflow-x: auto;
+  overflow-y: visible;
   box-sizing: border-box;
   gap: var(--menu-gap, 12px);
   font-family: inherit;
@@ -15,6 +16,7 @@
   gap: inherit;
   width: 100%;
   min-width: 0;
+  overflow: visible;
 }
 
 /* Fill the flex column so justify-content (center/right) aligns within the header, not just the text width */
@@ -216,10 +218,14 @@
 }
 
 .menu__chev {
-  margin-left: 6px;
-  font-size: 12px;
+  margin-left: var(--menu-dd-chev-gap, 6px);
+  font-size: var(--menu-dd-chev-size, 18px);
+  font-weight: 600;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
   opacity: 0.8;
-  transition: transform 160ms ease;
+  transition: transform 0.25s ease;
 }
 
 .menu__chev.is-open {
@@ -228,16 +234,37 @@
 
 .menu-dd__panel {
   position: absolute;
-  top: calc(100% + 10px);
-  left: 0;
-  min-width: 220px;
-  max-width: min(88vw, 720px);
+  top: calc(100% + var(--menu-dd-offset-y, 10px));
+  left: calc(0px + var(--menu-dd-offset-x, 0px));
+  width: var(--menu-dd-width, auto);
+  min-width: var(--menu-dd-min-width, 240px);
+  max-width: var(--menu-dd-max-width, 320px);
   z-index: 9000;
   padding: 10px;
-  border-radius: 12px;
+  border-radius: var(--menu-dd-radius, 14px);
   border: 1px solid color-mix(in srgb, var(--menu-color, #0f172a) 18%, transparent);
   background: color-mix(in srgb, var(--color-background, #fff) 92%, #fff 8%);
-  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
+  box-shadow: var(--menu-dd-shadow, 0 18px 42px rgba(15, 23, 42, 0.14));
+  overflow: var(--menu-dd-overflow, visible);
+  transform: translate3d(var(--menu-dd-shift-x, 0px), 0px, 0px);
+  will-change: transform, opacity;
+  animation: menu-dd-in 0.22s var(--ease-out, ease) both;
+}
+
+@keyframes menu-dd-in {
+  from {
+    opacity: 0;
+    transform: translate3d(var(--menu-dd-shift-x, 0px), 6px, 0px);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(var(--menu-dd-shift-x, 0px), 0px, 0px);
+  }
+}
+
+.menu-dd__panel--right {
+  left: auto;
+  right: calc(0px - var(--menu-dd-offset-x, 0px));
 }
 
 .menu-dd__grid {
@@ -251,8 +278,77 @@
 
 .menu-dd__items {
   display: grid;
-  gap: 6px;
+  gap: var(--menu-dd-item-gap, 6px);
   grid-template-columns: repeat(var(--mega-cols, 1), minmax(0, 1fr));
+}
+
+.menu-dd__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.menu-dd__row > .menu-item--sub {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.menu-dd__toggle {
+  flex: 0 0 auto;
+  width: auto;
+  height: auto;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: var(--menu-color, #0f172a);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 8px;
+  margin: 0;
+  box-sizing: border-box;
+  -webkit-appearance: none;
+  appearance: none;
+  transition:
+    background 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 160ms cubic-bezier(0.2, 0.9, 0.2, 1);
+}
+
+.menu-dd__toggle:hover {
+  background: var(--menu-dd-hover-bg, rgba(99, 102, 241, 0.08));
+  transform: translateY(-1px);
+}
+
+.menu-dd__toggle:active {
+  transform: translateY(0px);
+}
+
+.menu-dd__toggle:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--menu-hover-color, #6366f1) 70%, #fff 30%);
+  outline-offset: 2px;
+}
+
+.menu-dd__toggle .menu__chev {
+  margin-left: 0;
+  opacity: 0.85;
+}
+
+.menu-dd__node {
+  min-width: 0;
+}
+
+.menu-dd__nested {
+  display: grid;
+  gap: var(--menu-dd-nested-gap, 4px);
+  margin-top: 2px;
+  padding-left: var(--menu-dd-nested-indent, 10px);
+  border-left: 1px solid color-mix(in srgb, var(--menu-color, #0f172a) 10%, transparent);
+}
+
+.menu-item--sub-nested {
+  opacity: 0.95;
 }
 
 .menu-item--sub {
@@ -260,6 +356,18 @@
   justify-content: flex-start;
   text-align: left;
   white-space: normal;
+  font-size: var(--menu-dd-item-font-size, 14px);
+  font-weight: 600;
+  line-height: 1.5;
+  padding: var(--menu-dd-item-padding, 12px 14px);
+  border-radius: 10px;
+  transition: transform 0.2s ease, background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  overflow-wrap: anywhere;
+}
+
+.menu-item--sub:hover {
+  background: var(--menu-dd-hover-bg, rgba(99, 102, 241, 0.08));
+  transform: translateY(-1px);
 }
 
 .menu-item__label {

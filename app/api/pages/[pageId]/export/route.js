@@ -43,7 +43,10 @@ function renderNodeHtml(node) {
   if (node.nodeType === 'image') {
     const src = escapeHtml(node.props?.src || '');
     const alt = escapeHtml(node.props?.alt || '');
-    return src ? `<img src="${src}" alt="${alt}" />` : '';
+    const href = escapeHtml(node.props?.href || '');
+    if (!src) return '';
+    if (href) return `<a href="${href}"><img src="${src}" alt="${alt}" /></a>`;
+    return `<img src="${src}" alt="${alt}" />`;
   }
   if (node.nodeType === 'menu') {
     const items = Array.isArray(node.props?.items) ? node.props.items : [];
