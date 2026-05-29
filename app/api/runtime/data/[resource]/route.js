@@ -157,7 +157,13 @@ export async function GET(_request, { params }) {
   const sp = url.searchParams;
 
   // Ecommerce resources are project CMS-backed.
-  if (resource === 'products' || resource === 'categories' || resource === 'reviews' || resource === 'faqs') {
+  if (
+    resource === 'products' ||
+    resource === 'categories' ||
+    resource === 'reviews' ||
+    resource === 'faqs' ||
+    resource === 'related-products'
+  ) {
     const projectId = await resolveProjectIdFromRequest(_request);
     if (!projectId) {
       return ok({ success: true, meta: { total: 0, offset: 0, limit: 0 }, data: [] });

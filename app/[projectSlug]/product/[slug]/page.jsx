@@ -10,9 +10,11 @@ import { livePageCssVarOverridesForPage, resolveBodyLayout } from '@/lib/livePag
 import { resolveSeoMetadata } from '@/lib/seo/seoEngine';
 import JsonLd from '@/components/seo/JsonLd';
 import LiveDoc from '@/components/live/LiveDoc';
+import { normalizeProductFromCmsItem, resolveProductPricing, resolveProductStock, computeReviewStats, buildProductSchemaJsonLd, buildBreadcrumbSchemaJsonLd } from '@/lib/runtime/productRuntime';
 import '@/styles/live/live-site.css';
 import '@/styles/shared/menu.css';
 import '@/styles/shared/button.css';
+import '@/styles/shared/pdp.css';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -51,6 +53,10 @@ export default async function ProductDetailRoute({ params }) {
   const item = await getItemBySlug(page.projectId, 'products', slug, { status: 'published' });
   if (!item) notFound();
 
+  const product = normalizeProductFromCmsItem(item);
+  // Provide project id for client runtime store keying (not persisted to CMS).
+  product._projectId = page.projectId;
+
   const siteTheme = normalizeSiteTheme(page.projectConfig?.siteTheme);
   const siteCssVars = siteThemeToCssVariableStyle(siteTheme);
   const themeTokens = normalizeThemeTokens(page.projectConfig?.themeTokens);
@@ -62,6 +68,22 @@ export default async function ProductDetailRoute({ params }) {
     currentPath,
     pageSeo: page.seo,
     cmsContext: { item, sys: { slug, collection: 'products' } },
+  });
+
+  const pricing = resolveProductPricing(product, null);
+  const stock = resolveProductStock(product, null);
+  const productSchema = buildProductSchemaJsonLd({
+    product,
+    pricing,
+    stock,
+    reviewStats: computeReviewStats([]),
+    canonical: undefined,
+    projectSlug,
+  });
+  const breadcrumbSchema = buildBreadcrumbSchemaJsonLd({
+    projectSlug,
+    product,
+    categoryLabel: product.category || '',
   });
 
   const boundNodes = applyBindingsToTree(page.snapshot_json, {
@@ -86,7 +108,7 @@ export default async function ProductDetailRoute({ params }) {
         fontFamily: siteTheme.typography.fontFamily,
       }}
     >
-      <JsonLd data={schemaJsonLd} />
+      <JsonLd data={[schemaJsonLd, productSchema, breadcrumbSchema].filter(Boolean)} />
       <LiveDoc>
         <PublishedLiveTree
           nodes={boundNodes}
@@ -98,6 +120,13 @@ export default async function ProductDetailRoute({ params }) {
             pageId: page.id,
             projectId: page.projectId,
             projectSlug,
+            pdp: {
+              runtimeKey: `pdp:${page.projectId}:${slug}`,
+              projectId: page.projectId,
+              projectSlug,
+              slug,
+              product,
+            },
           }}
         />
       </LiveDoc>

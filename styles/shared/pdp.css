@@ -1,0 +1,254 @@
+.pdp-block {
+  width: 100%;
+  min-width: 0;
+}
+
+.pdp-gallery {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+}
+
+.pdp-gallery--thumbs-left {
+  grid-template-columns: 72px 1fr;
+}
+
+@media (max-width: 640px) {
+  .pdp-gallery--thumbs-left {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pdp-gallery__main {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--live-surface-muted, #f1f5f9);
+}
+
+.pdp-gallery__main img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.pdp-gallery__thumbs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .pdp-gallery__thumbs {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+}
+
+.pdp-gallery__thumb {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.pdp-gallery__thumb.is-active {
+  border-color: var(--live-accent, #4f46e5);
+}
+
+.pdp-gallery__thumb img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  display: block;
+}
+
+.pdp-variant__group {
+  margin-bottom: 12px;
+}
+
+.pdp-variant__label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+  display: block;
+}
+
+.pdp-variant__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pdp-variant__pill {
+  border: 1px solid rgba(15, 23, 42, 0.15);
+  background: #fff;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.pdp-variant__pill.is-selected {
+  border-color: var(--live-accent, #4f46e5);
+  background: rgba(79, 70, 229, 0.08);
+}
+
+.pdp-price {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pdp-price__current {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.pdp-price__compare {
+  font-size: 1rem;
+  text-decoration: line-through;
+  opacity: 0.55;
+}
+
+.pdp-sale-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: #dc2626;
+  color: #fff;
+}
+
+.pdp-stock--in {
+  color: #15803d;
+}
+
+.pdp-stock--low {
+  color: #b45309;
+}
+
+.pdp-stock--out {
+  color: #b91c1c;
+}
+
+.pdp-qty {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.pdp-qty button {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: #f8fafc;
+  cursor: pointer;
+  font-size: 1.1rem;
+}
+
+.pdp-qty input {
+  width: 48px;
+  text-align: center;
+  border: none;
+  border-left: 1px solid rgba(15, 23, 42, 0.08);
+  border-right: 1px solid rgba(15, 23, 42, 0.08);
+  height: 36px;
+}
+
+.pdp-add-to-cart {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 22px;
+  border-radius: 10px;
+  border: none;
+  background: var(--live-accent, #4f46e5);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  max-width: 320px;
+}
+
+.pdp-add-to-cart:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pdp-related__grid {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+}
+
+.pdp-related__card {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 12px;
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+}
+
+.pdp-related__card img {
+  width: 100%;
+  aspect-ratio: 4/3;
+  object-fit: cover;
+}
+
+.pdp-reviews__summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.pdp-reviews__item {
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  padding: 12px 0;
+}
+
+.pdp-breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.875rem;
+  opacity: 0.85;
+}
+
+.pdp-breadcrumbs a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.pdp-breadcrumbs a:hover {
+  text-decoration: underline;
+}
+
+.pdp-zoom {
+  position: relative;
+  overflow: hidden;
+  cursor: zoom-in;
+}
+
+.pdp-zoom img {
+  width: 100%;
+  display: block;
+  transition: transform 0.2s ease;
+}
+
+.pdp-zoom.is-zoomed img {
+  transform: scale(2);
+  cursor: zoom-out;
+}

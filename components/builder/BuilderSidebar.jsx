@@ -8,6 +8,7 @@ import { FULL_PAGE_TEMPLATES } from '@/lib/fullPageTemplates';
 import { getGlobalLinkMeta, isLinkedGlobalPlaceholder } from '@/lib/globalComponentLinkMeta';
 import { isSectionLockedRow, isStrictAncestorSectionLocked } from '@/lib/rowLayoutMeta';
 import { EXTRA_ADVANCED_ELEMENT_CARDS } from '@/lib/advancedElementRegistry';
+import { PDP_ELEMENT_CARDS } from '@/lib/pdpElementRegistry';
 import { InspectorNumInput } from '@/components/builder/inspector/InspectorNumeric';
 
 const ELEMENT_CARDS = [
@@ -31,6 +32,8 @@ const ELEMENT_CARDS = [
   { id: 'table', label: 'Table', icon: 'TBL', supported: true },
   { id: 'carousel', label: 'Carousel', icon: 'CAR', supported: true },
   { id: 'tabs', label: 'Feature tabs', icon: 'TAB', supported: true },
+  // PDP blocks (ecommerce)
+  ...PDP_ELEMENT_CARDS,
 ];
 
 const validParentTypes = new Set(['row', 'column', 'stack']);

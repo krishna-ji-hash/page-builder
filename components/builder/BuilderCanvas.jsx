@@ -234,6 +234,46 @@ function execRichCommandInRoot(root, command, value) {
   return { before, after };
 }
 
+const INLINE_FONT_SIZE_MIN_PX = 8;
+const INLINE_FONT_SIZE_MAX_PX = 120;
+const INLINE_FONT_SIZE_STEP_PX = 2;
+
+function parseTypographyFontSizePx(raw, fallback = 16) {
+  const s = String(raw || '').trim();
+  if (!s) return fallback;
+  const m = s.match(/^([\d.]+)\s*px$/i);
+  if (m) {
+    const n = Number(m[1]);
+    return Number.isFinite(n) ? Math.round(n) : fallback;
+  }
+  return fallback;
+}
+
+function applyInlineFontSizePxInRoot(root, px) {
+  if (!root || typeof document === 'undefined') return null;
+  const n = Math.max(INLINE_FONT_SIZE_MIN_PX, Math.min(INLINE_FONT_SIZE_MAX_PX, Math.round(px)));
+  const sizeStr = `${n}px`;
+  const before = root.innerHTML;
+  const hadCe = root.getAttribute('contenteditable');
+  root.setAttribute('contenteditable', 'true');
+  root.focus();
+  try {
+    document.execCommand('fontSize', '7');
+    root.querySelectorAll('font[size="7"]').forEach((font) => {
+      const span = document.createElement('span');
+      span.style.fontSize = sizeStr;
+      span.innerHTML = font.innerHTML;
+      font.replaceWith(span);
+    });
+  } catch (_) {
+    /* ignore */
+  }
+  const after = root.innerHTML;
+  if (hadCe === null) root.removeAttribute('contenteditable');
+  else root.setAttribute('contenteditable', hadCe);
+  return { before, after };
+}
+
 function applyDeviceStylePatch(existingStyle, device, patch, nodeType = null, siteTheme = null) {
   const normalizedCurrent = normalizeResponsiveStyle(existingStyle || {}, { nodeType, siteTheme });
   const desktopBase = normalizedCurrent.desktop || {};
@@ -2279,6 +2319,96 @@ function NodeRenderer({
     });
   };
 
+  const readToolbarFontSizePx = () => {
+    const raw = String(deviceStyle?.typography?.fontSize || '').trim();
+    const fromStyle = parseTypographyFontSizePx(raw, 0);
+    if (fromStyle > 0) return fromStyle;
+    if (node.nodeType === 'heading') {
+      const typo = semanticHeadingTypography(headingTag);
+      const semantic = parseTypographyFontSizePx(typo?.fontSize, 0);
+      if (semantic > 0) return semantic;
+    }
+    const leaf =
+      nodeElementRef.current?.querySelector?.('.bld-demo-text, .bld-demo-heading') || nodeElementRef.current;
+    if (leaf && typeof window !== 'undefined') {
+      const computed = parseFloat(window.getComputedStyle(leaf).fontSize);
+      if (Number.isFinite(computed) && computed > 0) return Math.round(computed);
+    }
+    return 16;
+  };
+
+  const persistInlineRichHtml = async (afterHtml) => {
+    const text = sanitizeInlineLeafHtml(afterHtml, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist });
+    if (isInlineEditing) {
+      setInlineDraftText(text);
+      return;
+    }
+    if (!onUpdateNode) return;
+    if ((node.props?.text || '') === text) return;
+    await onUpdateNode({
+      nodeId: node.id,
+      payload: {
+        props: {
+          ...(node.props || {}),
+          text,
+        },
+      },
+    });
+  };
+
+  const quickAdjustFontSize = async (delta) => {
+    if (sectionEditLocked) return;
+    if (node.nodeType !== 'heading' && node.nodeType !== 'text') return;
+    const step = Number(delta) || 0;
+    if (!step) return;
+
+    const root = getRichTextCommandRoot({
+      isInlineEditing,
+      inlineEditWrapRef,
+      nodeElementRef,
+      nodeType: node.nodeType,
+    });
+
+    if (root && selectionNonCollapsedInRoot(root)) {
+      let currentPx = readToolbarFontSizePx();
+      const sel = typeof window !== 'undefined' ? window.getSelection() : null;
+      if (sel?.rangeCount) {
+        const range = sel.getRangeAt(0);
+        let el = range.startContainer;
+        if (el?.nodeType === 3) el = el.parentElement;
+        if (el && root.contains(el) && typeof window !== 'undefined') {
+          const computed = parseFloat(window.getComputedStyle(el).fontSize);
+          if (Number.isFinite(computed) && computed > 0) currentPx = Math.round(computed);
+        }
+      }
+      const nextPx = Math.max(
+        INLINE_FONT_SIZE_MIN_PX,
+        Math.min(INLINE_FONT_SIZE_MAX_PX, currentPx + step)
+      );
+      const result = applyInlineFontSizePxInRoot(root, nextPx);
+      if (!result) return;
+      const { before, after } = result;
+      if (
+        sanitizeInlineLeafHtml(before, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist }) ===
+        sanitizeInlineLeafHtml(after, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist })
+      )
+        return;
+      await persistInlineRichHtml(after);
+      return;
+    }
+
+    const currentPx = readToolbarFontSizePx();
+    const nextPx = Math.max(
+      INLINE_FONT_SIZE_MIN_PX,
+      Math.min(INLINE_FONT_SIZE_MAX_PX, currentPx + step)
+    );
+    await commitStylePatch({
+      typography: { fontSize: `${nextPx}px` },
+    });
+  };
+
+  const toolbarFontSizePx = readToolbarFontSizePx();
+
   const headingSemanticTypo = node.nodeType === 'heading' ? semanticHeadingTypography(headingTag) : null;
   const headingFontSizeRaw = String(deviceStyle?.typography?.fontSize || '').trim();
   const headingSemanticFs = headingSemanticTypo ? String(headingSemanticTypo.fontSize || '').trim() : '';
@@ -2377,6 +2507,36 @@ function NodeRenderer({
       >
         <WpIconBold />
       </button>
+      {node.nodeType === 'heading' || node.nodeType === 'text' ? (
+        <>
+          <span className="bld-wp-toolbar__sep" aria-hidden />
+          <div className="bld-wp-toolbar__font-size-group" role="group" aria-label="Font size">
+            <button
+              type="button"
+              className="bld-wp-toolbar__font-size-btn"
+              title="Decrease font size"
+              aria-label="Decrease font size"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => void quickAdjustFontSize(-INLINE_FONT_SIZE_STEP_PX)}
+            >
+              −
+            </button>
+            <span className="bld-wp-toolbar__font-size-value" aria-hidden>
+              {toolbarFontSizePx}
+            </span>
+            <button
+              type="button"
+              className="bld-wp-toolbar__font-size-btn"
+              title="Increase font size"
+              aria-label="Increase font size"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => void quickAdjustFontSize(INLINE_FONT_SIZE_STEP_PX)}
+            >
+              +
+            </button>
+          </div>
+        </>
+      ) : null}
       <label
         className="bld-wp-toolbar__swatch"
         title="Text color"
