@@ -1,5 +1,7 @@
 'use client';
 
+import FontSizeStepper, { clampFontSizePx } from '@/components/builder/FontSizeStepper';
+
 const FONT_FAMILIES = ['Inter', 'Roboto', 'Poppins', 'Montserrat', 'Arial', 'Georgia'];
 const FONT_WEIGHTS = ['400', '500', '600', '700'];
 const WHITE_SPACE_OPTIONS = [
@@ -26,8 +28,13 @@ export default function TypographyControls({ form, onUpdate, selectedNodeType = 
       <div className="bld-field-grid">
         <div className="bld-field">
           <label className="bld-label">Font Size (px)</label>
-          <input className="bld-range" type="range" min="8" max="120" value={form.fontSizePx} onChange={(e) => onUpdate('fontSizePx', e.target.value)} />
-          <input className="bld-input" value={form.fontSizePx} onChange={(e) => onUpdate('fontSizePx', e.target.value)} />
+          <FontSizeStepper
+            value={form.fontSizePx}
+            onDelta={(delta) => {
+              const next = clampFontSizePx(Number(form.fontSizePx || 16) + delta);
+              onUpdate('fontSizePx', String(next));
+            }}
+          />
         </div>
         <div className="bld-field">
           <label className="bld-label">Font Weight</label>

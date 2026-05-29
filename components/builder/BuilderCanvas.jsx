@@ -70,6 +70,7 @@ import GapHandlesOverlay from './canvas/GapHandlesOverlay';
 import SpacingGuidesOverlay from './canvas/SpacingGuidesOverlay';
 import GridOverlay from './canvas/GridOverlay';
 import RichTextEditor from './RichTextEditor';
+import FontSizeStepper, { FONT_SIZE_MAX_PX, FONT_SIZE_MIN_PX } from './FontSizeStepper';
 import { getGlobalLinkMeta } from '@/lib/globalComponentLinkMeta';
 import { normalizeHeadingLevel as normalizeHeadingTag, semanticHeadingTypography } from '@/lib/headingLevel';
 import { finalizeLeafDeviceStyle } from '@/lib/leafStylePipeline';
@@ -161,9 +162,6 @@ function WpIconAlignBottom() {
   );
 }
 
-/** Px presets for heading-only quick font size in the floating toolbar. */
-const HEADING_FONT_SIZE_PRESETS_PX = [14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 56, 64, 72];
-
 /**
  * Floating toolbars use pointerdown preventDefault so the canvas does not treat the press as drag/pan.
  * That same cancelation applies to the event's original target, which breaks native `<select>` and color inputs.
@@ -234,10 +232,6 @@ function execRichCommandInRoot(root, command, value) {
   return { before, after };
 }
 
-const INLINE_FONT_SIZE_MIN_PX = 8;
-const INLINE_FONT_SIZE_MAX_PX = 120;
-const INLINE_FONT_SIZE_STEP_PX = 2;
-
 function parseTypographyFontSizePx(raw, fallback = 16) {
   const s = String(raw || '').trim();
   if (!s) return fallback;
@@ -251,7 +245,7 @@ function parseTypographyFontSizePx(raw, fallback = 16) {
 
 function applyInlineFontSizePxInRoot(root, px) {
   if (!root || typeof document === 'undefined') return null;
-  const n = Math.max(INLINE_FONT_SIZE_MIN_PX, Math.min(INLINE_FONT_SIZE_MAX_PX, Math.round(px)));
+  const n = Math.max(FONT_SIZE_MIN_PX, Math.min(FONT_SIZE_MAX_PX, Math.round(px)));
   const sizeStr = `${n}px`;
   const before = root.innerHTML;
   const hadCe = root.getAttribute('contenteditable');
@@ -1133,7 +1127,6 @@ function NodeRenderer({
   const faqAccordionAddItemHandler = node.nodeType === 'accordion' ? handleFaqAccordionAddItem : null;
   const headingTag = normalizeHeadingTag(node.props?.tag);
   const wpToolbarHeadingId = useId();
-  const wpToolbarHeadingSizeId = useId();
   const [isInlineEditing, setIsInlineEditing] = useState(false);
   const [isRichTextEditing, setIsRichTextEditing] = useState(false);
   const dragLocked = isInlineEditing || isRichTextEditing || sectionEditLocked;
@@ -2302,23 +2295,6 @@ function NodeRenderer({
     });
   };
 
-  const quickSetHeadingFontSize = async (value) => {
-    if (sectionEditLocked) return;
-    if (node.nodeType !== 'heading') return;
-    if (value === '__default__') {
-      const typo = semanticHeadingTypography(normalizeHeadingTag(node.props?.tag));
-      await commitStylePatch({
-        typography: { fontSize: typo.fontSize, lineHeight: typo.lineHeight },
-      });
-      return;
-    }
-    const v = String(value || '').trim();
-    if (!v) return;
-    await commitStylePatch({
-      typography: { fontSize: v },
-    });
-  };
-
   const readToolbarFontSizePx = () => {
     const raw = String(deviceStyle?.typography?.fontSize || '').trim();
     const fromStyle = parseTypographyFontSizePx(raw, 0);
@@ -2381,10 +2357,7 @@ function NodeRenderer({
           if (Number.isFinite(computed) && computed > 0) currentPx = Math.round(computed);
         }
       }
-      const nextPx = Math.max(
-        INLINE_FONT_SIZE_MIN_PX,
-        Math.min(INLINE_FONT_SIZE_MAX_PX, currentPx + step)
-      );
+      const nextPx = Math.max(FONT_SIZE_MIN_PX, Math.min(FONT_SIZE_MAX_PX, currentPx + step));
       const result = applyInlineFontSizePxInRoot(root, nextPx);
       if (!result) return;
       const { before, after } = result;
@@ -2398,35 +2371,13 @@ function NodeRenderer({
     }
 
     const currentPx = readToolbarFontSizePx();
-    const nextPx = Math.max(
-      INLINE_FONT_SIZE_MIN_PX,
-      Math.min(INLINE_FONT_SIZE_MAX_PX, currentPx + step)
-    );
+    const nextPx = Math.max(FONT_SIZE_MIN_PX, Math.min(FONT_SIZE_MAX_PX, currentPx + step));
     await commitStylePatch({
       typography: { fontSize: `${nextPx}px` },
     });
   };
 
   const toolbarFontSizePx = readToolbarFontSizePx();
-
-  const headingSemanticTypo = node.nodeType === 'heading' ? semanticHeadingTypography(headingTag) : null;
-  const headingFontSizeRaw = String(deviceStyle?.typography?.fontSize || '').trim();
-  const headingSemanticFs = headingSemanticTypo ? String(headingSemanticTypo.fontSize || '').trim() : '';
-  const headingSizeMatchesDefault =
-    node.nodeType === 'heading' &&
-    (!headingFontSizeRaw ||
-      headingFontSizeRaw === headingSemanticFs ||
-      (headingSemanticFs && headingFontSizeRaw.replace(/\s+/g, '') === headingSemanticFs.replace(/\s+/g, '')));
-  const headingSizeIsPreset =
-    node.nodeType === 'heading' && HEADING_FONT_SIZE_PRESETS_PX.some((n) => `${n}px` === headingFontSizeRaw);
-  const headingSizeSelectValue =
-    node.nodeType !== 'heading'
-      ? '__default__'
-      : headingSizeMatchesDefault
-        ? '__default__'
-        : headingSizeIsPreset
-          ? headingFontSizeRaw
-          : headingFontSizeRaw || '__default__';
 
   const quickToggleTextWrap = async () => {
     if (node.nodeType !== 'heading' && node.nodeType !== 'text') return;
@@ -2466,32 +2417,12 @@ function NodeRenderer({
               ))}
             </select>
           </div>
-          <div className="bld-wp-toolbar__group bld-wp-toolbar__group--compact">
-            <label className="bld-sr-only" htmlFor={wpToolbarHeadingSizeId}>
-              Font size
-            </label>
-            <select
-              id={wpToolbarHeadingSizeId}
-              className="bld-wp-toolbar__select bld-wp-toolbar__select--heading-size"
-              value={headingSizeSelectValue}
-              onChange={(e) => quickSetHeadingFontSize(e.target.value)}
-              title="Font size"
-              aria-label="Font size"
-            >
-              <option value="__default__">Auto</option>
-              {node.nodeType === 'heading' &&
-              headingFontSizeRaw &&
-              !headingSizeMatchesDefault &&
-              !headingSizeIsPreset ? (
-                <option value={headingFontSizeRaw}>Custom</option>
-              ) : null}
-              {HEADING_FONT_SIZE_PRESETS_PX.map((n) => (
-                <option key={n} value={`${n}px`}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </div>
+          <span className="bld-wp-toolbar__sep" aria-hidden />
+        </>
+      ) : null}
+      {node.nodeType === 'heading' || node.nodeType === 'text' ? (
+        <>
+          <FontSizeStepper value={toolbarFontSizePx} onDelta={(delta) => void quickAdjustFontSize(delta)} />
           <span className="bld-wp-toolbar__sep" aria-hidden />
         </>
       ) : null}
@@ -2507,36 +2438,6 @@ function NodeRenderer({
       >
         <WpIconBold />
       </button>
-      {node.nodeType === 'heading' || node.nodeType === 'text' ? (
-        <>
-          <span className="bld-wp-toolbar__sep" aria-hidden />
-          <div className="bld-wp-toolbar__font-size-group" role="group" aria-label="Font size">
-            <button
-              type="button"
-              className="bld-wp-toolbar__font-size-btn"
-              title="Decrease font size"
-              aria-label="Decrease font size"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => void quickAdjustFontSize(-INLINE_FONT_SIZE_STEP_PX)}
-            >
-              −
-            </button>
-            <span className="bld-wp-toolbar__font-size-value" aria-hidden>
-              {toolbarFontSizePx}
-            </span>
-            <button
-              type="button"
-              className="bld-wp-toolbar__font-size-btn"
-              title="Increase font size"
-              aria-label="Increase font size"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => void quickAdjustFontSize(INLINE_FONT_SIZE_STEP_PX)}
-            >
-              +
-            </button>
-          </div>
-        </>
-      ) : null}
       <label
         className="bld-wp-toolbar__swatch"
         title="Text color"
