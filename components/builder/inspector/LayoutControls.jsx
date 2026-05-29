@@ -150,6 +150,19 @@ export default function LayoutControls({
           isHeaderLandmark={isHeaderRowNode(selectedNode)}
         />
       ) : null}
+      {!isFlexContainer ? (
+        <div className="bld-field bld-field--flex-hint">
+          <p className="bld-field-note" style={{ margin: 0 }}>
+            <strong>Flex layout controls</strong> (Direction / Justify / Align) apply only to{' '}
+            <strong>Section</strong>, <strong>Column</strong>, or <strong>Stack</strong> — not Carousel or text blocks.
+          </p>
+          <p className="bld-field-note" style={{ marginTop: 8, marginBottom: 0 }}>
+            Left sidebar → <strong>Layers</strong> → click the parent <strong>Section</strong> (or Column) that wraps your
+            logo slider → right panel <strong>Layout</strong> → scroll to <strong>Flex &amp; flow</strong> →{' '}
+            <strong>Flex layout controls</strong>.
+          </p>
+        </div>
+      ) : null}
       {isFlexContainer ? (
         <>
           {isRow ? (

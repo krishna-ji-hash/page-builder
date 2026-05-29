@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { liveCarouselSlideImageAttrs } from '@/lib/liveCarouselImageAttrs';
+import { resolveTickerScrollClasses } from '@/lib/carouselTickerShared';
 
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
@@ -307,24 +308,8 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
     return out;
   }, [safeSlides]);
 
-  const scrollDirRaw = String(restProps?.scrollDirection ?? settings?.scrollDirection ?? '').toLowerCase().trim();
-  const scrollDirection =
-    scrollDirRaw === 'right' || scrollDirRaw === 'left' || scrollDirRaw === 'opposite'
-      ? scrollDirRaw
-      : isTickerVariant
-        ? 'opposite'
-        : isMarqueeVariant
-          ? 'right'
-          : 'left';
-  const effectiveScrollDir = isMarqueeVariant && scrollDirection === 'opposite' ? 'left' : scrollDirection;
-  const row1TrackClass =
-    effectiveScrollDir === 'right' ? 'live-carousel__ticker-track--rtl' : 'live-carousel__ticker-track--ltr';
-  const row2TrackClass =
-    effectiveScrollDir === 'opposite'
-      ? 'live-carousel__ticker-track--rtl'
-      : effectiveScrollDir === 'right'
-        ? 'live-carousel__ticker-track--rtl'
-        : 'live-carousel__ticker-track--ltr';
+  const carouselScrollDirection = restProps?.scrollDirection ?? settings?.scrollDirection;
+  const { row1TrackClass, row2TrackClass } = resolveTickerScrollClasses(variantKey, carouselScrollDirection);
 
   useEffect(() => {
     if (useSeamlessLoop) {

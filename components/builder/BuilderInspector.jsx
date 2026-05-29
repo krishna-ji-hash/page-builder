@@ -1756,7 +1756,13 @@ export default function BuilderInspector({
       if (key === 'carouselVariant') {
         const v = String(value || 'image');
         pendingCarouselVariantRef.current = { value: v, ts: Date.now() };
-        await updateCarouselMirrored({ variant: v }, { variant: v });
+        const extra =
+          v === 'ticker'
+            ? { scrollDirection: 'opposite' }
+            : v === 'marquee'
+              ? { scrollDirection: 'right' }
+              : {};
+        await updateCarouselMirrored({ variant: v, ...extra }, { variant: v, ...extra });
         return;
       }
       if (key === 'carouselAutoplay') {
@@ -1828,9 +1834,11 @@ export default function BuilderInspector({
         return;
       }
       if (key === 'carouselScrollDirection') {
-        const raw = String(value || 'right').toLowerCase().trim();
+        const raw = String(value || '').toLowerCase().trim();
         const allowed = new Set(['left', 'right', 'opposite']);
-        const dir = allowed.has(raw) ? raw : 'right';
+        const v0 = String(selectedNode.props?.variant || selectedNode.props?.settings?.variant || 'image');
+        const fallback = v0 === 'ticker' ? 'opposite' : v0 === 'marquee' ? 'right' : 'left';
+        const dir = allowed.has(raw) ? raw : fallback;
         await updateCarouselMirrored({ scrollDirection: dir }, { scrollDirection: dir });
         return;
       }

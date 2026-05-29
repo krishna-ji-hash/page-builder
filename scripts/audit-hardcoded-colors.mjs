@@ -11,6 +11,7 @@ const ROOT = path.resolve(__dirname, '..');
 
 export const AUDIT_CSS_REL_PATHS = [
   'styles/shared/live-semantic-tokens.css',
+  'styles/shared/dark-surface-copy.css',
   'styles/shared/advanced-elements.css',
   'styles/shared/menu.css',
   'styles/shared/button.css',
@@ -20,6 +21,16 @@ export const AUDIT_CSS_REL_PATHS = [
   'styles/shared/get-in-touch.css',
   'styles/shared/pdp.css',
   'styles/live/live-site.css',
+];
+
+/** Banned on `color:` / `background:` in section-contrast audited CSS (see AGENTS.md). */
+export const SECTION_CONTRAST_BANNED_NEUTRALS = [
+  '#0f172a',
+  '#111827',
+  '#ffffff',
+  '#f8fafc',
+  '#64748b',
+  '#475569',
 ];
 
 const HEX_RE = /#[0-9a-fA-F]{3,8}\b/g;
@@ -87,8 +98,43 @@ export function auditHardcodedColors(opts = {}) {
   return all;
 }
 
+/**
+ * Section-contrast lint: banned neutrals used directly on color/background props.
+ * @param {{ root?: string, paths?: string[] }} [opts]
+ * @returns {{ file: string, line: number, match: string, text: string }[]}
+ */
+export function auditSectionContrastBannedProps(opts = {}) {
+  const root = opts.root || ROOT;
+  const paths = opts.paths || AUDIT_CSS_REL_PATHS;
+  const banned = new Set(SECTION_CONTRAST_BANNED_NEUTRALS.map((h) => h.toLowerCase()));
+  const findings = [];
+  for (const rel of paths) {
+    const abs = path.join(root, rel);
+    if (!fs.existsSync(abs)) continue;
+    const lines = fs.readFileSync(abs, 'utf8').split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (isAllowedLine(line)) continue;
+      if (!/(?:^|\s)(?:color|background(?:-color)?|border-color):/i.test(line)) continue;
+      for (const hex of banned) {
+        if (line.toLowerCase().includes(hex)) {
+          findings.push({
+            file: rel,
+            line: i + 1,
+            match: hex,
+            text: line.trim().slice(0, 160),
+          });
+          break;
+        }
+      }
+    }
+  }
+  return findings;
+}
+
 const NEUTRAL_HEX = new Set([
   '#0f172a',
+  '#111827',
   '#64748b',
   '#475569',
   '#334155',
@@ -147,10 +193,28 @@ export function scoreDarkModeHealth(
 export { isCriticalFinding, NEUTRAL_HEX, STATUS_LEGACY_HEX };
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const warnNeutrals = process.argv.includes('--warn-neutrals') || process.argv.includes('--section-contrast');
   const findings = auditHardcodedColors();
   const byFile = {};
   for (const f of findings) {
     byFile[f.file] = (byFile[f.file] || 0) + 1;
   }
-  console.log(JSON.stringify({ total: findings.length, byFile, sample: findings.slice(0, 30) }, null, 2));
+  const payload = { total: findings.length, byFile, sample: findings.slice(0, 30) };
+  if (warnNeutrals) {
+    const bannedProps = auditSectionContrastBannedProps();
+    payload.sectionContrastBannedProps = bannedProps.length;
+    payload.sectionContrastSample = bannedProps.slice(0, 20);
+    if (bannedProps.length) {
+      console.error(
+        `[section-contrast] ${bannedProps.length} banned neutral(s) on color/background in audited CSS — use var(--live-section-fg*) or tokens (see AGENTS.md)`
+      );
+      for (const f of bannedProps.slice(0, 15)) {
+        console.error(`  ${f.file}:${f.line} ${f.match} — ${f.text}`);
+      }
+    }
+  }
+  console.log(JSON.stringify(payload, null, 2));
+  if (warnNeutrals && payload.sectionContrastBannedProps > 0) {
+    process.exit(1);
+  }
 }

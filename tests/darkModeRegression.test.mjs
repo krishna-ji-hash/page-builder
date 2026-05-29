@@ -15,7 +15,12 @@ import {
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 
-import { auditHardcodedColors, scoreDarkModeHealth } from '../scripts/audit-hardcoded-colors.mjs';
+import {
+  auditHardcodedColors,
+  auditSectionContrastBannedProps,
+  scoreDarkModeHealth,
+  SECTION_CONTRAST_BANNED_NEUTRALS,
+} from '../scripts/audit-hardcoded-colors.mjs';
 
 const AUDIT_CSS = [
   'styles/shared/advanced-elements.css',
@@ -31,6 +36,7 @@ const AUDIT_CSS = [
 
 const BANNED_PROP_PATTERNS = [
   /color:\s*#0f172a\b/i,
+  /color:\s*#111827\b/i,
   /color:\s*#64748b\b/i,
   /color:\s*#475569\b/i,
   /color:\s*#334155\b/i,
@@ -146,4 +152,16 @@ test('dark mode health score meets finalization target', () => {
   const findings = auditHardcodedColors({ root: ROOT });
   const score = scoreDarkModeHealth(findings);
   assert.ok(score >= 95, `expected health >= 95, got ${score} (${findings.length} hard-coded hits)`);
+});
+
+test('section contrast banned neutrals list includes architecture blocklist', () => {
+  assert.ok(SECTION_CONTRAST_BANNED_NEUTRALS.includes('#0f172a'));
+  assert.ok(SECTION_CONTRAST_BANNED_NEUTRALS.includes('#111827'));
+  assert.ok(SECTION_CONTRAST_BANNED_NEUTRALS.includes('#ffffff'));
+  assert.ok(SECTION_CONTRAST_BANNED_NEUTRALS.includes('#f8fafc'));
+});
+
+test('auditSectionContrastBannedProps scans shared/live/template CSS', () => {
+  const hits = auditSectionContrastBannedProps({ root: ROOT });
+  assert.ok(Array.isArray(hits));
 });

@@ -1,0 +1,56 @@
+---
+description: Section contrast — dark/light mode, templates, and live/builder parity
+globs: lib/**/*.{js,jsx},components/**/*.{js,jsx},styles/**/*.{css},tests/**/*.mjs
+alwaysApply: false
+---
+
+# Section Contrast Rules
+
+Prevent dark/light mode regressions. See `AGENTS.md` → **Section Contrast Rules** for the full flow.
+
+## 1. Never hardcode text colors
+
+Forbidden on `color` / copy:
+
+- `#0f172a`, `#111827`, `#ffffff`, `#f8fafc`
+
+Use:
+
+- `var(--live-section-fg)` — light section paint
+- `var(--live-section-muted)`
+- `var(--live-section-fg-on-dark)` — **only** inside dark-painted column/card/stack
+
+## 2. Dark surface rule
+
+Dark painted column/card/stack (`#0a0a0a`, navy band, etc.):
+
+- Set `data-dark-surface="true"` **or** call `applyTemplateSectionContrast()` in `lib/getInTouchSection.js`
+- Copy: `var(--live-section-fg-on-dark)` — **never** `var(--live-section-fg)` on nested dark cards (inherits light row `#0f172a`)
+
+## 3. Section tone rule
+
+Resolve `data-section-tone="light"|"dark"` via `resolveSectionToneForNode()` + `applySectionToneToLeafCss()` in `lib/sectionToneContext.js`. Do not sweep entire light rows with descendant tone CSS.
+
+## 4. New template rule
+
+Before merge, test:
+
+- Light site preset + Dark site preset
+- Mixed page (light section + dark card inside)
+- Builder canvas, draft preview, published live (same `liveRenderer` / `buildBuilderLiveRenderOptions` pipeline)
+
+## 5. Theme tokens
+
+Prefer `--token-text-primary`, `--token-text-muted`, `--token-bg-primary`, `--token-bg-surface`, `--token-border-default`. No new hardcoded slate neutrals in shared/live/template CSS.
+
+## 6. Builder/live parity
+
+Contrast fixes must work in builder canvas, draft preview, and published live. No builder-only CSS hacks.
+
+## 7. Regression tests
+
+New template → extend `tests/sectionToneContext.test.mjs`, `tests/darkSurfaceContext.test.mjs`, `tests/mixedContrastContext.test.mjs`, `tests/getInTouchSection.test.mjs`.
+
+## 8. Audit
+
+Run `npm run audit:section-contrast` before merge. Fix banned neutrals on `color:` in audited CSS paths.

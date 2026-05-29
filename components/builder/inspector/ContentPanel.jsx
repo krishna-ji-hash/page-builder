@@ -1024,11 +1024,13 @@ export default function ContentPanel({
               value={form.carouselScrollDirection || (isTickerSlider ? 'opposite' : 'right')}
               onChange={(e) => onChange('carouselScrollDirection', e.target.value)}
             >
-              <option value="left">Left (←)</option>
-              <option value="right">Right (→)</option>
-              {isTickerSlider ? <option value="opposite">Opposite</option> : null}
+              <option value="left">{isTickerSlider ? 'Both rows left (←)' : 'Left (←)'}</option>
+              <option value="right">{isTickerSlider ? 'Both rows right (→)' : 'Right (→)'}</option>
+              {isTickerSlider ? <option value="opposite">Opposite (top ←, bottom →)</option> : null}
             </select>
-            <p className="bld-field-note">Flow</p>
+            <p className="bld-field-note">
+              {isTickerSlider ? 'Dual row: use Opposite for row 1 left, row 2 right.' : 'Flow'}
+            </p>
           </div>
 
           {!isLogoSlider && !isTickerOrMarquee && form.carouselVariant !== 'card' && (form.carouselImageFit || 'cover') === 'cover' ? (

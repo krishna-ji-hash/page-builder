@@ -29,6 +29,7 @@ test('applyTemplateSectionContrast forces dark on platform hero pitch column', (
     { sectionTemplateId: 'platformHero', rowChildColumnIndex: 0 }
   );
   assert.equal(toneAttrs['data-section-tone'], 'dark');
+  assert.equal(toneAttrs['data-dark-surface'], 'true');
   assert.equal(css['--live-section-fg'], LIVE_SECTION_FG_ON_DARK);
 });
 
