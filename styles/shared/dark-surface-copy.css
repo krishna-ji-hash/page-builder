@@ -1,0 +1,28 @@
+/**
+ * Dark painted surfaces (pitch card, get-in-touch band) — dedicated copy token.
+ * Never use `var(--live-section-fg)` for copy here: it inherits #0f172a from light parent rows.
+ */
+
+:is(.live-doc, .bld-canvas__live-mirror) :is(.live-node, .bld-node__shell)[data-dark-surface='true'],
+:is(.live-doc, .bld-canvas__live-mirror) :is(.live-node, .bld-node__shell)[data-section-tone='dark']:is(.bld-column, .bld-stack) {
+  --live-section-fg-on-dark: #f8fafc;
+  --live-section-muted-on-dark: rgba(248, 250, 252, 0.82);
+}
+
+:is(.live-doc, .bld-canvas__live-mirror) [data-dark-surface='true'] .live-leaf-wrap :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text),
+:is(.live-doc, .bld-canvas__live-mirror) [data-dark-surface='true'] .live-leaf-wrap > :is(h1, h2, h3, h4, h5, h6, p),
+:is(.live-doc, .bld-canvas__live-mirror) .live-leaf-wrap[data-section-tone='dark'] > :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text),
+:is(.live-doc, .bld-canvas__live-mirror)
+  .live-node:is(.bld-column, .bld-stack)[data-section-tone='dark']
+  .live-leaf-wrap
+  :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text),
+:is(.live-doc, .bld-canvas__live-mirror)
+  .live-node.bld-column[style*='0a0a0a']
+  .live-leaf-wrap
+  :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text),
+:is(.live-doc, .bld-canvas__live-mirror)
+  .live-node.bld-column[style*='10, 10, 10']
+  .live-leaf-wrap
+  :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text) {
+  color: var(--live-section-fg-on-dark) !important;
+}

@@ -7,6 +7,11 @@ import InspectorTipChips from '@/components/builder/inspector/InspectorTipChips'
 import PageResponsivePanel from '@/components/builder/inspector/PageResponsivePanel';
 import { InspectorNumField } from '@/components/builder/inspector/InspectorNumeric';
 import { DEFAULT_STYLE_PRESETS, normalizeStylePresets } from '@/lib/stylePresetsStore';
+import {
+  createModePalettesFromFlat,
+  hasModePalettes,
+  resolveActiveThemeTokens,
+} from '@/lib/themeTokens';
 
 function Section({ title, children }) {
   return (
@@ -94,11 +99,42 @@ export default function ThemePanel({
     stylePresetsPersist,
   } = useBuilderTheme();
   const { colors, typography, spacing } = siteTheme;
-  const tokenColors = themeTokens?.colors || {};
-  const tokenSpacing = themeTokens?.spacing || {};
-  const tokenRadius = themeTokens?.radius || {};
-  const tokenShadows = themeTokens?.shadows || {};
-  const tokenMotion = themeTokens?.motion || {};
+  const activeThemeTokens = useMemo(() => resolveActiveThemeTokens(themeTokens), [themeTokens]);
+  const tokenMode = themeTokens?.mode === 'dark' ? 'dark' : 'light';
+  const tokenColors = activeThemeTokens.colors || {};
+  const tokenGradients = activeThemeTokens.gradients || {};
+  const tokenSpacing = activeThemeTokens.spacing || {};
+  const tokenRadius = activeThemeTokens.radius || {};
+  const tokenShadows = activeThemeTokens.shadows || {};
+  const tokenMotion = activeThemeTokens.motion || {};
+
+  const setTokenMode = (next) => {
+    setThemeTokens((prev) => {
+      const mode = next === 'dark' ? 'dark' : 'light';
+      if (hasModePalettes(prev)) return { ...prev, mode };
+      const { light, dark } = createModePalettesFromFlat(prev);
+      return { ...prev, mode, light, dark };
+    });
+  };
+
+  const patchTokenGroup = (group, patch) => {
+    setThemeTokens((prev) => {
+      const mode = prev.mode === 'dark' ? 'dark' : 'light';
+      if (hasModePalettes(prev)) {
+        return {
+          ...prev,
+          [mode]: {
+            ...(prev[mode] || {}),
+            [group]: { ...(prev[mode]?.[group] || {}), ...patch },
+          },
+        };
+      }
+      return {
+        ...prev,
+        [group]: { ...(prev[group] || {}), ...patch },
+      };
+    });
+  };
 
   const presetsNorm = useMemo(() => normalizeStylePresets(stylePresets || DEFAULT_STYLE_PRESETS), [stylePresets]);
   const presetsList = presetsNorm.presets || [];
@@ -272,9 +308,29 @@ export default function ThemePanel({
         <summary>Design tokens (global)</summary>
         <div className="bld-acc__body">
           <p className="bld-field-note" style={{ marginTop: 0 }}>
-            Tokens are stored on <strong>projects.config_json.themeTokens</strong> and exposed as CSS vars like{' '}
-            <code>--token-color-primary</code>. You can reference them in any style field using{' '}
-            <code>token-color-primary</code> or <code>var(--token-color-primary)</code>.
+            Tokens are stored on <strong>projects.config_json.themeTokens</strong> with per-mode palettes{' '}
+            <code>light</code> / <code>dark</code>. Active mode sets CSS vars like <code>--token-color-primary</code>.
+          </p>
+
+          <div className="bld-tiny-toggle" style={{ marginBottom: 12 }}>
+            <button
+              type="button"
+              className={`bld-tiny-toggle__btn ${tokenMode === 'light' ? 'is-active' : ''}`}
+              onClick={() => setTokenMode('light')}
+            >
+              Light tokens
+            </button>
+            <button
+              type="button"
+              className={`bld-tiny-toggle__btn ${tokenMode === 'dark' ? 'is-active' : ''}`}
+              onClick={() => setTokenMode('dark')}
+            >
+              Dark tokens
+            </button>
+          </div>
+          <p className="bld-field-note" style={{ marginTop: 0, marginBottom: 10 }}>
+            Editing applies to the <strong>{tokenMode}</strong> palette. Canvas, preview, and live use the active mode
+            after save.
           </p>
 
           <Section title="Token colors">
@@ -282,78 +338,159 @@ export default function ThemePanel({
               fieldId="tok-c-primary"
               label="Primary"
               value={tokenColors.primary}
-              onChange={(v) => setThemeTokens((p) => ({ ...p, colors: { ...(p.colors || {}), primary: v } }))}
+              onChange={(v) => patchTokenGroup('colors', { primary: v })}
             />
             <ColorRow
               fieldId="tok-c-secondary"
               label="Secondary"
               value={tokenColors.secondary}
-              onChange={(v) => setThemeTokens((p) => ({ ...p, colors: { ...(p.colors || {}), secondary: v } }))}
+              onChange={(v) => patchTokenGroup('colors', { secondary: v })}
             />
             <ColorRow
               fieldId="tok-c-accent"
               label="Accent"
               value={tokenColors.accent}
-              onChange={(v) => setThemeTokens((p) => ({ ...p, colors: { ...(p.colors || {}), accent: v } }))}
+              onChange={(v) => patchTokenGroup('colors', { accent: v })}
             />
             <ColorRow
               fieldId="tok-c-bg"
               label="Background"
               value={tokenColors.background}
-              onChange={(v) => setThemeTokens((p) => ({ ...p, colors: { ...(p.colors || {}), background: v } }))}
+              onChange={(v) => patchTokenGroup('colors', { background: v })}
             />
             <ColorRow
               fieldId="tok-c-surface"
               label="Surface"
               value={tokenColors.surface}
-              onChange={(v) => setThemeTokens((p) => ({ ...p, colors: { ...(p.colors || {}), surface: v } }))}
+              onChange={(v) => patchTokenGroup('colors', { surface: v })}
             />
             <ColorRow
               fieldId="tok-c-text"
               label="Text"
               value={tokenColors.text}
-              onChange={(v) => setThemeTokens((p) => ({ ...p, colors: { ...(p.colors || {}), text: v } }))}
+              onChange={(v) => patchTokenGroup('colors', { text: v })}
             />
             <ColorRow
               fieldId="tok-c-border"
               label="Border"
               value={tokenColors.border}
-              onChange={(v) => setThemeTokens((p) => ({ ...p, colors: { ...(p.colors || {}), border: v } }))}
+              onChange={(v) => patchTokenGroup('colors', { border: v })}
+            />
+            <ColorRow
+              fieldId="tok-c-on-primary"
+              label="On primary"
+              value={tokenColors.onPrimary}
+              onChange={(v) => patchTokenGroup('colors', { onPrimary: v })}
+            />
+          </Section>
+
+          <Section title="Token status">
+            <ColorRow
+              fieldId="tok-c-success"
+              label="Success"
+              value={tokenColors.success}
+              onChange={(v) => patchTokenGroup('colors', { success: v })}
+            />
+            <ColorRow
+              fieldId="tok-c-success-bg"
+              label="Success background"
+              value={tokenColors.successBg}
+              onChange={(v) => patchTokenGroup('colors', { successBg: v })}
+            />
+            <ColorRow
+              fieldId="tok-c-warning"
+              label="Warning"
+              value={tokenColors.warning}
+              onChange={(v) => patchTokenGroup('colors', { warning: v })}
+            />
+            <ColorRow
+              fieldId="tok-c-warning-bg"
+              label="Warning background"
+              value={tokenColors.warningBg}
+              onChange={(v) => patchTokenGroup('colors', { warningBg: v })}
+            />
+            <ColorRow
+              fieldId="tok-c-error"
+              label="Error"
+              value={tokenColors.error}
+              onChange={(v) => patchTokenGroup('colors', { error: v })}
+            />
+            <ColorRow
+              fieldId="tok-c-error-bg"
+              label="Error background"
+              value={tokenColors.errorBg}
+              onChange={(v) => patchTokenGroup('colors', { errorBg: v })}
+            />
+            <ColorRow
+              fieldId="tok-c-info"
+              label="Info"
+              value={tokenColors.info}
+              onChange={(v) => patchTokenGroup('colors', { info: v })}
+            />
+            <ColorRow
+              fieldId="tok-c-info-bg"
+              label="Info background"
+              value={tokenColors.infoBg}
+              onChange={(v) => patchTokenGroup('colors', { infoBg: v })}
+            />
+          </Section>
+
+          <Section title="Token gradients">
+            <TextRow
+              fieldId="tok-g-hero"
+              label="Hero gradient"
+              value={tokenGradients.hero}
+              placeholder="linear-gradient(135deg, …)"
+              onChange={(v) => patchTokenGroup('gradients', { hero: v })}
+            />
+            <TextRow
+              fieldId="tok-g-surface"
+              label="Surface gradient"
+              value={tokenGradients.surface}
+              placeholder="linear-gradient(180deg, …)"
+              onChange={(v) => patchTokenGroup('gradients', { surface: v })}
+            />
+            <TextRow
+              fieldId="tok-g-section"
+              label="Section gradient"
+              value={tokenGradients.section}
+              placeholder="linear-gradient(145deg, …)"
+              onChange={(v) => patchTokenGroup('gradients', { section: v })}
             />
           </Section>
 
           <Section title="Token spacing">
             <div className="bld-field-grid">
-              <TextRow fieldId="tok-sp-xs" label="XS" value={tokenSpacing.xs} placeholder="4px" onChange={(v) => setThemeTokens((p) => ({ ...p, spacing: { ...(p.spacing || {}), xs: v } }))} />
-              <TextRow fieldId="tok-sp-sm" label="SM" value={tokenSpacing.sm} placeholder="8px" onChange={(v) => setThemeTokens((p) => ({ ...p, spacing: { ...(p.spacing || {}), sm: v } }))} />
-              <TextRow fieldId="tok-sp-md" label="MD" value={tokenSpacing.md} placeholder="16px" onChange={(v) => setThemeTokens((p) => ({ ...p, spacing: { ...(p.spacing || {}), md: v } }))} />
-              <TextRow fieldId="tok-sp-lg" label="LG" value={tokenSpacing.lg} placeholder="24px" onChange={(v) => setThemeTokens((p) => ({ ...p, spacing: { ...(p.spacing || {}), lg: v } }))} />
-              <TextRow fieldId="tok-sp-xl" label="XL" value={tokenSpacing.xl} placeholder="32px" onChange={(v) => setThemeTokens((p) => ({ ...p, spacing: { ...(p.spacing || {}), xl: v } }))} />
+              <TextRow fieldId="tok-sp-xs" label="XS" value={tokenSpacing.xs} placeholder="4px" onChange={(v) => patchTokenGroup('spacing', { xs: v })} />
+              <TextRow fieldId="tok-sp-sm" label="SM" value={tokenSpacing.sm} placeholder="8px" onChange={(v) => patchTokenGroup('spacing', { sm: v })} />
+              <TextRow fieldId="tok-sp-md" label="MD" value={tokenSpacing.md} placeholder="16px" onChange={(v) => patchTokenGroup('spacing', { md: v })} />
+              <TextRow fieldId="tok-sp-lg" label="LG" value={tokenSpacing.lg} placeholder="24px" onChange={(v) => patchTokenGroup('spacing', { lg: v })} />
+              <TextRow fieldId="tok-sp-xl" label="XL" value={tokenSpacing.xl} placeholder="32px" onChange={(v) => patchTokenGroup('spacing', { xl: v })} />
             </div>
           </Section>
 
           <Section title="Token radius">
             <div className="bld-field-grid">
-              <TextRow fieldId="tok-r-sm" label="SM" value={tokenRadius.sm} placeholder="8px" onChange={(v) => setThemeTokens((p) => ({ ...p, radius: { ...(p.radius || {}), sm: v } }))} />
-              <TextRow fieldId="tok-r-md" label="MD" value={tokenRadius.md} placeholder="12px" onChange={(v) => setThemeTokens((p) => ({ ...p, radius: { ...(p.radius || {}), md: v } }))} />
-              <TextRow fieldId="tok-r-lg" label="LG" value={tokenRadius.lg} placeholder="16px" onChange={(v) => setThemeTokens((p) => ({ ...p, radius: { ...(p.radius || {}), lg: v } }))} />
-              <TextRow fieldId="tok-r-pill" label="Pill" value={tokenRadius.pill} placeholder="999px" onChange={(v) => setThemeTokens((p) => ({ ...p, radius: { ...(p.radius || {}), pill: v } }))} />
+              <TextRow fieldId="tok-r-sm" label="SM" value={tokenRadius.sm} placeholder="8px" onChange={(v) => patchTokenGroup('radius', { sm: v })} />
+              <TextRow fieldId="tok-r-md" label="MD" value={tokenRadius.md} placeholder="12px" onChange={(v) => patchTokenGroup('radius', { md: v })} />
+              <TextRow fieldId="tok-r-lg" label="LG" value={tokenRadius.lg} placeholder="16px" onChange={(v) => patchTokenGroup('radius', { lg: v })} />
+              <TextRow fieldId="tok-r-pill" label="Pill" value={tokenRadius.pill} placeholder="999px" onChange={(v) => patchTokenGroup('radius', { pill: v })} />
             </div>
           </Section>
 
           <Section title="Token shadows">
-            <TextRow fieldId="tok-sh-sm" label="Shadow sm" value={tokenShadows.sm} placeholder="0 2px 8px rgba(15,23,42,0.10)" onChange={(v) => setThemeTokens((p) => ({ ...p, shadows: { ...(p.shadows || {}), sm: v } }))} />
-            <TextRow fieldId="tok-sh-md" label="Shadow md" value={tokenShadows.md} placeholder="0 10px 24px rgba(15,23,42,0.14)" onChange={(v) => setThemeTokens((p) => ({ ...p, shadows: { ...(p.shadows || {}), md: v } }))} />
-            <TextRow fieldId="tok-sh-lg" label="Shadow lg" value={tokenShadows.lg} placeholder="0 18px 42px rgba(15,23,42,0.16)" onChange={(v) => setThemeTokens((p) => ({ ...p, shadows: { ...(p.shadows || {}), lg: v } }))} />
+            <TextRow fieldId="tok-sh-sm" label="Shadow sm" value={tokenShadows.sm} placeholder="0 2px 8px rgba(15,23,42,0.10)" onChange={(v) => patchTokenGroup('shadows', { sm: v })} />
+            <TextRow fieldId="tok-sh-md" label="Shadow md" value={tokenShadows.md} placeholder="0 10px 24px rgba(15,23,42,0.14)" onChange={(v) => patchTokenGroup('shadows', { md: v })} />
+            <TextRow fieldId="tok-sh-lg" label="Shadow lg" value={tokenShadows.lg} placeholder="0 18px 42px rgba(15,23,42,0.16)" onChange={(v) => patchTokenGroup('shadows', { lg: v })} />
           </Section>
 
           <Section title="Token motion">
             <div className="bld-field-grid">
-              <TextRow fieldId="tok-m-fast" label="Fast" value={tokenMotion.fast} placeholder="140ms" onChange={(v) => setThemeTokens((p) => ({ ...p, motion: { ...(p.motion || {}), fast: v } }))} />
-              <TextRow fieldId="tok-m-base" label="Base" value={tokenMotion.base} placeholder="200ms" onChange={(v) => setThemeTokens((p) => ({ ...p, motion: { ...(p.motion || {}), base: v } }))} />
-              <TextRow fieldId="tok-m-slow" label="Slow" value={tokenMotion.slow} placeholder="320ms" onChange={(v) => setThemeTokens((p) => ({ ...p, motion: { ...(p.motion || {}), slow: v } }))} />
+              <TextRow fieldId="tok-m-fast" label="Fast" value={tokenMotion.fast} placeholder="140ms" onChange={(v) => patchTokenGroup('motion', { fast: v })} />
+              <TextRow fieldId="tok-m-base" label="Base" value={tokenMotion.base} placeholder="200ms" onChange={(v) => patchTokenGroup('motion', { base: v })} />
+              <TextRow fieldId="tok-m-slow" label="Slow" value={tokenMotion.slow} placeholder="320ms" onChange={(v) => patchTokenGroup('motion', { slow: v })} />
             </div>
-            <TextRow fieldId="tok-m-easing" label="Easing" value={tokenMotion.easing} placeholder="cubic-bezier(0.16, 1, 0.3, 1)" onChange={(v) => setThemeTokens((p) => ({ ...p, motion: { ...(p.motion || {}), easing: v } }))} />
+            <TextRow fieldId="tok-m-easing" label="Easing" value={tokenMotion.easing} placeholder="cubic-bezier(0.16, 1, 0.3, 1)" onChange={(v) => patchTokenGroup('motion', { easing: v })} />
           </Section>
         </div>
       </details>

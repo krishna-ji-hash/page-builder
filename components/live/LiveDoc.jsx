@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { bindInteractionScrollObservers } from '@/lib/interactionScrollRuntime';
+import { bindInteractionObservers } from '@/lib/interactionScrollRuntime';
 
 /**
  * Published / preview document root. suppressHydrationWarning avoids dev-only noise when
@@ -12,7 +12,7 @@ export default function LiveDoc({ children }) {
 
   useEffect(() => {
     if (!ref.current) return undefined;
-    return bindInteractionScrollObservers(ref.current);
+    return bindInteractionObservers(ref.current);
   }, []);
 
   return (

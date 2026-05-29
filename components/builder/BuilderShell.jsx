@@ -463,6 +463,7 @@ export default function BuilderShell({ pageId }) {
   const globalComponentCacheRef = useRef(new Map());
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [previewCssByNodeId, setPreviewCssByNodeId] = useState({});
+  const [formPreviewByNodeId, setFormPreviewByNodeId] = useState({});
   const [activeSpacingEdit, setActiveSpacingEdit] = useState(null);
   const [overflowByNodeId, setOverflowByNodeId] = useState({});
   const [inspectorTab, setInspectorTab] = useState('content'); // content | style | advanced
@@ -3279,14 +3280,24 @@ export default function BuilderShell({ pageId }) {
         parentNodeId: leftStack.id,
         displayName: 'Hero Title',
         props: { text: 'Build a great page in minutes' },
-        style_json: { desktop: { typography: { fontSize: '52px', fontWeight: '800', color: '#ffffff' } } },
+        style_json: {
+          desktop: {
+            typography: { fontSize: '52px', fontWeight: '800' },
+            colors: { textColor: 'var(--live-section-fg, var(--color-text))' },
+          },
+        },
       });
       await createNodeRequest({
         nodeType: 'text',
         parentNodeId: leftStack.id,
         displayName: 'Hero Subtitle',
         props: { text: 'Use sections, presets, and global theme tokens to ship faster.' },
-        style_json: { desktop: { typography: { fontSize: '18px', color: 'rgba(255,255,255,0.85)' } } },
+        style_json: {
+          desktop: {
+            typography: { fontSize: '18px' },
+            colors: { textColor: 'var(--live-section-muted, var(--color-muted))' },
+          },
+        },
       });
       await createNodeRequest({
         nodeType: 'button',
@@ -3804,6 +3815,7 @@ export default function BuilderShell({ pageId }) {
             initialSiteTheme: page.projectConfig?.siteTheme,
             initialThemeTokens: page.projectConfig?.themeTokens,
             initialStylePresets: page.projectConfig?.stylePresets,
+            initialAnimationPresets: page.projectConfig?.animationPresets,
             onSiteThemeSaved: handleSiteThemeSaved,
             onPersistError: handleSiteThemePersistError,
             onRevisionConflict: handleSiteThemeRevisionConflict,
@@ -3815,6 +3827,7 @@ export default function BuilderShell({ pageId }) {
       page?.projectConfig?.siteTheme,
       page?.projectConfig?.themeTokens,
       page?.projectConfig?.stylePresets,
+      page?.projectConfig?.animationPresets,
       pageIdValid,
       handleSiteThemeSaved,
       handleSiteThemePersistError,
@@ -4649,6 +4662,7 @@ export default function BuilderShell({ pageId }) {
               minimalPageChrome
               previewCssByNodeId={previewCssByNodeId}
               onSetPreviewCssForNode={setPreviewCssForNode}
+              formPreviewByNodeId={formPreviewByNodeId}
               activeSpacingEdit={activeSpacingEdit}
               onOverflowDiagnosticsChange={handleOverflowDiagnostics}
               showGrid={showGrid}
@@ -4670,6 +4684,19 @@ export default function BuilderShell({ pageId }) {
               activeTab={inspectorTab}
               onActiveTabChange={setInspectorTab}
               onSetPreviewCssForNode={setPreviewCssForNode}
+              onSetFormPreviewModeForNode={(nodeId, mode) => {
+                if (!nodeId) return;
+                setFormPreviewByNodeId((prev) => {
+                  const next = { ...prev };
+                  if (!mode || mode === 'live') {
+                    delete next[nodeId];
+                  } else {
+                    next[nodeId] = mode;
+                  }
+                  return next;
+                });
+              }}
+              formPreviewMode={selectedNode?.id ? formPreviewByNodeId[selectedNode.id] ?? null : null}
               onSetActiveSpacingEdit={setActiveSpacingEdit}
               overflowDiagnostics={overflowByNodeId?.[selectedNodeId] || null}
               onEditGlobalComponent={openGlobalComponentEditor}

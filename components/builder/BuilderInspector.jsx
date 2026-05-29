@@ -40,6 +40,7 @@ import ContentPanel from './inspector/ContentPanel';
 import LayoutPanel from './inspector/LayoutPanel';
 import StylePanel from './inspector/StylePanel';
 import InteractionsPanel from './inspector/InteractionsPanel';
+import FormBuilderPanel from './inspector/FormBuilderPanel';
 import SeoCmsPanel from './inspector/SeoCmsPanel';
 import AdvancedPanel from './inspector/AdvancedPanel';
 import ThemePanel from './inspector/ThemePanel';
@@ -335,6 +336,8 @@ export default function BuilderInspector({
   /** `rail` = embedded under library; `panel` / `default` = dedicated right column. */
   variant = 'default',
   onSetPreviewCssForNode,
+  onSetFormPreviewModeForNode,
+  formPreviewMode = null,
   onSetActiveSpacingEdit,
   overflowDiagnostics,
   onEditGlobalComponent,
@@ -377,7 +380,7 @@ export default function BuilderInspector({
       setActiveTab(ids.has('content') ? 'content' : (availableTabs?.[0]?.id || 'content'));
     }
   }, [activeTab, availableTabs, setActiveTab]);
-  const { siteTheme } = useBuilderTheme();
+  const { siteTheme, animationPresets } = useBuilderTheme();
   const ixPreviewTimerRef = useRef(null);
   const ixSaveTimerRef = useRef(null);
   const ixPendingIxRef = useRef(null);
@@ -2138,6 +2141,12 @@ export default function BuilderInspector({
       }
       await updateProps({ layout: Object.keys(next).length ? next : undefined });
     }
+    if (key === 'formPatchProps' && selectedNode.nodeType === 'form') {
+      const patch = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+      const prev = selectedNode.props && typeof selectedNode.props === 'object' ? selectedNode.props : {};
+      await updateProps({ ...prev, ...patch });
+      return;
+    }
     if (key === 'formSetNotifications' && selectedNode.nodeType === 'form') {
       const patch = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
       const prev = selectedNode.props?.notifications && typeof selectedNode.props.notifications === 'object' ? selectedNode.props.notifications : {};
@@ -2419,10 +2428,10 @@ export default function BuilderInspector({
       const nextStyleJson = mergeStyleForDevice(selectedNode, device, patch, siteTheme);
       const tmpNode = { ...selectedNode, style_json: nextStyleJson };
       const resolved = getInspectorResolvedStyle(tmpNode, device, siteTheme);
-      const css = resolved ? styleToCss(resolved, siteTheme) : null;
+      const css = resolved ? styleToCss(resolved, siteTheme, { animationPresets }) : null;
       onSetPreviewCssForNode?.(selectedNode.id, css);
     },
-    [selectedNode, device, siteTheme, onSetPreviewCssForNode, editingDisabledBySectionLock]
+    [selectedNode, device, siteTheme, animationPresets, onSetPreviewCssForNode, editingDisabledBySectionLock]
   );
 
   const scheduleInteractionPreview = useCallback(
@@ -2704,6 +2713,19 @@ export default function BuilderInspector({
           onApplyPreset={handleApplyStylePreset}
         />
       ) : null}
+      {activeTab === 'form' && selectedNode?.nodeType === 'form' ? (
+        <FormBuilderPanel
+          selectedNode={selectedNode}
+          form={form}
+          onChange={handleContentChange}
+          disabled={editingDisabledBySectionLock}
+          pageId={pageId}
+          projectId={projectId}
+          previewMode={formPreviewMode}
+          onPreviewModeChange={(mode) => onSetFormPreviewModeForNode?.(selectedNode?.id, mode)}
+          jsonErrors={jsonErrors}
+        />
+      ) : null}
       {activeTab === 'interactions' ? (
         <InteractionsPanel
           form={form}
@@ -2711,6 +2733,7 @@ export default function BuilderInspector({
           onInteractionClearGroup={handleInteractionClearGroup}
           disabled={editingDisabledBySectionLock}
           selectedNodeId={selectedNode?.id}
+          device={device}
         />
       ) : null}
       {activeTab === 'seo' ? (

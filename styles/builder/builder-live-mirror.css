@@ -13,15 +13,11 @@
   /* Must win over global `.live-site { overflow-x: hidden }` so builder never clips wide sections at 100% zoom. */
   overflow-x: visible !important;
   box-sizing: border-box;
-  /* Match `styles/live/live-site.css` on `.live-site` — theme vars come from inline `siteThemeToCssVariableStyle` on the mirror. */
+  /* Match `styles/live/live-site.css` — tokens + site vars are inlined on this node. */
   font-family: var(--font-family-body, system-ui, -apple-system, 'Segoe UI', sans-serif);
   line-height: var(--line-height-base, 1.5);
-  color: var(--color-text, #0f172a);
-  /*
-   * Must match `styles/live/live-site.css` — not the builder artboard.
-   * Transparent here made dark-text sections invisible in Dark UI (they sat on --bld-artboard).
-   */
-  background: var(--color-background, #f8fafc);
+  color: var(--token-text-primary);
+  background: var(--token-bg-primary);
 }
 
 .bld-builder-root .bld-canvas__live-mirror .live-doc {
@@ -105,15 +101,13 @@
  * for the editor. Inside the live mirror that sits on `var(--color-background)` and tints sections
  * dark in Dark UI while text stays theme-dark → unreadable. Published pages never use these tints.
  */
-.bld-builder-root .bld-canvas__live-mirror .live-node.bld-row,
-.bld-builder-root .bld-canvas__live-mirror .live-node.bld-row:hover,
-.bld-builder-root .bld-canvas__live-mirror .live-node.bld-row.bld-selected,
-.bld-builder-root .bld-canvas__live-mirror .live-node.bld-column,
-.bld-builder-root .bld-canvas__live-mirror .live-node.bld-column:hover,
-.bld-builder-root .bld-canvas__live-mirror .live-node.bld-column.bld-selected,
-.bld-builder-root .bld-canvas__live-mirror .live-node.bld-stack,
-.bld-builder-root .bld-canvas__live-mirror .live-node.bld-stack:hover,
-.bld-builder-root .bld-canvas__live-mirror .live-node.bld-stack.bld-selected {
+/* Columns/stacks without their own section tone — editor tint only (opaque panels keep paint). */
+.bld-builder-root .bld-canvas__live-mirror .live-node.bld-column:not([data-section-tone]),
+.bld-builder-root .bld-canvas__live-mirror .live-node.bld-column:not([data-section-tone]):hover,
+.bld-builder-root .bld-canvas__live-mirror .live-node.bld-column:not([data-section-tone]).bld-selected,
+.bld-builder-root .bld-canvas__live-mirror .live-node.bld-stack:not([data-section-tone]),
+.bld-builder-root .bld-canvas__live-mirror .live-node.bld-stack:not([data-section-tone]):hover,
+.bld-builder-root .bld-canvas__live-mirror .live-node.bld-stack:not([data-section-tone]).bld-selected {
   background: transparent;
   background-image: none;
 }
@@ -130,6 +124,58 @@
 
 .bld-builder-root .bld-canvas__live-mirror figcaption {
   color: var(--color-text, #0f172a);
+}
+
+/*
+ * Section tone: only target the painted container — never sweep all descendants under a light row
+ * (that forced dark copy inside platform hero pitch cards on light site mode).
+ */
+.bld-builder-root .bld-canvas__live-mirror .live-node:is(.bld-row, .bld-column, .bld-stack)[data-section-tone='dark'] .live-leaf-wrap :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text),
+.live-site .live-node:is(.bld-row, .bld-column, .bld-stack)[data-section-tone='dark'] .live-leaf-wrap :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text),
+.bld-builder-root .bld-canvas__live-mirror .live-leaf-wrap[data-section-tone='dark'] > :is(h1, h2, h3, h4, h5, h6, p),
+.bld-builder-root .bld-canvas__live-mirror .live-leaf-wrap[data-section-tone='dark'] > .live-rich-text,
+.live-site .live-leaf-wrap[data-section-tone='dark'] > :is(h1, h2, h3, h4, h5, h6, p),
+.live-site .live-leaf-wrap[data-section-tone='dark'] > .live-rich-text {
+  color: var(--live-section-fg-on-dark) !important;
+}
+
+.bld-builder-root .bld-canvas__live-mirror .live-node:is(.bld-row, .bld-column, .bld-stack)[data-section-tone='light'] > .live-leaf-wrap > :is(h1, h2, h3, h4, h5, h6, p),
+.bld-builder-root .bld-canvas__live-mirror .live-node:is(.bld-row, .bld-column, .bld-stack)[data-section-tone='light'] > .live-leaf-wrap > .live-rich-text,
+.live-site .live-node:is(.bld-row, .bld-column, .bld-stack)[data-section-tone='light'] > .live-leaf-wrap > :is(h1, h2, h3, h4, h5, h6, p),
+.live-site .live-node:is(.bld-row, .bld-column, .bld-stack)[data-section-tone='light'] > .live-leaf-wrap > .live-rich-text,
+.bld-builder-root .bld-canvas__live-mirror .live-leaf-wrap[data-section-tone='light'] > :is(h1, h2, h3, h4, h5, h6, p),
+.live-site .live-leaf-wrap[data-section-tone='light'] > :is(h1, h2, h3, h4, h5, h6, p) {
+  color: var(--live-section-fg) !important;
+}
+
+/* Template sections (get in touch contact column + platform hero pitch) */
+.bld-builder-root .bld-canvas__live-mirror [data-section-template='getInTouch'] :is(
+    > .live-node.bld-column:first-child,
+    .bld-node-children > .live-node.bld-column:first-child
+  )
+  .live-leaf-wrap
+  :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text),
+.bld-builder-root .bld-canvas__live-mirror [data-section-template='platformHero'] :is(
+    > .live-node.bld-column:first-child,
+    .bld-node-children > .live-node.bld-column:first-child,
+    .live-node[data-section-tone='dark']
+  )
+  .live-leaf-wrap
+  :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text),
+.live-site [data-section-template='getInTouch'] :is(
+    > .live-node.bld-column:first-child,
+    .bld-node-children > .live-node.bld-column:first-child
+  )
+  .live-leaf-wrap
+  :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text),
+.live-site [data-section-template='platformHero'] :is(
+    > .live-node.bld-column:first-child,
+    .bld-node-children > .live-node.bld-column:first-child,
+    .live-node[data-section-tone='dark']
+  )
+  .live-leaf-wrap
+  :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text) {
+  color: var(--live-section-fg-on-dark) !important;
 }
 
 /* style_json hover/click must win over editor-only row lift in builder-canvas.css */

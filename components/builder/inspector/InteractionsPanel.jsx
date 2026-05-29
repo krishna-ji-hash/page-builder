@@ -1,15 +1,17 @@
 'use client';
 
+import { useMemo } from 'react';
+import { useBuilderTheme } from '@/context/BuilderThemeContext';
 import { InspectorField, InspectorPanel, InspectorSection } from './InspectorUi';
-import { ANIMATION_PRESET_GROUPS, normalizeAnimationPreset } from '@/lib/interactionAnimations';
+import {
+  ANIMATION_PRESET_GROUPS,
+  ANIMATION_TRIGGER_OPTIONS,
+  normalizeAnimationPreset,
+} from '@/lib/interactionAnimations';
+import { normalizeAnimationPresets } from '@/lib/animationPresetsStore';
 import { InspectorNumInput } from '@/components/builder/inspector/InspectorNumeric';
 import { sanitizeCssColor } from '@/lib/inspectorStyleValidate';
-
-const ANIM_TRIGGERS = [
-  { id: 'on-load', label: 'On load (page open)' },
-  { id: 'on-hover', label: 'On mouse hover' },
-  { id: 'on-scroll', label: 'On scroll (into view)' },
-];
+import ProjectAnimationPresetsPanel from './ProjectAnimationPresetsPanel';
 
 const EASING_OPTIONS = ['ease', 'ease-in', 'ease-out', 'ease-in-out', 'linear', 'cubic-bezier(0.34, 1.56, 0.64, 1)'];
 
@@ -29,7 +31,13 @@ export default function InteractionsPanel({
   onInteractionClearGroup,
   disabled,
   selectedNodeId,
+  device = 'desktop',
 }) {
+  const { animationPresets } = useBuilderTheme();
+  const projectPresets = useMemo(
+    () => normalizeAnimationPresets(animationPresets).presets || [],
+    [animationPresets]
+  );
   const ix = readIx(form);
   const hover = ix.hover || {};
   const pressed = ix.pressed || ix.active || {};
@@ -37,11 +45,25 @@ export default function InteractionsPanel({
   const anim = ix.animation || {};
   const animPreset = normalizeAnimationPreset(anim.preset);
   const animEnabled = animPreset !== 'none';
+  const presetRef = String(anim.presetRef || '').trim();
 
   const patchHover = (key, value) => onInteractionChange?.('hover', key, value);
   const patchPressed = (key, value) => onInteractionChange?.('pressed', key, value);
   const patchFocus = (key, value) => onInteractionChange?.('focus', key, value);
   const patchAnim = (key, value) => onInteractionChange?.('animation', key, value);
+
+  const applyProjectPreset = (id) => {
+    const found = projectPresets.find((p) => p.id === id);
+    if (!found) return;
+    onInteractionChange?.('animation', 'presetRef', id);
+    onInteractionChange?.('animation', 'preset', found.animation?.preset || 'fade-in');
+    if (found.animation?.trigger) onInteractionChange?.('animation', 'trigger', found.animation.trigger);
+    if (found.animation?.duration != null) onInteractionChange?.('animation', 'duration', String(found.animation.duration));
+    if (found.animation?.delay != null) onInteractionChange?.('animation', 'delay', String(found.animation.delay));
+    if (found.animation?.easing) onInteractionChange?.('animation', 'easing', found.animation.easing);
+    if (found.animation?.loop) onInteractionChange?.('animation', 'loop', true);
+    if (found.animation?.repeat != null) onInteractionChange?.('animation', 'repeat', String(found.animation.repeat));
+  };
 
   const clearGroup = (group) => {
     if (typeof onInteractionClearGroup === 'function') {
@@ -56,9 +78,14 @@ export default function InteractionsPanel({
   return (
     <InspectorPanel title="Interactions">
       <p className="bld-field-note" style={{ marginTop: 0 }}>
-        <strong>Mouse hover</strong> and <strong>pressed</strong> styles apply instantly on the canvas.{' '}
-        <strong>Animation</strong> uses the trigger you pick (load, hover, or scroll into view).
+        Animations use <strong>transform</strong> and <strong>opacity</strong> only. Tablet/mobile layers override
+        duration, delay, trigger, and repeat without replacing the whole animation block.
       </p>
+      <p className="bld-field-note" style={{ marginTop: 0 }}>
+        Editing device: <strong>{device}</strong>
+      </p>
+
+      <ProjectAnimationPresetsPanel disabled={disabled} />
 
       <InspectorSection
         key={selectedNodeId ? `ix-hover-${selectedNodeId}` : 'ix-hover'}
@@ -238,7 +265,30 @@ export default function InteractionsPanel({
       </InspectorSection>
 
       <InspectorSection title="Animation" keywords="animation fade slide scroll hover load">
-        <InspectorField label="Animation type" disabled={disabled}>
+        <InspectorField label="Project preset (optional)" disabled={disabled}>
+          <select
+            className="bld-input"
+            value={presetRef}
+            disabled={disabled}
+            onChange={(e) => {
+              const id = e.target.value;
+              if (!id) {
+                onInteractionChange?.('animation', 'presetRef', '');
+                return;
+              }
+              applyProjectPreset(id);
+            }}
+          >
+            <option value="">— Custom per node —</option>
+            {projectPresets.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </InspectorField>
+
+        <InspectorField label="Animation preset" disabled={disabled}>
           <select
             className="bld-input"
             value={animPreset}
@@ -260,25 +310,20 @@ export default function InteractionsPanel({
 
         {animEnabled ? (
           <>
-            <InspectorField label="When to play" disabled={disabled}>
+            <InspectorField label="Trigger" disabled={disabled}>
               <select
                 className="bld-input"
                 value={anim.trigger || 'on-load'}
                 disabled={disabled}
                 onChange={(e) => patchAnim('trigger', e.target.value)}
               >
-                {ANIM_TRIGGERS.map((t) => (
+                {ANIMATION_TRIGGER_OPTIONS.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.label}
                   </option>
                 ))}
               </select>
             </InspectorField>
-            <p className="bld-field-note" style={{ marginTop: 0 }}>
-              <strong>On load</strong> — plays when the page opens. <strong>On mouse hover</strong> — plays while the
-              pointer is over the element. <strong>On scroll</strong> — plays when the element scrolls into view (scroll
-              the canvas or live page to preview).
-            </p>
             <div className="bld-field-grid">
               <InspectorField label="Duration (s)" disabled={disabled}>
                 <InspectorNumInput
@@ -314,6 +359,19 @@ export default function InteractionsPanel({
                   ))}
                 </select>
               </InspectorField>
+              <InspectorField label="Repeat" disabled={disabled}>
+                <InspectorNumInput
+                  min={1}
+                  max={99}
+                  step={1}
+                  value={anim.repeat ?? 1}
+                  disabled={disabled || Boolean(anim.loop)}
+                  onChange={(n) => {
+                    patchAnim('loop', false);
+                    patchAnim('repeat', n == null ? '1' : String(n));
+                  }}
+                />
+              </InspectorField>
               <InspectorField label="Loop" disabled={disabled}>
                 <label className="bld-checkbox-row">
                   <input
@@ -322,7 +380,7 @@ export default function InteractionsPanel({
                     disabled={disabled}
                     onChange={(e) => patchAnim('loop', e.target.checked)}
                   />
-                  <span>Repeat</span>
+                  <span>Infinite repeat</span>
                 </label>
               </InspectorField>
             </div>
@@ -332,8 +390,8 @@ export default function InteractionsPanel({
           </>
         ) : (
           <p className="bld-field-note" style={{ margin: 0 }}>
-            Pick an animation (slide from top/left/right, zoom in/out, fade, …) then <strong>when to play</strong>: on load,
-            mouse hover, or scroll into view.
+            Pick a preset, trigger, duration, and easing. Scroll/viewport animations reveal when the element enters the
+            viewport (builder canvas and live).
           </p>
         )}
       </InspectorSection>

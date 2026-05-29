@@ -1,7 +1,9 @@
 import { fail, ok, parseJsonBody } from '@/lib/api';
-import { dispatchFormNotifications } from '@/services/forms/dispatchFormNotifications';
-import { createFormSubmission } from '@/services/forms/formSubmissionsService';
+import { shouldSaveLead } from '@/lib/formWorkflowEngine.js';
 import { validateFormFields } from '@/lib/runtime/formValidation';
+import { runFormSubmitWorkflow } from '@/services/forms/formWorkflowService';
+import { recordFormAnalyticsEvent } from '@/services/forms/formAnalyticsService';
+import { createFormSubmission } from '@/services/forms/formSubmissionsService';
 
 function getClientIp(request) {
   const xff = request.headers.get('x-forwarded-for');
@@ -15,7 +17,12 @@ function safeNotifications(n) {
   if (!n || typeof n !== 'object' || Array.isArray(n)) return null;
   const webhookUrl = typeof n.webhookUrl === 'string' ? n.webhookUrl.trim() : '';
   const emailTo = typeof n.emailTo === 'string' ? n.emailTo.trim() : '';
-  return { webhookUrl: webhookUrl.slice(0, 300), emailTo: emailTo.slice(0, 200) };
+  const crmTag = typeof n.crmTag === 'string' ? n.crmTag.trim() : '';
+  return {
+    webhookUrl: webhookUrl.slice(0, 300),
+    emailTo: emailTo.slice(0, 200),
+    crmTag: crmTag.slice(0, 64),
+  };
 }
 
 export async function POST(request) {
@@ -32,14 +39,13 @@ export async function POST(request) {
   if (!formId.trim()) return fail('Invalid formId');
   if (!values) return fail('Invalid values');
 
-  // Optional server-side validation: fields provided by client (builder config).
-  // We treat it as a hint; it must never expand trust boundaries.
   const fields = Array.isArray(body.fields) ? body.fields : null;
   if (fields) {
     const v = validateFormFields(values, fields);
     if (!v.ok) return fail('Validation failed', 400, v.errors);
   }
 
+  const workflow = body.workflow && typeof body.workflow === 'object' ? body.workflow : null;
   const notifications = safeNotifications(body.notifications);
   const meta = {
     ip: getClientIp(request),
@@ -49,32 +55,51 @@ export async function POST(request) {
   };
 
   try {
-    const created = await createFormSubmission({
+    let submissionId = null;
+    if (shouldSaveLead(workflow) || !workflow) {
+      const created = await createFormSubmission({
+        projectId,
+        pageId,
+        formNodeId: formId,
+        values,
+        meta,
+        status: notifications?.crmTag ? `tagged:${notifications.crmTag}` : 'received',
+      });
+      submissionId = created.id;
+    }
+
+    const wfResult = await runFormSubmitWorkflow({
+      workflow,
+      values,
       projectId,
       pageId,
       formNodeId: formId,
-      values,
+      submissionId,
       meta,
     });
 
-    const notify = await dispatchFormNotifications({
-      notifications,
-      values,
-      projectId,
-      pageId,
-      formNodeId: formId,
-      submissionId: created.id,
-    });
-    if (notify.webhook && notify.webhook !== 'sent') {
-      meta.webhookStatus = notify.webhook;
-    }
-    if (notify.email === 'pending' && notifications?.emailTo) {
-      meta.emailNotifyTo = notifications.emailTo;
+    if (wfResult.crmTag) {
+      meta.crmTag = wfResult.crmTag;
     }
 
-    return ok({ ok: true, submissionId: created.id, message: 'Thank you — we received your message.' });
+    try {
+      await recordFormAnalyticsEvent({
+        projectId,
+        pageId,
+        formNodeId: formId,
+        event: 'submit',
+      });
+    } catch {
+      // analytics must not block submit
+    }
+
+    return ok({
+      ok: true,
+      submissionId,
+      message: wfResult.successMessage || 'Thank you — we received your message.',
+      workflow: wfResult,
+    });
   } catch (err) {
     return fail('Failed to store submission', 500, err instanceof Error ? err.message : String(err));
   }
 }
-

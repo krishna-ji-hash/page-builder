@@ -116,13 +116,13 @@
 }
 
 .menu--pill .menu-item {
-  background: color-mix(in srgb, var(--menu-color, #0f172a) 6%, transparent);
+  background: color-mix(in srgb, var(--menu-color, var(--token-text-primary)) 6%, transparent);
   border-color: transparent;
 }
 
 .menu--pill .menu-item:hover {
   background: var(--menu-hover-bg, rgba(99, 102, 241, 0.18));
-  color: var(--menu-hover-color, var(--menu-color, #0f172a));
+  color: var(--menu-hover-color, var(--menu-color, var(--token-text-primary)));
 }
 
 .menu--underline .menu-item {
@@ -170,13 +170,13 @@
 
 .menu--button .menu-item {
   background: var(--menu-button-bg, #6366f1);
-  color: var(--menu-button-color, #fff);
+  color: var(--menu-button-color, var(--token-button-text));
   border-color: transparent;
 }
 
 .menu--button .menu-item:hover {
   filter: brightness(1.06);
-  color: var(--menu-button-color, #fff);
+  color: var(--menu-button-color, var(--token-button-text));
 }
 
 .menu--vertical.menu--pill .menu-item {
@@ -242,8 +242,8 @@
   z-index: 9000;
   padding: 10px;
   border-radius: var(--menu-dd-radius, 14px);
-  border: 1px solid color-mix(in srgb, var(--menu-color, #0f172a) 18%, transparent);
-  background: color-mix(in srgb, var(--color-background, #fff) 92%, #fff 8%);
+  border: 1px solid color-mix(in srgb, var(--menu-color, var(--token-text-primary)) 18%, transparent);
+  background: color-mix(in srgb, var(--color-background, var(--token-bg-surface)) 92%, #fff 8%);
   box-shadow: var(--menu-dd-shadow, 0 18px 42px rgba(15, 23, 42, 0.14));
   overflow: var(--menu-dd-overflow, visible);
   transform: translate3d(var(--menu-dd-shift-x, 0px), 0px, 0px);
@@ -301,7 +301,7 @@
   border-radius: 10px;
   border: none;
   background: transparent;
-  color: var(--menu-color, #0f172a);
+  color: var(--menu-color, var(--token-text-primary));
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -344,7 +344,7 @@
   gap: var(--menu-dd-nested-gap, 4px);
   margin-top: 2px;
   padding-left: var(--menu-dd-nested-indent, 10px);
-  border-left: 1px solid color-mix(in srgb, var(--menu-color, #0f172a) 10%, transparent);
+  border-left: 1px solid color-mix(in srgb, var(--menu-color, var(--token-text-primary)) 10%, transparent);
 }
 
 .menu-item--sub-nested {
@@ -392,7 +392,7 @@
 .menu-dd__featured {
   border-radius: 12px;
   padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--menu-color, #0f172a) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--menu-color, var(--token-text-primary)) 12%, transparent);
   background: color-mix(in srgb, var(--menu-hover-bg, rgba(99, 102, 241, 0.18)) 28%, transparent);
 }
 
@@ -414,7 +414,7 @@
   padding: 8px 12px;
   border-radius: 999px;
   background: var(--menu-button-bg, #6366f1);
-  color: var(--menu-button-color, #fff);
+  color: var(--menu-button-color, var(--token-button-text));
   text-decoration: none;
   font-weight: 700;
 }
@@ -507,9 +507,9 @@
     min-width: 40px;
     min-height: 40px;
     border-radius: 10px;
-    border: 1px solid color-mix(in srgb, var(--menu-color, #0f172a) 18%, transparent);
-    background: color-mix(in srgb, var(--color-background, #fff) 92%, transparent);
-    color: var(--menu-color, #0f172a);
+    border: 1px solid color-mix(in srgb, var(--menu-color, var(--token-text-primary)) 18%, transparent);
+    background: color-mix(in srgb, var(--color-background, var(--token-bg-surface)) 92%, transparent);
+    color: var(--menu-color, var(--token-text-primary));
     cursor: pointer;
     position: relative;
     z-index: 11002;
@@ -566,7 +566,7 @@
   max-width: 100%;
   margin: 0;
   padding: 0;
-  background: var(--color-background, #fff);
+  background: var(--color-background, var(--token-bg-surface));
   box-shadow: none;
   transform: translateX(100%);
   opacity: 1;
@@ -590,14 +590,14 @@
   margin: 0;
   padding: var(--menu-m-top-pad, max(8px, env(safe-area-inset-top, 0px))) 14px 8px;
   border-bottom: 1px solid rgba(226, 232, 240, 0.95);
-  background: var(--color-background, #fff);
+  background: var(--color-background, var(--token-bg-surface));
 }
 
 .menu-m__title {
   font-weight: 700;
   font-size: 1.05rem;
   line-height: 1.2;
-  color: var(--menu-color, #0f172a);
+  color: var(--menu-color, var(--token-text-primary));
 }
 
 .menu-m__close {
@@ -612,7 +612,7 @@
   border: none;
   border-radius: 10px;
   background: transparent;
-  color: var(--menu-color, #0f172a);
+  color: var(--menu-color, var(--token-text-primary));
   cursor: pointer;
   -webkit-appearance: none;
   appearance: none;
@@ -677,7 +677,7 @@
   height: 40px;
   border-radius: 10px;
   border: 1px solid rgba(226, 232, 240, 0.9);
-  background: #fff;
+  background: var(--token-bg-surface);
   cursor: pointer;
 }
 
@@ -733,7 +733,7 @@
   margin: 6px 0 0;
   padding: var(--menu-m-actions-pad, 8px 14px max(10px, env(safe-area-inset-bottom, 0px)));
   border-top: 1px solid rgba(226, 232, 240, 0.95);
-  background: var(--color-background, #fff);
+  background: var(--color-background, var(--token-bg-surface));
 }
 
 .menu-m[data-drawer-actions-layout='column'] .menu-m__actions {

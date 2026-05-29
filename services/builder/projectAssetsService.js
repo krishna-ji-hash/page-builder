@@ -2,6 +2,7 @@ import { getDbPool } from '@/lib/db';
 import { normalizeSiteTheme, SITE_THEME_SCHEMA_VERSION } from '@/lib/siteDesignTheme';
 import { normalizeThemeTokens, THEME_TOKENS_SCHEMA_VERSION } from '@/lib/themeTokens';
 import { normalizeStylePresets, STYLE_PRESETS_SCHEMA_VERSION } from '@/lib/stylePresetsStore';
+import { normalizeAnimationPresets, ANIMATION_PRESETS_SCHEMA_VERSION } from '@/lib/animationPresetsStore';
 import { getBuilderState } from '@/services/builder/builderService';
 import { autoFixTree, reconcileStructuralParents, validateTree } from '@/lib/builderTree';
 
@@ -337,6 +338,35 @@ export async function saveStylePresets({ projectId, stylePresets, ifRevision }) 
   const nextConfig = {
     ...(project.config || {}),
     stylePresets: normalized,
+  };
+  await saveProjectConfig(prid, nextConfig);
+  return normalized;
+}
+
+/**
+ * Persist reusable animation presets on `projects.config_json.animationPresets`.
+ */
+export async function saveAnimationPresets({ projectId, animationPresets, ifRevision }) {
+  const prid = Number(projectId);
+  if (!Number.isInteger(prid) || prid <= 0) throw new Error('Invalid projectId');
+  const project = await getProjectConfig(prid);
+  if (!project) throw new Error('Project not found');
+  const current = project.config?.animationPresets;
+  const currentRev =
+    typeof current?.revision === 'number' && Number.isFinite(current.revision)
+      ? Math.max(0, Math.floor(current.revision))
+      : 0;
+  if (ifRevision !== undefined && ifRevision !== null && Number(ifRevision) !== currentRev) {
+    const err = new Error('REVISION_CONFLICT');
+    err.code = 'REVISION_CONFLICT';
+    throw err;
+  }
+  const normalized = normalizeAnimationPresets(animationPresets);
+  normalized.revision = currentRev + 1;
+  normalized.schemaVersion = ANIMATION_PRESETS_SCHEMA_VERSION;
+  const nextConfig = {
+    ...(project.config || {}),
+    animationPresets: normalized,
   };
   await saveProjectConfig(prid, nextConfig);
   return normalized;

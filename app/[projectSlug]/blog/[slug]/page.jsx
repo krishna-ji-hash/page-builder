@@ -2,7 +2,11 @@ import { notFound } from 'next/navigation';
 import { getPublishedPageForPublic } from '@/services/site/publishedPageService';
 import PublishedLiveTree from '@/components/live/PublishedLiveTree';
 import { normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesignTheme';
-import { normalizeThemeTokens, themeTokensToCssVariableStyle } from '@/lib/themeTokens';
+import {
+  alignThemeTokensWithSiteTheme,
+  normalizeThemeTokens,
+  themeTokensToCssVariableStyle,
+} from '@/lib/themeTokens';
 import { resolveMaybeAsyncParams, isPublicSlug } from '@/lib/routeParams';
 import { getItemBySlug } from '@/services/builder/cmsService';
 import { applyBindingsToTree, applyBindingsToString } from '@/lib/cms/cmsBindings';
@@ -54,7 +58,10 @@ export default async function BlogPostRoute({ params }) {
 
   const siteTheme = normalizeSiteTheme(page.projectConfig?.siteTheme);
   const siteCssVars = siteThemeToCssVariableStyle(siteTheme);
-  const themeTokens = normalizeThemeTokens(page.projectConfig?.themeTokens);
+  const themeTokens = alignThemeTokensWithSiteTheme(
+    siteTheme,
+    normalizeThemeTokens(page.projectConfig?.themeTokens)
+  );
   const tokenVars = themeTokensToCssVariableStyle(themeTokens);
   const currentPath = `/${projectSlug}/blog/${slug}`;
   const { schemaJsonLd } = resolveSeoMetadata({

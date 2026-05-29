@@ -1,26 +1,45 @@
-/* Get in Touch — form look only; layout/spacing comes from Style tab (no forced padding/align). */
+/* Get in Touch — dark band (left column) + white form card (right column). */
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  :is(section, div).live-node.bld-row[data-section-template='getInTouch'] {
+  --live-section-fg: #f8fafc;
+  --live-section-muted: #cbd5e1;
+  --live-section-fg-on-dark: #f8fafc;
+}
+
+/* Contact column only — not the white form column */
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='getInTouch']
+  :is(
+    > .live-node.bld-column:first-child,
+    .bld-node-children > .live-node.bld-column:first-child
+  )
+  .live-leaf-wrap
+  :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text) {
+  color: var(--live-section-fg-on-dark) !important;
+}
 
 .live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='getInTouch']
+  > :where(section.live-node.bld-row, main.live-node.bld-row, div.live-node.bld-row)[data-section-template='getInTouch']
   .live-form__label {
   font-size: 14px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--token-text-primary);
 }
 
 .live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='getInTouch']
+  > :where(section.live-node.bld-row, main.live-node.bld-row, div.live-node.bld-row)[data-section-template='getInTouch']
   .live-form__input {
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--token-border-default);
   border-radius: 8px;
   padding: 12px 14px;
   font-size: 14px;
-  background: #ffffff;
-  color: #0f172a;
+  background: var(--token-bg-surface);
+  color: var(--token-text-primary);
 }
 
 .live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='getInTouch']
+  > :where(section.live-node.bld-row, main.live-node.bld-row, div.live-node.bld-row)[data-section-template='getInTouch']
   .live-form__submit {
   width: 100%;
   margin-top: 8px;
@@ -28,20 +47,20 @@
   border: none;
   border-radius: 8px;
   background: #3b82f6;
-  color: #ffffff;
+  color: var(--token-button-text);
   font-size: 15px;
   font-weight: 700;
   cursor: pointer;
 }
 
 .live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='getInTouch']
+  > :where(section.live-node.bld-row, main.live-node.bld-row, div.live-node.bld-row)[data-section-template='getInTouch']
   .live-form__submit:hover:not(:disabled) {
   background: #2563eb;
 }
 
 .live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='getInTouch']
+  > :where(section.live-node.bld-row, main.live-node.bld-row, div.live-node.bld-row)[data-section-template='getInTouch']
   .live-divider {
   flex-shrink: 0;
 }

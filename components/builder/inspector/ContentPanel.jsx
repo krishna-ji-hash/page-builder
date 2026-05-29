@@ -1369,6 +1369,8 @@ export default function ContentPanel({
                       <option value="checkbox">Checkbox</option>
                       <option value="radio">Radio</option>
                       <option value="switch">Switch</option>
+                      <option value="file">File upload</option>
+                      <option value="hidden">Hidden</option>
                     </select>
                   </div>
                   <div className="bld-field">

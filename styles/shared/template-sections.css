@@ -163,7 +163,7 @@
   background-color: rgba(79, 70, 229, 0.06) !important;
 }
 [data-tpl-role='compare-header'] {
-  background-color: #f8fafc !important;
+  background-color: var(--token-card-bg) !important;
   font-weight: 800;
 }
 

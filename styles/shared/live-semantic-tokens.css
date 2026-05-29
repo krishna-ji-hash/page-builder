@@ -1,0 +1,41 @@
+/**
+ * Semantic aliases for live + builder canvas mirror.
+ * Fallback chain: section contrast → theme tokens → site theme → static default.
+ * Inline style_json (--node-text, --node-bg) still wins on nodes.
+ */
+
+.live-site,
+.bld-builder-root .live-site {
+  --token-text-primary: var(--live-section-fg, var(--token-color-text, var(--color-text, #0f172a)));
+  --token-text-muted: var(--live-section-muted, var(--token-color-muted, var(--color-muted, #64748b)));
+  --token-bg-primary: var(--token-color-background, var(--color-background, #f8fafc));
+  --token-bg-surface: var(--token-color-surface, var(--color-surface, #ffffff));
+  --token-border-default: var(--token-color-border, var(--color-border, #e2e8f0));
+  --token-card-bg: var(--token-bg-surface);
+  --token-button-bg: var(--token-color-primary, var(--color-primary, #2563eb));
+  --token-button-text: var(--token-color-on-primary, #ffffff);
+
+  /* Defaults when themeTokens.gradients not injected; overridden by --token-gradient-* from palette */
+  --token-gradient-hero: linear-gradient(
+    135deg,
+    var(--token-bg-primary),
+    color-mix(in srgb, var(--token-bg-primary) 85%, var(--token-text-primary) 15%)
+  );
+  --token-gradient-surface: linear-gradient(
+    180deg,
+    var(--token-bg-surface) 0%,
+    var(--token-bg-primary) 100%
+  );
+  --token-gradient-section: linear-gradient(
+    145deg,
+    var(--token-bg-primary) 0%,
+    var(--token-bg-surface) 50%,
+    color-mix(in srgb, var(--token-bg-primary) 92%, var(--token-border-default) 8%) 100%
+  );
+
+  --token-shadow-tint: var(--token-text-primary);
+  --token-overlay-scrim: color-mix(in srgb, var(--token-shadow-tint) 55%, transparent);
+  --token-border-subtle: color-mix(in srgb, var(--token-border-default) 65%, transparent);
+  --token-surface-raised: var(--token-card-bg);
+  --tpl-accent: var(--token-color-primary, var(--color-primary, #4f46e5));
+}

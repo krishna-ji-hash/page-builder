@@ -67,7 +67,7 @@ test('pruneInteractions drops empty animation and keeps valid presets', () => {
   assert.deepEqual(pruneInteractions({ animation: { preset: 'none', trigger: 'on-load' } }), {});
   assert.deepEqual(
     pruneInteractions({ hover: { scale: '1.05' }, animation: { preset: 'fade', duration: 0.5 } }),
-    { hover: { scale: '1.05' }, animation: { preset: 'fade', duration: 0.5, trigger: 'on-load' } }
+    { hover: { scale: '1.05' }, animation: { preset: 'fade-in', duration: 0.5, trigger: 'on-load' } }
   );
 });
 
@@ -91,7 +91,7 @@ test('interactionInlineStyleVars maps hover + animation tokens', () => {
   const vars = interactionInlineStyleVars({
     interactions: {
       hover: { background: '#6366f1', scale: '1.03' },
-      animation: { preset: 'fade', duration: 0.5, easing: 'ease-out' },
+      animation: { preset: 'fade-in', duration: 0.5, easing: 'ease-out' },
     },
   });
   assert.equal(vars['--node-hover-bg'], '#6366f1');
@@ -102,11 +102,11 @@ test('interactionInlineStyleVars maps hover + animation tokens', () => {
 });
 
 test('normalizeAnimationPreset maps legacy ids to canonical presets', () => {
-  assert.equal(normalizeAnimationPreset('slide-up'), 'slide-from-bottom');
+  assert.equal(normalizeAnimationPreset('slide-up'), 'fade-up');
   assert.equal(normalizeAnimationPreset('zoom'), 'zoom-in');
-  assert.equal(normalizeAnimationPreset('slide-from-left'), 'slide-from-left');
+  assert.equal(normalizeAnimationPreset('slide-from-left'), 'slide-left');
   assert.equal(animationKeyframeName('zoom'), 'bld-ix-zoom-in');
-  assert.equal(animationKeyframeName('slide-from-top'), 'bld-ix-slide-from-top');
+  assert.equal(animationKeyframeName('slide-from-top'), 'bld-ix-fade-down');
 });
 
 test('interactionPresentationClass adds ix + animation + trigger class', () => {
@@ -114,7 +114,7 @@ test('interactionPresentationClass adds ix + animation + trigger class', () => {
     interactions: { animation: { preset: 'slide-up', trigger: 'on-scroll' } },
   });
   assert.match(cls, /live-node--ix/);
-  assert.match(cls, /live-node--ix-anim-slide-from-bottom/);
+  assert.match(cls, /live-node--ix-anim-fade-up/);
   assert.match(cls, /live-node--ix-trigger-on-scroll/);
 });
 
@@ -128,7 +128,7 @@ test('pruneInteractions normalizes legacy animation preset on save', () => {
 test('pruneInteractions drops invalid animation duration and opacity', () => {
   const out = pruneInteractions({
     hover: { opacity: 'bad', scale: '1.05' },
-    animation: { preset: 'fade', duration: 'x', delay: NaN, trigger: 'on-load' },
+    animation: { preset: 'fade-in', duration: 'x', delay: NaN, trigger: 'on-load' },
   });
   assert.equal(out.hover.opacity, undefined);
   assert.equal(out.hover.scale, '1.05');
@@ -138,7 +138,7 @@ test('pruneInteractions drops invalid animation duration and opacity', () => {
 
 test('interactionInlineStyleVars skips non-finite animation timing', () => {
   const vars = interactionInlineStyleVars({
-    interactions: { animation: { preset: 'fade', duration: NaN, delay: 'nope' } },
+    interactions: { animation: { preset: 'fade-in', duration: NaN, delay: 'nope' } },
   });
   assert.equal(vars['--node-anim-duration'], undefined);
   assert.equal(vars['--node-anim-delay'], undefined);
@@ -146,9 +146,9 @@ test('interactionInlineStyleVars skips non-finite animation timing', () => {
 
 test('animationCssFromInteractions only inlines animation for on-load', () => {
   const onLoad = animationCssFromInteractions({
-    interactions: { animation: { preset: 'fade', trigger: 'on-load' } },
+    interactions: { animation: { preset: 'fade-in', trigger: 'on-load' } },
   });
-  assert.equal(onLoad.animationName, 'bld-ix-fade');
+  assert.equal(onLoad.animationName, 'bld-ix-fade-in');
 
   const onHover = animationCssFromInteractions({
     interactions: { animation: { preset: 'fade', trigger: 'on-hover' } },

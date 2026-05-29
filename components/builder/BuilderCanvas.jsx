@@ -19,7 +19,11 @@ import { normalizeResponsiveStyle } from '@/lib/styleNormalizer';
 import { withResolvedLayoutGap } from '@/lib/layoutGapUtils';
 import { mergeDeviceStyleWithTypeDefaults, mergeMenuDeviceStyle } from '@/lib/nodeLayoutDefaults';
 import { SECTION_TEMPLATES } from '@/lib/sectionTemplates';
-import { isGetInTouchSectionRow } from '@/lib/getInTouchSection';
+import {
+  applyTemplateSectionContrast,
+  findParentRowForNode,
+  sectionTemplateDataAttrsForRow,
+} from '@/lib/getInTouchSection';
 import { mergeImageFigureStyleForShadow } from '@/lib/boxShadowLayout';
 import {
   buildBuilderLiveRenderOptions,
@@ -48,17 +52,22 @@ import {
   rowSectionStripDataAttrs,
   sectionContentDataAttrs,
 } from '@/lib/livePageCssVars';
-import { bindInteractionScrollObservers } from '@/lib/interactionScrollRuntime';
+import { bindInteractionObservers } from '@/lib/interactionScrollRuntime';
 import { interactionPresentationClass, resolveLeafInteractionShell } from '@/lib/nodeInteractionCss';
 import { getDeviceStyle, sanitizeInlineMarginCss, styleToCss } from '@/lib/styleToCss';
 import { useBuilderTheme } from '@/context/BuilderThemeContext';
 import { mergeNodeStyleWithSiteTheme, normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesignTheme';
+import { alignThemeTokensWithSiteTheme, themeTokensToCssVariableStyle } from '@/lib/themeTokens';
 import Carousel from '@/components/runtime/Carousel';
 import { patchFeatureTabs, resolveFeatureTabsProps } from '@/lib/featureTabsDefaults';
 import { appendFaqItem, patchFaqItems, resolveFaqAccordionProps } from '@/lib/faqAccordionDefaults';
 import Menu from '@/components/runtime/Menu';
 import { applyBindingsToString } from '@/lib/cms/cmsBindings';
 import { isProbablyInlineHtml, sanitizeInlineLeafHtml } from '@/lib/inlineTextHtml';
+import { isSiteContentDarkMode } from '@/lib/bodyTextNeutralization';
+import { sectionToneDataAttrForCss } from '@/lib/liveSectionContrastVars.js';
+import { applySectionToneToLeafCss, resolveSectionToneForNode } from '@/lib/sectionToneContext.js';
+import { neutralizeLightSurfaceDeviceStyle } from '@/lib/sectionSurfaceNeutralization.js';
 import { neutralizeLeafTextCssObject } from '@/lib/sanitizeRichHtml';
 import ResizeHandle from './canvas/ResizeHandle';
 import InlineEdit from './canvas/InlineEdit';
@@ -416,11 +425,15 @@ function renderNodeContent(node, renderOpts = {}) {
     onFaqAccordionPatch = null,
     onFaqAccordionAddItem = null,
     siteTheme = null,
+    themeTokens = null,
     insideSiteHeaderRow = false,
     builderPageId = null,
     builderProjectId = null,
+    formPreviewMode = null,
+    sectionTone = null,
   } = renderOpts;
   const liveStylePresets = renderOpts.stylePresets ?? null;
+  const liveAnimationPresets = renderOpts.animationPresets ?? null;
   const bind = (s) => (cmsBindingContext ? applyBindingsToString(String(s || ''), cmsBindingContext) : s);
 
   const builderCanvasHooks =
@@ -451,12 +464,17 @@ function renderNodeContent(node, renderOpts = {}) {
   const liveRenderOptions = buildBuilderLiveRenderOptions({
     device: device || 'desktop',
     siteTheme,
+    themeTokens,
     stylePresets: liveStylePresets,
+    animationPresets: liveAnimationPresets,
     insideSiteHeaderRow,
     builderCanvas: builderCanvasHooks,
     pageId: builderPageId,
     projectId: builderProjectId,
     builderInlineCss: widgetCss || undefined,
+    formPreviewMode: formPreviewMode || null,
+    sectionTone: sectionTone || null,
+    builderTree: renderOpts.builderTree || null,
   });
 
   const renderViaLive = () => {
@@ -890,6 +908,7 @@ function NodeRenderer({
   device,
   previewCssByNodeId,
   onSetPreviewCssForNode,
+  formPreviewByNodeId = {},
   activeSpacingEdit,
   onReportOverflow,
   rowRole,
@@ -1195,13 +1214,25 @@ function NodeRenderer({
   const inlineEditWrapRef = useRef(null);
   const [floatingToolbarPos, setFloatingToolbarPos] = useState(null);
   const [quickTextToolbarPos, setQuickTextToolbarPos] = useState(null);
-  const { siteTheme, theme, stylePresets } = useBuilderTheme();
-  /** Persist stripping only for dark *site* preset so light sites are not rewritten when only builder UI is dark. */
-  const neutralizeBodyColorsPersist = normalizeSiteTheme(siteTheme).presetId === 'dark';
-  /** Preview: dark site or dark builder chrome — pasted inline neutrals must not disappear on dark surfaces. */
-  const neutralizeBodyColorsPreview = neutralizeBodyColorsPersist || theme === 'dark';
+  const { siteTheme, themeTokens, stylePresets, animationPresets } = useBuilderTheme();
+  const alignedContentTokens = useMemo(
+    () => alignThemeTokensWithSiteTheme(normalizeSiteTheme(siteTheme), themeTokens),
+    [siteTheme, themeTokens]
+  );
+  const ancestorSectionTone = useMemo(
+    () =>
+      tree?.length && node?.id
+        ? resolveSectionToneForNode(tree, node.id, device, siteTheme, alignedContentTokens)
+        : null,
+    [tree, node?.id, device, siteTheme, alignedContentTokens]
+  );
+  const darkContentMode = isSiteContentDarkMode(siteTheme, themeTokens);
+  const neutralizeBodyColors = darkContentMode;
+  const neutralizeBodyColorsPreview = neutralizeBodyColors;
+  const neutralizeBodyColorsPersist = neutralizeBodyColors;
   const rawDevice = getDeviceStyle(node.style_json, device);
-  const themed = mergeNodeStyleWithSiteTheme(rawDevice, siteTheme, node.nodeType);
+  const surfaceReady = neutralizeLightSurfaceDeviceStyle(rawDevice, siteTheme, alignedContentTokens);
+  const themed = mergeNodeStyleWithSiteTheme(surfaceReady, siteTheme, node.nodeType);
   const gapReady = withResolvedLayoutGap(themed, siteTheme);
   let deviceStyle = finalizeLeafDeviceStyle(
     node,
@@ -1229,7 +1260,12 @@ function NodeRenderer({
     if (node.nodeType !== 'image' || !Array.isArray(tree) || !tree.length) return 'column';
     return getImageParentFlexDirection(tree, node.id, device, siteTheme);
   }, [node.nodeType, node.id, tree, device, siteTheme]);
-  let nodeCss = styleToCss(deviceStyle, siteTheme) || undefined;
+  let nodeCss =
+    styleToCss(deviceStyle, siteTheme, {
+      nodeType: node.nodeType,
+      animationPresets,
+      darkContentMode,
+    }) || undefined;
   if (compactHeaderBar && siteHeaderRow) {
     nodeCss = {
       ...(nodeCss || {}),
@@ -1341,11 +1377,12 @@ function NodeRenderer({
   ) {
     nodeCss = ensureHeaderActionsVisibleCss(nodeCss);
   }
-  if (
-    neutralizeBodyColorsPreview &&
-    (node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'rich_text')
-  ) {
-    nodeCss = neutralizeLeafTextCssObject(nodeCss || {});
+  if (node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'rich_text') {
+    nodeCss = neutralizeLeafTextCssObject(nodeCss || {}, {
+      darkContentMode,
+      sectionTone: ancestorSectionTone,
+    });
+    nodeCss = applySectionToneToLeafCss(nodeCss, ancestorSectionTone);
   }
   /** Match liveRenderer: any direct `.live-doc` child row gets spacing vars (not only when semantic tag resolves). */
   const isRootLiveDocRow = node.nodeType === 'row' && Array.isArray(tree) && isRootPageRow(tree, node);
@@ -1406,13 +1443,27 @@ function NodeRenderer({
       : nodeCssWithRootSpacing;
   const sectionContentMode =
     node.nodeType === 'row' ? resolveSectionContentWidth(rowMetaForStrip, sectionWidthCtx) : '';
-  const nodeCssWithSectionContent =
+  let nodeCssWithSectionContent =
     sectionContentMode === 'boxed'
       ? {
           ...(nodeCssWithLandmarkContent || {}),
           '--live-section-content-max-width': `${resolveSectionContentMaxWidthPx(rowMetaForStrip, deviceStyle?.layout?.maxWidth)}px`,
         }
       : nodeCssWithLandmarkContent;
+  const parentRowForCol = node.nodeType === 'column' ? findParentRowForNode(tree, node.id) : null;
+  const rowChildColumnIndex =
+    parentRowForCol?.children?.findIndex((c) => String(c?.id) === String(node.id)) ?? -1;
+  const templateContrast = applyTemplateSectionContrast(node, nodeCssWithSectionContent || nodeCss, {
+    tree,
+    device,
+    siteTheme,
+    sectionTemplateId:
+      node.props?.meta?.sectionTemplate ||
+      sectionTemplateDataAttrsForRow(parentRowForCol)['data-section-template'] ||
+      undefined,
+    rowChildColumnIndex: rowChildColumnIndex >= 0 ? rowChildColumnIndex : undefined,
+  });
+  nodeCssWithSectionContent = templateContrast.css;
   const rowPaddingDefinedAttrs =
     isRootLiveDocRow &&
     (rowSemanticTag === 'section' || rowSemanticTag === 'main') &&
@@ -1441,7 +1492,7 @@ function NodeRenderer({
   );
   const leafInteractionShell =
     !shellCarriesLeafLayout && node.nodeType !== 'image'
-      ? resolveLeafInteractionShell({ deviceStyle, previewCss: externalPreview })
+      ? resolveLeafInteractionShell({ deviceStyle, previewCss: externalPreview, animationPresets })
       : { ixStyle: null, ixClass: '' };
   const isImageLeaf = node.nodeType === 'image';
   const imageCssSplit = isImageLeaf ? splitImageNodeCss(inlineStyle) : null;
@@ -1454,6 +1505,13 @@ function NodeRenderer({
   })();
   const imageFigureStyle = imageCssSplit?.figure;
   const isRow = node.nodeType === 'row';
+  let sectionToneAttrs =
+    node.nodeType === 'row' || node.nodeType === 'column' || node.nodeType === 'stack'
+      ? {
+          ...sectionToneDataAttrForCss(nodeCssWithSectionContent || nodeCss),
+          ...templateContrast.toneAttrs,
+        }
+      : {};
   const linkedMeta = isRow ? getGlobalLinkMeta(node) : null;
   const isLinkedGlobal = Boolean(linkedMeta);
   const isRowEmpty = isRow && !node.children?.length;
@@ -3144,11 +3202,8 @@ function NodeRenderer({
           {...landmarkContentAttrs}
           {...sectionContentAttrs}
           {...rowPaddingDefinedAttrs}
-          {...(node.props?.meta?.sectionTemplate
-            ? { 'data-section-template': String(node.props.meta.sectionTemplate) }
-            : isGetInTouchSectionRow(node)
-              ? { 'data-section-template': 'getInTouch' }
-              : {})}
+          {...sectionToneAttrs}
+          {...sectionTemplateDataAttrsForRow(node)}
           {...(node.props?.meta?.isHeader ||
           node.props?.meta?.role === 'header' ||
           isSiteHeaderRowForCompact(node)
@@ -3165,7 +3220,7 @@ function NodeRenderer({
           {...(rowSemanticTag === 'footer' || node.props?.meta?.isFooter || node.props?.meta?.role === 'footer'
             ? { 'data-site-footer': 'true' }
             : {})}
-          className={`${classNames} ${interactionPresentationClass(deviceStyle)} bld-node ${isSelected ? 'bld-selected' : ''}`.trim()}
+          className={`${classNames} ${interactionPresentationClass(deviceStyle, animationPresets)} bld-node ${isSelected ? 'bld-selected' : ''}`.trim()}
           style={inlineStyle}
           onClick={handleSelect}
           onMouseDown={maybeStartDirectMove}
@@ -3347,6 +3402,7 @@ function NodeRenderer({
                     insideSiteHeaderRow={childInsideSiteHeaderRow}
                     builderPageId={builderPageId}
                     builderProjectId={builderProjectId}
+                    formPreviewByNodeId={formPreviewByNodeId}
                   />
                 ))}
               </div>
@@ -3361,6 +3417,7 @@ function NodeRenderer({
           }}
           {...attributes}
           data-bld-node={node.id}
+          {...sectionToneAttrs}
           {...(isImageLeaf && (imageAlignAxes.horizontal || imageAlignAxes.vertical)
             ? {
                 ...(imageAlignAxes.horizontal
@@ -3371,7 +3428,7 @@ function NodeRenderer({
                   : {}),
               }
             : {})}
-          className={`${classNames} ${shellCarriesLeafLayout ? interactionPresentationClass(deviceStyle) : leafInteractionShell.ixClass} bld-node bld-node__shell ${isSelected ? 'bld-selected' : ''}`.trim()}
+          className={`${classNames} ${shellCarriesLeafLayout ? interactionPresentationClass(deviceStyle, animationPresets) : leafInteractionShell.ixClass} bld-node bld-node__shell ${isSelected ? 'bld-selected' : ''}`.trim()}
           style={
             isImageLeaf
               ? imageShellStyle
@@ -3536,10 +3593,15 @@ function NodeRenderer({
                   onFaqAccordionPatch: faqAccordionPatchHandler,
                   onFaqAccordionAddItem: faqAccordionAddItemHandler,
                   siteTheme,
+                  themeTokens: alignedContentTokens,
                   stylePresets,
+                  animationPresets,
                   insideSiteHeaderRow,
                   builderPageId,
                   builderProjectId,
+                  formPreviewMode: formPreviewByNodeId?.[node.id] ?? null,
+                  sectionTone: ancestorSectionTone,
+                  builderTree: tree,
                 })}
               </div>
             ) : (
@@ -3570,10 +3632,15 @@ function NodeRenderer({
                 onFaqAccordionPatch: faqAccordionPatchHandler,
                 onFaqAccordionAddItem: faqAccordionAddItemHandler,
                 siteTheme,
+                themeTokens: alignedContentTokens,
                 stylePresets,
+                animationPresets,
                 insideSiteHeaderRow,
                 builderPageId,
                 builderProjectId,
+                formPreviewMode: formPreviewByNodeId?.[node.id] ?? null,
+                sectionTone: ancestorSectionTone,
+                builderTree: tree,
               })
             )}
             {null}
@@ -3793,6 +3860,7 @@ function NodeRenderer({
                     tree={tree}
                     previewCssByNodeId={previewCssByNodeId}
                     onSetPreviewCssForNode={onSetPreviewCssForNode}
+                    formPreviewByNodeId={formPreviewByNodeId}
                     onReportOverflow={onReportOverflow}
                     onDeleteNode={onDeleteNode}
                     onRequestNavigator={onRequestNavigator}
@@ -4023,6 +4091,7 @@ export default function BuilderCanvas({
   flashPasteNodeId = null,
   previewCssByNodeId: externalPreviewCssByNodeId,
   onSetPreviewCssForNode: externalOnSetPreviewCssForNode,
+  formPreviewByNodeId: externalFormPreviewByNodeId,
   activeSpacingEdit,
   onOverflowDiagnosticsChange,
   showGrid = false,
@@ -4031,7 +4100,11 @@ export default function BuilderCanvas({
 }) {
   const builderPageId = Number(builderPageIdProp) > 0 ? Number(builderPageIdProp) : null;
   const builderProjectId = Number(projectId) > 0 ? Number(projectId) : null;
-  const { siteTheme, currentPageSlug } = useBuilderTheme();
+  const { siteTheme, themeTokens, currentPageSlug } = useBuilderTheme();
+  const alignedThemeTokens = useMemo(
+    () => alignThemeTokensWithSiteTheme(normalizeSiteTheme(siteTheme), themeTokens),
+    [siteTheme, themeTokens]
+  );
   const pageVars = currentPageSlug ? siteTheme?.pageVars?.[currentPageSlug] : null;
   const stickyHeader = Boolean(pageVars?.stickyHeader);
   const bodyLayout = resolveBodyLayout(siteTheme, currentPageSlug);
@@ -4040,9 +4113,11 @@ export default function BuilderCanvas({
     const normalized = normalizeSiteTheme(siteTheme);
     return {
       ...siteThemeToCssVariableStyle(normalized),
+      ...themeTokensToCssVariableStyle(alignedThemeTokens),
+      ...livePageCssVarOverridesForPage(normalized, currentPageSlug),
       fontFamily: normalized.typography.fontFamily,
     };
-  }, [siteTheme]);
+  }, [siteTheme, alignedThemeTokens, currentPageSlug]);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const [draggingNodeType, setDraggingNodeType] = useState(null);
   const [isAddSectionOpen, setIsAddSectionOpen] = useState(false);
@@ -4069,7 +4144,7 @@ export default function BuilderCanvas({
 
   useEffect(() => {
     if (!liveDocRef.current) return undefined;
-    return bindInteractionScrollObservers(liveDocRef.current);
+    return bindInteractionObservers(liveDocRef.current);
   }, [tree, device]);
 
   const setPreviewCssForNode = useCallback((nodeId, css, opts = {}) => {
@@ -4087,6 +4162,7 @@ export default function BuilderCanvas({
   }, []);
 
   const effectivePreviewCssByNodeId = externalPreviewCssByNodeId || previewCssByNodeId;
+  const effectiveFormPreviewByNodeId = externalFormPreviewByNodeId || {};
   const effectiveSetPreviewCssForNode = externalOnSetPreviewCssForNode || setPreviewCssForNode;
 
   // CMS preview: fetch a single sample item per repeater collection (cached; not per render).
@@ -4753,6 +4829,8 @@ export default function BuilderCanvas({
               <RuntimeProvider>
               <div
                 className="live-site bld-canvas__live-mirror"
+                data-site-preset={normalizeSiteTheme(siteTheme).presetId}
+                data-token-mode={alignedThemeTokens.mode}
                 data-sticky-header={stickyHeader ? 'true' : 'false'}
                 data-live-body-layout={bodyLayout}
                 style={{
@@ -4783,6 +4861,7 @@ export default function BuilderCanvas({
                       tree={tree}
                       previewCssByNodeId={effectivePreviewCssByNodeId}
                       onSetPreviewCssForNode={effectiveSetPreviewCssForNode}
+                      formPreviewByNodeId={effectiveFormPreviewByNodeId}
                       activeSpacingEdit={activeSpacingEdit}
                       onReportOverflow={reportOverflow}
                       rowRole={node.nodeType === 'row' ? rowRoleForIndex(index, tree.length) : null}

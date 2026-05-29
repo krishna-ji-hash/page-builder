@@ -16,8 +16,16 @@ import {
   SITE_THEME_PRESETS,
   siteThemeToCssVariableStyle,
 } from '@/lib/siteDesignTheme';
-import { DEFAULT_THEME_TOKENS, normalizeThemeTokens, themeTokensToCssVariableStyle } from '@/lib/themeTokens';
+import {
+  alignThemeTokensWithSiteTheme,
+  createModePalettesFromFlat,
+  DEFAULT_THEME_TOKENS,
+  hasModePalettes,
+  normalizeThemeTokens,
+  themeTokensToCssVariableStyle,
+} from '@/lib/themeTokens';
 import { DEFAULT_STYLE_PRESETS, normalizeStylePresets } from '@/lib/stylePresetsStore';
+import { DEFAULT_ANIMATION_PRESETS, normalizeAnimationPresets } from '@/lib/animationPresetsStore';
 
 const BuilderThemeContext = createContext(null);
 
@@ -59,6 +67,8 @@ export function BuilderThemeProvider({ children, persistence = null, persistFlus
   const [themeTokensPersist, setThemeTokensPersist] = useState({ status: 'idle', error: '' });
   const [stylePresets, setStylePresetsState] = useState(() => DEFAULT_STYLE_PRESETS);
   const [stylePresetsPersist, setStylePresetsPersist] = useState({ status: 'idle', error: '' });
+  const [animationPresets, setAnimationPresetsState] = useState(() => DEFAULT_ANIMATION_PRESETS);
+  const [animationPresetsPersist, setAnimationPresetsPersist] = useState({ status: 'idle', error: '' });
   const lastHydrateSigRef = useRef(null);
   const lastSavedJsonRef = useRef('');
   const lastSavedTokensJsonRef = useRef('');
@@ -80,6 +90,10 @@ export function BuilderThemeProvider({ children, persistence = null, persistFlus
   const persistPresetsDebounceTimerRef = useRef(null);
   const persistPresetsDebounceAbortRef = useRef(null);
   const persistPresetsInFlightRef = useRef(null);
+  const persistAnimPresetsDebounceTimerRef = useRef(null);
+  const persistAnimPresetsDebounceAbortRef = useRef(null);
+  const persistAnimPresetsInFlightRef = useRef(null);
+  const lastSavedAnimPresetsJsonRef = useRef('');
 
   useEffect(() => {
     const saved = window.localStorage.getItem(STORAGE_UI);
@@ -221,6 +235,69 @@ export function BuilderThemeProvider({ children, persistence = null, persistFlus
     }
   }, []);
 
+  const runPersistAnimationPresets = useCallback(async (payload, signal) => {
+    const prev = persistAnimPresetsInFlightRef.current;
+    if (prev) {
+      try {
+        await prev;
+      } catch {
+        // ignore
+      }
+    }
+    const pid = persistenceRef.current?.projectId;
+    if (!pid) return;
+    const payloadJson = JSON.stringify(payload);
+    if (payloadJson === lastSavedAnimPresetsJsonRef.current) {
+      setAnimationPresetsPersist({ status: 'idle', error: '' });
+      return;
+    }
+    const job = (async () => {
+      try {
+        const response = await fetch(`/api/projects/${pid}/animation-presets`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            animationPresets: payload,
+            ifRevision: payload.revision,
+          }),
+          signal,
+        });
+        const data = await response.json().catch(() => ({}));
+        if (response.status === 409) {
+          try {
+            await persistenceRef.current?.onRevisionConflict?.();
+            setAnimationPresetsPersist({ status: 'idle', error: '' });
+          } catch (reloadErr) {
+            const msg = reloadErr instanceof Error ? reloadErr.message : String(reloadErr);
+            setAnimationPresetsPersist({ status: 'error', error: msg });
+            persistenceRef.current?.onPersistError?.(msg);
+          }
+          return;
+        }
+        if (!response.ok) {
+          const err = data?.error || `Save failed (${response.status})`;
+          throw new Error(err);
+        }
+        const normalized = normalizeAnimationPresets(data?.animationPresets ?? payload);
+        lastSavedAnimPresetsJsonRef.current = JSON.stringify(normalized);
+        setAnimationPresetsPersist({ status: 'saved', error: '' });
+      } catch (e) {
+        if (e?.name === 'AbortError') return;
+        const message = e instanceof Error ? e.message : String(e);
+        setAnimationPresetsPersist({ status: 'error', error: message });
+        persistenceRef.current?.onPersistError?.(message);
+      }
+    })();
+    persistAnimPresetsInFlightRef.current = job;
+    try {
+      await job;
+    } finally {
+      if (persistAnimPresetsInFlightRef.current === job) {
+        persistAnimPresetsInFlightRef.current = null;
+      }
+    }
+  }, []);
+
   const runPersistSiteTheme = useCallback(async (payload, signal) => {
     const prev = persistInFlightRef.current;
     if (prev) {
@@ -312,17 +389,44 @@ export function BuilderThemeProvider({ children, persistence = null, persistFlus
     const fromDb = persistence?.initialSiteTheme;
     const fromDbTokens = persistence?.initialThemeTokens;
     const fromDbPresets = persistence?.initialStylePresets;
-    const sig = `${projectId}:${JSON.stringify(fromDb ?? null)}:${JSON.stringify(fromDbTokens ?? null)}:${JSON.stringify(fromDbPresets ?? null)}`;
+    const fromDbAnimPresets = persistence?.initialAnimationPresets;
+    const sig = `${projectId}:${JSON.stringify(fromDb ?? null)}:${JSON.stringify(fromDbTokens ?? null)}:${JSON.stringify(fromDbPresets ?? null)}:${JSON.stringify(fromDbAnimPresets ?? null)}`;
     if (lastHydrateSigRef.current === sig) return;
     lastHydrateSigRef.current = sig;
-    const next = normalizeSiteTheme(fromDb ?? undefined);
+    let next = normalizeSiteTheme(fromDb ?? undefined);
+    const nextTokensRaw = normalizeThemeTokens(fromDbTokens ?? undefined);
+
+    if (typeof window !== 'undefined') {
+      const uiTheme = window.localStorage.getItem(STORAGE_UI);
+      if ((uiTheme === 'dark' || uiTheme === 'light') && next.presetId !== uiTheme) {
+        const preset = SITE_THEME_PRESETS[uiTheme];
+        if (preset) {
+          next = normalizeSiteTheme(
+            { ...preset, presetId: uiTheme },
+            { defaultRevision: next.revision, defaultSchemaVersion: next.schemaVersion }
+          );
+        }
+      }
+    }
+
     const json = JSON.stringify(next);
     setSiteThemeState(next);
     lastSavedJsonRef.current = json;
     writeSiteThemeCache(projectId, next);
     setSiteThemePersist({ status: 'idle', error: '' });
 
-    const nextTokens = normalizeThemeTokens(fromDbTokens ?? undefined);
+    let nextTokens = alignThemeTokensWithSiteTheme(next, nextTokensRaw);
+    if (typeof window !== 'undefined') {
+      const uiTheme = window.localStorage.getItem(STORAGE_UI);
+      if (uiTheme === 'dark' || uiTheme === 'light') {
+        if (hasModePalettes(nextTokens)) {
+          if (nextTokens.mode !== uiTheme) nextTokens = normalizeThemeTokens({ ...nextTokens, mode: uiTheme });
+        } else {
+          const { light, dark } = createModePalettesFromFlat(nextTokens);
+          nextTokens = normalizeThemeTokens({ ...nextTokens, mode: uiTheme, light, dark });
+        }
+      }
+    }
     setThemeTokensState(nextTokens);
     lastSavedTokensJsonRef.current = JSON.stringify(nextTokens);
     setThemeTokensPersist({ status: 'idle', error: '' });
@@ -331,7 +435,18 @@ export function BuilderThemeProvider({ children, persistence = null, persistFlus
     setStylePresetsState(nextPresets);
     lastSavedPresetsJsonRef.current = JSON.stringify(nextPresets);
     setStylePresetsPersist({ status: 'idle', error: '' });
-  }, [projectId, persistence?.initialSiteTheme, persistence?.initialThemeTokens, persistence?.initialStylePresets]);
+
+    const nextAnimPresets = normalizeAnimationPresets(fromDbAnimPresets ?? undefined);
+    setAnimationPresetsState(nextAnimPresets);
+    lastSavedAnimPresetsJsonRef.current = JSON.stringify(nextAnimPresets);
+    setAnimationPresetsPersist({ status: 'idle', error: '' });
+  }, [
+    projectId,
+    persistence?.initialSiteTheme,
+    persistence?.initialThemeTokens,
+    persistence?.initialStylePresets,
+    persistence?.initialAnimationPresets,
+  ]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -445,6 +560,43 @@ export function BuilderThemeProvider({ children, persistence = null, persistFlus
     };
   }, [stylePresets, projectId, runPersistStylePresets]);
 
+  useEffect(() => {
+    if (!projectId) return;
+    const json = JSON.stringify(animationPresets);
+    if (json === lastSavedAnimPresetsJsonRef.current) return;
+
+    if (persistAnimPresetsDebounceTimerRef.current != null) {
+      clearTimeout(persistAnimPresetsDebounceTimerRef.current);
+      persistAnimPresetsDebounceTimerRef.current = null;
+    }
+    if (persistAnimPresetsDebounceAbortRef.current) {
+      persistAnimPresetsDebounceAbortRef.current.abort();
+      persistAnimPresetsDebounceAbortRef.current = null;
+    }
+
+    const controller = new AbortController();
+    persistAnimPresetsDebounceAbortRef.current = controller;
+    persistAnimPresetsDebounceTimerRef.current = setTimeout(() => {
+      persistAnimPresetsDebounceTimerRef.current = null;
+      void runPersistAnimationPresets(animationPresets, controller.signal).finally(() => {
+        if (persistAnimPresetsDebounceAbortRef.current === controller) {
+          persistAnimPresetsDebounceAbortRef.current = null;
+        }
+      });
+    }, 550);
+
+    return () => {
+      if (persistAnimPresetsDebounceTimerRef.current != null) {
+        clearTimeout(persistAnimPresetsDebounceTimerRef.current);
+        persistAnimPresetsDebounceTimerRef.current = null;
+      }
+      controller.abort();
+      if (persistAnimPresetsDebounceAbortRef.current === controller) {
+        persistAnimPresetsDebounceAbortRef.current = null;
+      }
+    };
+  }, [animationPresets, projectId, runPersistAnimationPresets]);
+
   const setSiteTheme = useCallback((next) => {
     setSiteThemeState((prev) => {
       const raw = typeof next === 'function' ? next(prev) : next;
@@ -475,7 +627,18 @@ export function BuilderThemeProvider({ children, persistence = null, persistFlus
     });
   }, []);
 
+  const setAnimationPresets = useCallback((next) => {
+    setAnimationPresetsState((prev) => {
+      const raw = typeof next === 'function' ? next(prev) : next;
+      return normalizeAnimationPresets(raw, {
+        defaultRevision: prev.revision,
+        defaultSchemaVersion: prev.schemaVersion,
+      });
+    });
+  }, []);
+
   const applySitePreset = useCallback((presetId) => {
+    const mode = presetId === 'dark' ? 'dark' : 'light';
     setSiteThemeState((prev) => {
       const preset = SITE_THEME_PRESETS[presetId];
       if (!preset) return prev;
@@ -483,6 +646,12 @@ export function BuilderThemeProvider({ children, persistence = null, persistFlus
         { ...preset, presetId },
         { defaultRevision: prev.revision, defaultSchemaVersion: prev.schemaVersion }
       );
+    });
+    setThemeTokensState((prev) => {
+      if (prev.mode === mode && hasModePalettes(prev)) return prev;
+      if (hasModePalettes(prev)) return { ...prev, mode };
+      const { light, dark } = createModePalettesFromFlat(prev);
+      return { ...prev, mode, light, dark };
     });
   }, []);
 
@@ -533,7 +702,10 @@ export function BuilderThemeProvider({ children, persistence = null, persistFlus
   }, []);
 
   const cssVarStyle = useMemo(() => siteThemeToCssVariableStyle(siteTheme), [siteTheme]);
-  const tokenVarStyle = useMemo(() => themeTokensToCssVariableStyle(themeTokens), [themeTokens]);
+  const tokenVarStyle = useMemo(
+    () => themeTokensToCssVariableStyle(alignThemeTokensWithSiteTheme(siteTheme, themeTokens)),
+    [siteTheme, themeTokens]
+  );
 
   const value = useMemo(
     () => ({
@@ -545,12 +717,15 @@ export function BuilderThemeProvider({ children, persistence = null, persistFlus
       setThemeTokens,
       stylePresets,
       setStylePresets,
+      animationPresets,
+      setAnimationPresets,
       applySitePreset,
       tokens,
       setTokens,
       siteThemePersist,
       themeTokensPersist,
       stylePresetsPersist,
+      animationPresetsPersist,
       currentPageSlug,
       toggleTheme,
     }),
@@ -562,6 +737,8 @@ export function BuilderThemeProvider({ children, persistence = null, persistFlus
       setThemeTokens,
       stylePresets,
       setStylePresets,
+      animationPresets,
+      setAnimationPresets,
       applySitePreset,
       toggleTheme,
       tokens,
@@ -569,6 +746,7 @@ export function BuilderThemeProvider({ children, persistence = null, persistFlus
       siteThemePersist,
       themeTokensPersist,
       stylePresetsPersist,
+      animationPresetsPersist,
       currentPageSlug,
     ]
   );

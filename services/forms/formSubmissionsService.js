@@ -37,7 +37,14 @@ export function sanitizeSubmissionMeta(meta) {
   return safeJsonObject(meta, { maxKeys: 40, maxString: 1000 }) || {};
 }
 
-export async function createFormSubmission({ projectId, pageId, formNodeId, values, meta }) {
+export async function createFormSubmission({
+  projectId,
+  pageId,
+  formNodeId,
+  values,
+  meta,
+  status = 'received',
+}) {
   const pid = Number(projectId);
   const pgid = Number(pageId);
   if (!Number.isInteger(pid) || pid <= 0) throw new Error('Invalid projectId');
@@ -48,14 +55,16 @@ export async function createFormSubmission({ projectId, pageId, formNodeId, valu
   const submissionJson = sanitizeSubmissionValues(values);
   const metaJson = sanitizeSubmissionMeta(meta);
 
+  const st = String(status || 'received').trim().slice(0, 32) || 'received';
+
   const pool = getDbPool();
   const [r] = await pool.query(
-    `INSERT INTO form_submissions (project_id, page_id, form_node_id, submission_json, meta_json)
-     VALUES (?, ?, ?, ?, ?)`,
-    [pid, pgid, formId, JSON.stringify(submissionJson), JSON.stringify(metaJson)]
+    `INSERT INTO form_submissions (project_id, page_id, form_node_id, submission_json, meta_json, status)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [pid, pgid, formId, JSON.stringify(submissionJson), JSON.stringify(metaJson), st]
   );
 
-  return { id: r.insertId, projectId: pid, pageId: pgid, formNodeId: formId };
+  return { id: r.insertId, projectId: pid, pageId: pgid, formNodeId: formId, status: st };
 }
 
 /**

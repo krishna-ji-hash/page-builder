@@ -45,13 +45,16 @@ test('sanitizeRichHtml neutralizeHardcodedBodyTextColors strips inline slate on 
   assert.ok(fixed.includes('Dispatch'));
 });
 
-test('neutralizeLeafTextCssObject maps neutral dark color and --node-text to theme token', () => {
-  const a = neutralizeLeafTextCssObject({ color: '#0f172a', fontSize: '18px' });
-  assert.equal(a.color, 'var(--color-text)');
+test('neutralizeLeafTextCssObject maps neutral dark color and --node-text to section fg', () => {
+  const a = neutralizeLeafTextCssObject({ color: '#0f172a', fontSize: '18px' }, { darkContentMode: true });
+  assert.match(String(a.color), /live-section-fg/);
   assert.equal(a.fontSize, '18px');
-  const b = neutralizeLeafTextCssObject({ '--node-text': 'rgb(15, 23, 42)', width: '100%' });
-  assert.equal(b['--node-text'], 'var(--color-text)');
+  const b = neutralizeLeafTextCssObject(
+    { '--node-text': 'rgb(15, 23, 42)', width: '100%' },
+    { darkContentMode: true }
+  );
+  assert.match(String(b['--node-text']), /live-section-fg/);
   assert.equal(b.width, '100%');
-  const c = neutralizeLeafTextCssObject({ color: '#f97316' });
+  const c = neutralizeLeafTextCssObject({ color: '#f97316' }, { darkContentMode: true });
   assert.equal(c.color, '#f97316');
 });

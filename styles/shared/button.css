@@ -35,7 +35,7 @@
 }
 
 .bld-btn:hover {
-  background: var(--btn-bg-hover, color-mix(in srgb, var(--btn-bg, var(--node-bg, #ffffff)) 92%, #000 8%));
+  background: var(--btn-bg-hover, color-mix(in srgb, var(--btn-bg, var(--node-bg, var(--token-bg-surface))) 92%, #000 8%));
   color: var(--btn-text-hover, var(--btn-text, var(--node-text, inherit)));
   border-color: var(--btn-border-hover, var(--node-border-color, color-mix(in srgb, currentColor 24%, transparent)));
   transform: translateY(var(--lift-y));
@@ -101,25 +101,25 @@
 
 .bld-btn--default {
   --btn-bg: var(--node-bg, rgba(99, 102, 241, 1));
-  --btn-text: var(--node-text, #ffffff);
+  --btn-text: var(--node-text, var(--token-button-text));
 }
 
 .bld-btn--info {
-  --btn-bg: color-mix(in srgb, #0ea5e9 92%, #ffffff 8%);
-  --btn-text: #ffffff;
+  --btn-bg: color-mix(in srgb, #0ea5e9 92%, var(--token-button-text) 8%);
+  --btn-text: var(--token-button-text);
 }
 
 .bld-btn--success {
-  --btn-bg: color-mix(in srgb, #22c55e 92%, #ffffff 8%);
-  --btn-text: #ffffff;
+  --btn-bg: color-mix(in srgb, #22c55e 92%, var(--token-button-text) 8%);
+  --btn-text: var(--token-button-text);
 }
 
 .bld-btn--warning {
-  --btn-bg: color-mix(in srgb, #f59e0b 92%, #ffffff 8%);
-  --btn-text: #111827;
+  --btn-bg: color-mix(in srgb, #f59e0b 92%, var(--token-button-text) 8%);
+  --btn-text: var(--token-text-primary);
 }
 
 .bld-btn--danger {
-  --btn-bg: color-mix(in srgb, #ef4444 92%, #ffffff 8%);
-  --btn-text: #ffffff;
+  --btn-bg: color-mix(in srgb, #ef4444 92%, var(--token-button-text) 8%);
+  --btn-text: var(--token-button-text);
 }
