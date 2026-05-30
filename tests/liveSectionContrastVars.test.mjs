@@ -160,6 +160,40 @@ test('styleToCss never emits raw #ffffff on heading color or --node-text', () =>
   assert.match(String(css['--node-text']), /live-section-fg/);
 });
 
+test('styleToCss preserves dark text on white button in dark content mode', () => {
+  const css = styleToCss(
+    {
+      colors: { textColor: '#111111', backgroundColor: '#ffffff' },
+      spacing: { padding: '13px 24px' },
+    },
+    darkSite,
+    { nodeType: 'button', darkContentMode: true }
+  );
+  assert.equal(css.color, '#111111');
+  assert.equal(css['--node-text'], '#111111');
+  assert.equal(css.backgroundColor, '#ffffff');
+});
+
+test('styleToCss still remaps button text without explicit contrasting background', () => {
+  const css = styleToCss(
+    { colors: { textColor: '#111111' }, spacing: { padding: '13px 24px' } },
+    darkSite,
+    { nodeType: 'button', darkContentMode: true }
+  );
+  assert.match(String(css.color), /live-section-fg/);
+});
+
+test('resolveSectionBackgroundIsLight resolves remapped token surface in dark mode', () => {
+  const css = styleToCss(
+    { background: { backgroundColor: '#f4f8fc' } },
+    darkSite,
+    { nodeType: 'row', darkContentMode: true }
+  );
+  const light = resolveSectionBackgroundIsLight({ css, deviceStyle: {}, siteTheme: darkSite });
+  assert.equal(light, false);
+  assert.equal(css['--live-section-muted'], LIVE_SECTION_MUTED_ON_DARK);
+});
+
 test('sectionToneDataAttrForCss maps contrast vars to data-section-tone', () => {
   assert.deepEqual(sectionToneDataAttrForCss({ '--live-section-fg': LIVE_SECTION_FG_ON_LIGHT }), {
     'data-section-tone': 'light',

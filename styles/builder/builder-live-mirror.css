@@ -200,12 +200,35 @@
 }
 
 /* Match published live: content bands + header/nested hero (parity with live-site.css). */
-.bld-builder-root .bld-canvas__live-mirror .live-doc > :where(section.live-node.bld-row, main.live-node.bld-row):not([data-site-header='true']):not([data-site-footer='true']):not([data-section-template]),
-.bld-builder-root .bld-canvas__live-mirror .live-doc > :is(header.live-node, [data-site-header='true']) > .live-node.bld-row {
+.bld-builder-root
+  .bld-canvas__live-mirror
+  .live-doc
+  > :where(section.live-node.bld-row, main.live-node.bld-row):not([data-site-header='true']):not([data-site-footer='true']):not(
+    [data-section-template]
+  ):not(:has(.live-carousel--ticker)):not(:has(.live-carousel--marquee)):not(:has(.live-carousel--logo)),
+.bld-builder-root
+  .bld-canvas__live-mirror
+  .live-doc
+  > :is(header.live-node, [data-site-header='true'])
+  > .live-node.bld-row:not(:has(.live-carousel--ticker)):not(:has(.live-carousel--marquee)):not(:has(.live-carousel--logo)) {
   align-items: flex-start !important;
   min-height: min-content;
   overflow-x: clip;
   overflow-y: visible;
+}
+
+/* Logo ticker/marquee rows: allow horizontal scroll bleed (same as live-site.css). */
+.bld-builder-root .bld-canvas__live-mirror .live-doc > :where(section.live-node.bld-row, main.live-node.bld-row):has(
+    :is(.live-carousel--ticker, .live-carousel--marquee, .live-carousel--logo)
+  ),
+.bld-builder-root
+  .bld-canvas__live-mirror
+  .live-doc
+  :where(.live-node.bld-row, .live-node.bld-column, .live-node.bld-stack):has(
+    > :is(.live-carousel--ticker, .live-carousel--marquee, .live-carousel--logo)
+  ) {
+  overflow: visible;
+  overflow-x: visible;
 }
 
 .bld-builder-root .bld-canvas__live-mirror .live-doc > :where(section.live-node.bld-row, main.live-node.bld-row):not([data-site-header='true']):not([data-site-footer='true']):not([data-section-template]) > .live-node.bld-column,

@@ -1,0 +1,121 @@
+.bld-project-brand {
+  padding: 12px 14px 20px;
+}
+
+.bld-project-brand__head {
+  margin-bottom: 16px;
+}
+
+.bld-project-brand__title {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.bld-project-brand__lead {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--bld-text-muted, #64748b);
+}
+
+.bld-project-brand__status {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--bld-text-muted, #64748b);
+}
+
+.bld-project-brand__status--ok {
+  color: #16a34a;
+}
+
+.bld-project-brand__section {
+  margin-bottom: 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--bld-border, #e2e8f0);
+}
+
+.bld-project-brand__section:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.bld-project-brand__section-title {
+  margin-bottom: 10px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--bld-text-muted, #64748b);
+}
+
+.bld-project-brand__hint {
+  margin: 0 0 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--bld-text-muted, #64748b);
+}
+
+.bld-project-brand__color {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.bld-project-brand__color-label {
+  font-size: 12px;
+}
+
+.bld-project-brand__color-inputs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bld-project-brand__swatch {
+  width: 36px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid var(--bld-border, #e2e8f0);
+  border-radius: 6px;
+  cursor: pointer;
+  background: transparent;
+}
+
+.bld-project-brand__hex {
+  width: 92px;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.bld-project-brand__font-preview {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--bld-border, #e2e8f0);
+  border-radius: 10px;
+  background: var(--bld-surface-2, #f8fafc);
+}
+
+.bld-project-brand__font-preview-heading {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-bottom: 6px;
+}
+
+.bld-project-brand__font-preview-body {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.bld-project-brand__apply-font {
+  margin-top: 12px;
+}
+
+.bld-project-brand__apply-btn {
+  width: 100%;
+}

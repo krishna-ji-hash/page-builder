@@ -429,6 +429,43 @@
   min-width: 0;
 }
 
+/* Feature tabs — default active tab picker */
+.bld-feature-tabs-active-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bld-feature-tabs-active-picker__btn {
+  width: 100%;
+  text-align: left;
+  border: 1px solid color-mix(in srgb, var(--bld-border) 88%, transparent);
+  background: var(--bld-surface-2);
+  color: var(--bld-text);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.bld-feature-tabs-active-picker__btn:hover {
+  border-color: color-mix(in srgb, var(--bld-primary) 45%, var(--bld-border));
+  background: color-mix(in srgb, var(--bld-primary) 8%, var(--bld-surface-2));
+}
+
+.bld-feature-tabs-active-picker__btn.is-active {
+  border-color: color-mix(in srgb, var(--bld-primary) 70%, var(--bld-border));
+  background: color-mix(in srgb, var(--bld-primary) 14%, var(--bld-surface-2));
+  color: var(--bld-text);
+  box-shadow: inset 3px 0 0 var(--bld-primary);
+}
+
 .bld-panel {
   background: transparent;
   border: none;

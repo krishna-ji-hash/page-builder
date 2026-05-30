@@ -50,12 +50,19 @@ import { buildReusableBulkOrderedNodes } from '@/lib/reusableBlockInsert';
 import PageSeoModal from './seo/PageSeoModal';
 import AuditModal from './audits/AuditModal';
 import AuditBadgesOverlay from './audits/AuditBadgesOverlay';
+import ProjectBrandPanel from './inspector/ProjectBrandPanel';
+import {
+  applyBrandFontToTree,
+  collectBrandFontClearPatches,
+  countUserFontOverrideNodes,
+} from '@/lib/projectBrand';
 import '@/styles/builder/builder-shell.css';
 import '@/styles/builder/builder-rail.css';
 import '@/styles/builder/builder-topbar.css';
 import '@/styles/builder/builder-sidebar.css';
 import '@/styles/builder/builder-canvas.css';
 import '@/styles/builder/builder-inspector.css';
+import '@/styles/builder/project-brand-panel.css';
 import '@/styles/builder/builder-responsive.css';
 import '@/styles/shared/menu.css';
 import '@/styles/shared/button.css';
@@ -451,7 +458,7 @@ export default function BuilderShell({ pageId }) {
   const [device, setDevice] = useState('desktop');
   /** Default Strict so rows (headers) keep flex — Free mode uses absolute coords and breaks space-between. */
   const [isFreeMode, setIsFreeMode] = useState(false);
-  const [leftPanelTab, setLeftPanelTab] = useState('elements'); // elements | templates | globals | layers
+  const [leftPanelTab, setLeftPanelTab] = useState('elements'); // elements | templates | globals | layers | theme
   const [sectionsCollapsed, setSectionsCollapsed] = useState(false);
   const [interiorCollapsed, setInteriorCollapsed] = useState(false);
   const [page, setPage] = useState(null);
@@ -472,6 +479,7 @@ export default function BuilderShell({ pageId }) {
   const [isSavingNode, setIsSavingNode] = useState(false);
   const [isCreatingNode, setIsCreatingNode] = useState(false);
   const [isApplyingResponsive, setIsApplyingResponsive] = useState(false);
+  const [isApplyingBrandFonts, setIsApplyingBrandFonts] = useState(false);
   const [isDeletingNode, setIsDeletingNode] = useState(false);
   const [deletingNodeId, setDeletingNodeId] = useState(null);
   const deleteInFlightRef = useRef(false);
@@ -923,7 +931,7 @@ export default function BuilderShell({ pageId }) {
     setInspectorTab(styleFirst ? 'style' : 'content');
   };
 
-  const handleNodeUpdate = async ({ nodeId, payload }) => {
+  const handleNodeUpdate = async ({ nodeId, payload, skipHistorySnapshot = false }) => {
     const normalizeNodeId = (raw) => {
       const s = String(raw ?? '').trim();
       if (!s) return null;
@@ -939,6 +947,8 @@ export default function BuilderShell({ pageId }) {
     if (blockedNodeUpdateIdsRef.current.has(normalizedNodeId)) {
       return;
     }
+    const brandFontNormalize = Boolean(payload?.brandFontNormalize);
+    const apiPayload = { ...payload };
     const targetNode = findNodeInTree(tree, normalizedNodeId);
     if (!targetNode) {
       if (deleteInFlightRef.current) return;
@@ -949,11 +959,11 @@ export default function BuilderShell({ pageId }) {
       }
       return;
     }
-    if (isStrictAncestorSectionLocked(tree, normalizedNodeId)) {
+    if (!brandFontNormalize && isStrictAncestorSectionLocked(tree, normalizedNodeId)) {
       setErrorMessage('This layer is inside a locked section. Unlock the section in the left panel to edit.');
       return;
     }
-    if (targetNode?.nodeType === 'row' && isSectionLockedRow(targetNode)) {
+    if (!brandFontNormalize && targetNode?.nodeType === 'row' && isSectionLockedRow(targetNode)) {
       const mergedMeta = { ...(targetNode.props?.meta || {}), ...(payload.props?.meta || {}) };
       if (!metaRepresentsExplicitSectionUnlock(mergedMeta)) {
         setErrorMessage('This section is locked. Click the lock icon in Sections or Layers to unlock.');
@@ -961,7 +971,9 @@ export default function BuilderShell({ pageId }) {
       }
     }
     const beforeTree = tree;
-    pushHistorySnapshot(beforeTree);
+    if (!skipHistorySnapshot) {
+      pushHistorySnapshot(beforeTree);
+    }
     setIsSavingNode(true);
     setErrorMessage('');
     setTree((prev) =>
@@ -979,7 +991,7 @@ export default function BuilderShell({ pageId }) {
       const response = await fetch(`/api/nodes/${normalizedNodeId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(apiPayload),
       });
       const data = await readJsonSafe(response);
       if (!response.ok) {
@@ -1010,6 +1022,44 @@ export default function BuilderShell({ pageId }) {
       setIsSavingNode(false);
     }
   };
+
+  const explicitFontOverrideCount = useMemo(
+    () => countUserFontOverrideNodes(tree),
+    [tree]
+  );
+
+  const handleLeftPanelTabChange = useCallback(
+    (tab) => {
+      setLeftPanelTab(tab);
+      if (tab === 'theme') {
+        setInspectorTab('theme');
+      } else if (inspectorTab === 'theme') {
+        setInspectorTab('content');
+      }
+    },
+    [inspectorTab]
+  );
+
+  const handleApplyBrandFontsToPage = useCallback(async () => {
+    const patches = collectBrandFontClearPatches(tree);
+    if (!patches.length) return;
+    const beforeTree = tree;
+    pushHistorySnapshot(beforeTree);
+    setIsApplyingBrandFonts(true);
+    setErrorMessage('');
+    setTree(applyBrandFontToTree(tree));
+    try {
+      for (const patch of patches) {
+        await handleNodeUpdate({ ...patch, skipHistorySnapshot: true });
+      }
+      setHasUnpublishedEdits(true);
+    } catch (error) {
+      setTree(beforeTree);
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsApplyingBrandFonts(false);
+    }
+  }, [tree, handleNodeUpdate]);
 
   const handleToggleSectionLock = async (rowId) => {
     const rid = Number(rowId);
@@ -4147,37 +4197,44 @@ export default function BuilderShell({ pageId }) {
                 <button
                   type="button"
                   className={`bld-left__tab ${leftPanelTab === 'elements' ? 'is-active' : ''}`}
-                  onClick={() => setLeftPanelTab('elements')}
+                  onClick={() => handleLeftPanelTabChange('elements')}
                 >
                   Elements
                 </button>
                 <button
                   type="button"
                   className={`bld-left__tab ${leftPanelTab === 'templates' ? 'is-active' : ''}`}
-                  onClick={() => setLeftPanelTab('templates')}
+                  onClick={() => handleLeftPanelTabChange('templates')}
                 >
                   Templates
                 </button>
                 <button
                   type="button"
                   className={`bld-left__tab ${leftPanelTab === 'reusable' ? 'is-active' : ''}`}
-                  onClick={() => setLeftPanelTab('reusable')}
+                  onClick={() => handleLeftPanelTabChange('reusable')}
                 >
                   Reusable
                 </button>
                 <button
                   type="button"
                   className={`bld-left__tab ${leftPanelTab === 'globals' ? 'is-active' : ''}`}
-                  onClick={() => setLeftPanelTab('globals')}
+                  onClick={() => handleLeftPanelTabChange('globals')}
                 >
                   Globals
                 </button>
                 <button
                   type="button"
                   className={`bld-left__tab ${leftPanelTab === 'layers' ? 'is-active' : ''}`}
-                  onClick={() => setLeftPanelTab('layers')}
+                  onClick={() => handleLeftPanelTabChange('layers')}
                 >
                   Layers
+                </button>
+                <button
+                  type="button"
+                  className={`bld-left__tab ${leftPanelTab === 'theme' ? 'is-active' : ''}`}
+                  onClick={() => handleLeftPanelTabChange('theme')}
+                >
+                  Theme
                 </button>
               </div>
               {Array.isArray(selectionBreadcrumb) && selectionBreadcrumb.length ? (
@@ -4481,7 +4538,14 @@ export default function BuilderShell({ pageId }) {
                 </div>
               ) : null}
               <div className="bld-left__library-scroll">
-                <BuilderSidebar
+                {leftPanelTab === 'theme' ? (
+                  <ProjectBrandPanel
+                    onApplyFontsToPage={handleApplyBrandFontsToPage}
+                    isApplyingFonts={isApplyingBrandFonts}
+                    explicitFontOverrideCount={explicitFontOverrideCount}
+                  />
+                ) : (
+                  <BuilderSidebar
                   activeTab={
                     leftPanelTab === 'layers'
                       ? 'layers'
@@ -4566,6 +4630,7 @@ export default function BuilderShell({ pageId }) {
                   }}
                   onOpenGlobalComponentEditor={openGlobalComponentEditor}
                 />
+                )}
               </div>
             </div>
           </aside>
@@ -4708,6 +4773,7 @@ export default function BuilderShell({ pageId }) {
               isCreatingNode={isCreatingNode}
               onApplyResponsiveToPage={handleApplyResponsiveToPage}
               isApplyingResponsive={isApplyingResponsive}
+              hideBrandThemeSections={leftPanelTab === 'theme'}
             />
           </aside>
         </div>

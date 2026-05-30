@@ -14,6 +14,7 @@ export default function FeatureTabs({
   imageFit: imageFitProp,
   imageHeightPx: imageHeightPxProp,
   tabAlign: tabAlignProp,
+  sectionTone = null,
   onActiveTabChange,
   builderMode = false,
   builderEditable = false,
@@ -60,19 +61,13 @@ export default function FeatureTabs({
     setEditingTabLabelId(null);
   }, [tabIdsSignature]);
 
-  /** Builder only: inspector preview / save pushed a new activeTabId. */
+  /** Builder only: inspector / saved props pushed a new activeTabId — always honor it. */
   useEffect(() => {
     if (!controlled) return;
     const next = String(activeTabIdProp ?? '').trim();
     if (!next || !tabs.some((t) => t.id === next)) return;
     setActiveId((cur) => {
-      if (cur === next) {
-        lastPropActiveRef.current = next;
-        return cur;
-      }
-      if (lastPropActiveRef.current === cur && tabs.some((t) => t.id === cur)) {
-        return cur;
-      }
+      if (cur === next) return cur;
       lastPropActiveRef.current = next;
       return next;
     });
@@ -202,6 +197,7 @@ export default function FeatureTabs({
         .filter(Boolean)
         .join(' ')}
       style={style}
+      {...(sectionTone === 'dark' || sectionTone === 'light' ? { 'data-section-tone': sectionTone } : {})}
     >
       {canvasEdit ? (
         <p className="live-feature-tabs__builder-hint" aria-hidden>

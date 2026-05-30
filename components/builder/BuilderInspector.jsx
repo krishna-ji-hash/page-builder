@@ -127,8 +127,11 @@ function getSelectedDeviceStyle(selectedNode, device) {
 function getInspectorResolvedStyle(selectedNode, device, siteTheme) {
   const raw = getSelectedDeviceStyle(selectedNode, device);
   const nt = selectedNode?.nodeType;
-  if (!nt) return mergeNodeStyleWithSiteTheme(raw, siteTheme, null);
-  const themed = withResolvedLayoutGap(mergeNodeStyleWithSiteTheme(raw, siteTheme, nt), siteTheme);
+  if (!nt) return mergeNodeStyleWithSiteTheme(raw, siteTheme, null, { treeNode: selectedNode });
+  const themed = withResolvedLayoutGap(
+    mergeNodeStyleWithSiteTheme(raw, siteTheme, nt, { treeNode: selectedNode }),
+    siteTheme
+  );
   if (nt === 'menu') {
     const orientation = selectedNode.props?.orientation === 'column' ? 'column' : 'row';
     return finalizeLeafDeviceStyle(
@@ -172,6 +175,10 @@ function mergeStyleForDevice(selectedNode, device, patch, siteTheme, styleJsonOv
     },
     transform: { ...(currentDevice.transform || {}), ...(patch.transform || {}) },
   };
+  if (patch.typography && patch.typography.fontFamily === null) {
+    delete merged.typography.fontFamily;
+    if (Object.keys(merged.typography).length === 0) delete merged.typography;
+  }
   if (Object.prototype.hasOwnProperty.call(patch, 'interactions')) {
     const ix = patch.interactions;
     if (ix && typeof ix === 'object' && Object.keys(ix).length > 0) {
@@ -352,6 +359,7 @@ export default function BuilderInspector({
   onSelectNode,
   onApplyResponsiveToPage,
   isApplyingResponsive = false,
+  hideBrandThemeSections = false,
 }) {
   const [internalTab, setInternalTab] = useState('content');
   const activeTab = activeTabProp || internalTab;
@@ -805,7 +813,7 @@ export default function BuilderInspector({
       alt: selectedNode.props?.alt || '',
       imageFit: selectedNode.props?.imageFit || 'cover',
       imageHeightPx: Number(selectedNode.props?.imageHeightPx || 0),
-      fontFamily: style?.typography?.fontFamily || 'Inter',
+      fontFamily: style?.typography?.fontFamily || '',
       fontSizePx: parsePxValue(style?.typography?.fontSize, 16),
       fontWeight: style?.typography?.fontWeight || '400',
       lineHeight: style?.typography?.lineHeight || '1.4',
@@ -2281,7 +2289,21 @@ export default function BuilderInspector({
     }
 
     previewStylePatch(built.patch);
-    await updateStyle(built.patch, baseJsonOverride);
+    const style_json = mergeStyleForDevice(selectedNode, device, built.patch, siteTheme, baseJsonOverride);
+    const nodePayload = { style_json };
+    if (built.propsMetaPatch) {
+      const prevMeta =
+        selectedNode.props?.meta &&
+        typeof selectedNode.props.meta === 'object' &&
+        !Array.isArray(selectedNode.props.meta)
+          ? selectedNode.props.meta
+          : {};
+      nodePayload.props = {
+        ...selectedNode.props,
+        meta: { ...prevMeta, ...built.propsMetaPatch },
+      };
+    }
+    await updateNode(selectedNode.id, nodePayload);
 
     const isRow = selectedNode?.nodeType === 'row';
     const isRootLandmarkRow =
@@ -2770,6 +2792,7 @@ export default function BuilderInspector({
           }
           onApplyResponsiveToPage={onApplyResponsiveToPage}
           isApplyingResponsive={isApplyingResponsive}
+          hideBrandSections={hideBrandThemeSections}
         />
       ) : null}
 

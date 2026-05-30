@@ -84,6 +84,7 @@ export default function ThemePanel({
   selectedNodeId = null,
   onApplyResponsiveToPage,
   isApplyingResponsive = false,
+  hideBrandSections = false,
 }) {
   const {
     siteTheme,
@@ -278,31 +279,39 @@ export default function ThemePanel({
                 : null}
         </p>
       ) : null}
-      <div className="bld-tiny-toggle" style={{ marginBottom: 12 }}>
-        <button
-          type="button"
-          className={`bld-tiny-toggle__btn ${siteTheme.presetId === 'light' ? 'is-active' : ''}`}
-          onClick={() => applySitePreset('light')}
-        >
-          Light
-        </button>
-        <button
-          type="button"
-          className={`bld-tiny-toggle__btn ${siteTheme.presetId === 'dark' ? 'is-active' : ''}`}
-          onClick={() => applySitePreset('dark')}
-        >
-          Dark
-        </button>
-      </div>
-      <Section title="Colors">
-        <ColorRow fieldId="theme-c-primary" label="Primary" value={colors.primary} onChange={(v) => patchColors('primary', v)} />
-        <ColorRow fieldId="theme-c-secondary" label="Secondary" value={colors.secondary} onChange={(v) => patchColors('secondary', v)} />
-        <ColorRow fieldId="theme-c-text" label="Text" value={colors.text} onChange={(v) => patchColors('text', v)} />
-        <ColorRow fieldId="theme-c-muted" label="Muted" value={colors.muted} onChange={(v) => patchColors('muted', v)} />
-        <ColorRow fieldId="theme-c-bg" label="Background" value={colors.background} onChange={(v) => patchColors('background', v)} />
-        <ColorRow fieldId="theme-c-surface" label="Surface" value={colors.surface} onChange={(v) => patchColors('surface', v)} />
-        <ColorRow fieldId="theme-c-border" label="Border" value={colors.border} onChange={(v) => patchColors('border', v)} />
-      </Section>
+      {hideBrandSections ? (
+        <p className="bld-field-note" style={{ marginTop: 0, marginBottom: 12 }}>
+          Brand colors and font are in the left <strong>Theme</strong> panel. Advanced settings below.
+        </p>
+      ) : (
+        <>
+          <div className="bld-tiny-toggle" style={{ marginBottom: 12 }}>
+            <button
+              type="button"
+              className={`bld-tiny-toggle__btn ${siteTheme.presetId === 'light' ? 'is-active' : ''}`}
+              onClick={() => applySitePreset('light')}
+            >
+              Light
+            </button>
+            <button
+              type="button"
+              className={`bld-tiny-toggle__btn ${siteTheme.presetId === 'dark' ? 'is-active' : ''}`}
+              onClick={() => applySitePreset('dark')}
+            >
+              Dark
+            </button>
+          </div>
+          <Section title="Colors">
+            <ColorRow fieldId="theme-c-primary" label="Primary" value={colors.primary} onChange={(v) => patchColors('primary', v)} />
+            <ColorRow fieldId="theme-c-secondary" label="Secondary" value={colors.secondary} onChange={(v) => patchColors('secondary', v)} />
+            <ColorRow fieldId="theme-c-text" label="Text" value={colors.text} onChange={(v) => patchColors('text', v)} />
+            <ColorRow fieldId="theme-c-muted" label="Muted" value={colors.muted} onChange={(v) => patchColors('muted', v)} />
+            <ColorRow fieldId="theme-c-bg" label="Background" value={colors.background} onChange={(v) => patchColors('background', v)} />
+            <ColorRow fieldId="theme-c-surface" label="Surface" value={colors.surface} onChange={(v) => patchColors('surface', v)} />
+            <ColorRow fieldId="theme-c-border" label="Border" value={colors.border} onChange={(v) => patchColors('border', v)} />
+          </Section>
+        </>
+      )}
 
       <details className="bld-acc" style={{ marginTop: 10 }}>
         <summary>Design tokens (global)</summary>
@@ -690,31 +699,33 @@ export default function ThemePanel({
         </div>
       </details>
 
-      <Section title="Typography">
-        <TextRow fieldId="theme-ff-body" label="Body font" value={typography.fontFamily} onChange={(v) => patchTypo('fontFamily', v)} />
-        <TextRow
-          fieldId="theme-ff-heading"
-          label="Heading font"
-          value={typography.fontFamilyHeading}
-          onChange={(v) => patchTypo('fontFamilyHeading', v)}
-        />
-        <TextRow fieldId="theme-fs-base" label="Base size" value={typography.fontSizeBase} onChange={(v) => patchTypo('fontSizeBase', v)} />
-        <TextRow fieldId="theme-lh" label="Line height" value={typography.lineHeight} onChange={(v) => patchTypo('lineHeight', v)} />
-        <div className="bld-field-grid">
+      {hideBrandSections ? null : (
+        <Section title="Typography">
+          <TextRow fieldId="theme-ff-body" label="Body font" value={typography.fontFamily} onChange={(v) => patchTypo('fontFamily', v)} />
           <TextRow
-            fieldId="theme-fw-norm"
-            label="Weight normal"
-            value={typography.fontWeightNormal}
-            onChange={(v) => patchTypo('fontWeightNormal', v)}
+            fieldId="theme-ff-heading"
+            label="Heading font"
+            value={typography.fontFamilyHeading}
+            onChange={(v) => patchTypo('fontFamilyHeading', v)}
           />
-          <TextRow
-            fieldId="theme-fw-bold"
-            label="Weight bold"
-            value={typography.fontWeightBold}
-            onChange={(v) => patchTypo('fontWeightBold', v)}
-          />
-        </div>
-      </Section>
+          <TextRow fieldId="theme-fs-base" label="Base size" value={typography.fontSizeBase} onChange={(v) => patchTypo('fontSizeBase', v)} />
+          <TextRow fieldId="theme-lh" label="Line height" value={typography.lineHeight} onChange={(v) => patchTypo('lineHeight', v)} />
+          <div className="bld-field-grid">
+            <TextRow
+              fieldId="theme-fw-norm"
+              label="Weight normal"
+              value={typography.fontWeightNormal}
+              onChange={(v) => patchTypo('fontWeightNormal', v)}
+            />
+            <TextRow
+              fieldId="theme-fw-bold"
+              label="Weight bold"
+              value={typography.fontWeightBold}
+              onChange={(v) => patchTypo('fontWeightBold', v)}
+            />
+          </div>
+        </Section>
+      )}
       <Section title="Spacing scale">
         <div className="bld-field-grid">
           <NumRow fieldId="theme-sp-xs" label="XS" value={spacing.xs} onChange={(v) => patchSpace('xs', v)} />

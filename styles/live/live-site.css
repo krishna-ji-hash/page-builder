@@ -805,6 +805,47 @@
   gap: 0;
 }
 
+/*
+ * Dark-painted sections: logo ticker/marquee inherits row background (no separate surface band).
+ * Applies when ancestor row/column/stack exposes data-section-tone=dark or data-dark-surface.
+ */
+:is(.live-doc, .bld-canvas__live-mirror)
+  :is(
+    .live-node.bld-row[data-section-tone='dark'],
+    .live-node.bld-column[data-section-tone='dark'],
+    .live-node.bld-stack[data-section-tone='dark'],
+    .live-node[data-dark-surface='true']
+  )
+  :is(.live-carousel--ticker, .live-carousel--marquee) {
+  background: transparent !important;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  :is(
+    .live-node.bld-row[data-section-tone='dark'],
+    .live-node.bld-column[data-section-tone='dark'],
+    .live-node.bld-stack[data-section-tone='dark'],
+    .live-node[data-dark-surface='true']
+  )
+  .live-carousel__ticker-card {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--live-section-fg-on-dark) 14%, transparent);
+  box-shadow: none;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  :is(
+    .live-node.bld-row[data-section-tone='dark'],
+    .live-node.bld-column[data-section-tone='dark'],
+    .live-node.bld-stack[data-section-tone='dark'],
+    .live-node[data-dark-surface='true']
+  )
+  .live-carousel__ticker-fallback {
+  color: var(--live-section-muted-on-dark, var(--token-text-muted));
+}
+
 .live-node.bld-stack > .live-carousel--ticker,
 .live-node.bld-stack > .live-carousel--marquee,
 .live-node.bld-stack > .live-carousel--logo {
@@ -1305,6 +1346,55 @@
   align-content: flex-start;
   overflow-x: clip;
   overflow-y: visible;
+}
+
+/* Feature tabs — tab labels inherit row section contrast (dark mode readable) */
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='featureTabs']
+  .live-feature-tabs__tab {
+  color: var(--live-section-muted, var(--color-muted));
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='featureTabs']
+  .live-feature-tabs__tab:hover,
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='featureTabs']
+  .live-feature-tabs__tab.is-active {
+  color: var(--live-section-fg, var(--color-text));
+}
+
+/* Panel copy lives outside .live-leaf-wrap — inherit section contrast from row / widget */
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='featureTabs']
+  .live-feature-tabs__heading {
+  color: var(--live-section-fg, var(--color-text));
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='featureTabs']
+  .live-feature-tabs__paragraph,
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='featureTabs']
+  .live-feature-tabs__bullets li {
+  color: var(--live-section-muted, var(--color-muted));
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='featureTabs'][data-section-tone='dark']
+  .live-feature-tabs__paragraph,
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='featureTabs'][data-section-tone='dark']
+  .live-feature-tabs__bullets li,
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='featureTabs']
+  .live-feature-tabs[data-section-tone='dark']
+  .live-feature-tabs__paragraph,
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='featureTabs']
+  .live-feature-tabs[data-section-tone='dark']
+  .live-feature-tabs__bullets li {
+  color: var(--live-section-muted, #cbd5e1);
 }
 
 .live-doc

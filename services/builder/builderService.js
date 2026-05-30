@@ -14,6 +14,7 @@ import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
 import { isSectionLockedFlagValue, metaRepresentsExplicitSectionUnlock } from '@/lib/rowLayoutMeta';
 import { freezeGlobalSectionsForPublish } from '@/lib/globalSectionSnapshot';
 import { applyResponsiveDefaultsToTree } from '@/lib/applyPageResponsiveDefaults';
+import { isBrandFontNormalizeStyleJson } from '@/lib/projectBrand.js';
 import { normalizeSiteTheme } from '@/lib/siteDesignTheme';
 
 function parseSnapshot(value) {
@@ -843,22 +844,37 @@ export async function updateNode(nodeId, payload) {
     const existing = await getNodeById(nodeId, connection);
     if (!existing) return null;
 
+    const brandFontNormalize = Boolean(payload?.brandFontNormalize);
+    const body = { ...payload };
+    delete body.brandFontNormalize;
+
     const existingProps = normalizeNodeProps(parseSnapshot(existing.props_json) || {}, existing.node_type);
-    const mergedProps = payload.props ? mergeNodePropsJsonPatch(existingProps, payload.props) : existingProps;
-    if (payload.style_json !== undefined) {
-      mergedProps.style_json = payload.style_json;
+    const mergedProps = body.props ? mergeNodePropsJsonPatch(existingProps, body.props) : existingProps;
+    if (body.style_json !== undefined) {
+      mergedProps.style_json = body.style_json;
     }
     if (existing.node_type === 'rich_text' && mergedProps.content !== undefined) {
       mergedProps.content = sanitizeRichHtml(String(mergedProps.content));
     }
-    await assertDbNodeNotUnderLockedSectionRow(connection, existing);
-    await assertLockedRowUpdateAllowsUnlockOnly(existing, mergedProps);
-    const nextProps = JSON.stringify(normalizeNodeProps(mergedProps, existing.node_type));
-    const nextDisplayName = payload.displayName ?? existing.display_name;
-    const nextPosition = payload.positionIndex ?? existing.position_index;
-    const nextParent = payload.parentNodeId !== undefined ? payload.parentNodeId : existing.parent_node_id;
 
-    if (payload.parentNodeId !== undefined) {
+    if (brandFontNormalize) {
+      if (
+        body.style_json !== undefined &&
+        !isBrandFontNormalizeStyleJson(existingProps.style_json, body.style_json)
+      ) {
+        throw new Error('Invalid brand font normalize payload');
+      }
+    } else {
+      await assertDbNodeNotUnderLockedSectionRow(connection, existing);
+      await assertLockedRowUpdateAllowsUnlockOnly(existing, mergedProps);
+    }
+
+    const nextProps = JSON.stringify(normalizeNodeProps(mergedProps, existing.node_type));
+    const nextDisplayName = body.displayName ?? existing.display_name;
+    const nextPosition = body.positionIndex ?? existing.position_index;
+    const nextParent = body.parentNodeId !== undefined ? body.parentNodeId : existing.parent_node_id;
+
+    if (body.parentNodeId !== undefined) {
       let parentNode = null;
       if (nextParent) {
         parentNode = await getNodeById(nextParent, connection);
@@ -876,12 +892,12 @@ export async function updateNode(nodeId, payload) {
     }
 
     let nextDataJson = parseJsonColumn(existing.data_json);
-    if (payload.dataJson !== undefined) {
-      nextDataJson = payload.dataJson;
+    if (body.dataJson !== undefined) {
+      nextDataJson = body.dataJson;
     }
     let nextActionsJson = parseJsonColumn(existing.actions_json);
-    if (payload.actionsJson !== undefined) {
-      nextActionsJson = payload.actionsJson;
+    if (body.actionsJson !== undefined) {
+      nextActionsJson = body.actionsJson;
     }
     const dataForDb = jsonOrNullForDb(nextDataJson);
     const actionsForDb = jsonOrNullForDb(nextActionsJson);

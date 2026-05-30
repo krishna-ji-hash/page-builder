@@ -35,11 +35,24 @@ const nextConfig = {
     // Work around unstable dev segment explorer manifest errors in Next 15.x
     devtoolSegmentExplorer: false,
   },
-  webpack: (config, { dev }) => {
-    // Prevents stale chunk maps after HMR on Windows: "__webpack_modules__[moduleId] is not a function"
-    // and "Cannot find module './NNNN.js'" under .next/server (corrupt webpack filesystem cache).
+  webpack: (config, { dev, isServer }) => {
     if (dev) {
-      config.cache = false;
+      // Filesystem cache (with a project-specific id) is more stable on Windows than cache:false,
+      // which can race and produce ENOENT for on-demand server page chunks.
+      config.cache = {
+        type: 'filesystem',
+        cacheDirectory: path.join(__dirname, '.next', 'cache', 'webpack'),
+        buildDependencies: {
+          config: [path.join(__dirname, 'next.config.mjs')],
+        },
+      };
+      if (isServer) {
+        config.optimization = {
+          ...(config.optimization || {}),
+          moduleIds: 'named',
+          chunkIds: 'named',
+        };
+      }
     }
     return config;
   },

@@ -12,15 +12,41 @@ export default function FeatureTabsControls({
   jsonErrors = {},
 }) {
   const featureTabsList = Array.isArray(selectedNode?.props?.tabs) ? selectedNode.props.tabs : [];
-  const previewTabId = String(form.featureTabsActiveId || featureTabsList[0]?.id || '');
+  const activeTabId = String(
+    form.featureTabsActiveId || selectedNode?.props?.activeTabId || featureTabsList[0]?.id || ''
+  );
 
   return (
     <div className="bld-feature-tabs-inspector">
       <p className="bld-field-note" style={{ marginTop: 0, marginBottom: 12 }}>
-        <strong>Edit on canvas:</strong> click heading, paragraph, bullets, and tab names directly in the preview.
-        Click <strong>Change image</strong> on the photo. Use fields below only for alignment and image size. Width,
-        padding, and colors are in the <strong>Style</strong> tab.
+        Edit tab names, headings, paragraphs, and images directly on the canvas. Use the controls below for
+        layout only.
       </p>
+
+      <div className="bld-field">
+        <span className="bld-label">Default active tab</span>
+        <p className="bld-field-note" style={{ marginTop: 4, marginBottom: 8 }}>
+          Opens first on your live site. Visitors can still switch tabs by clicking.
+        </p>
+        <div className="bld-feature-tabs-active-picker" role="radiogroup" aria-label="Default active tab">
+          {featureTabsList.map((tab) => {
+            const tabId = String(tab?.id || '');
+            const isActive = tabId === activeTabId;
+            return (
+              <button
+                key={tabId || String(tab?.label)}
+                type="button"
+                role="radio"
+                aria-checked={isActive}
+                className={`bld-feature-tabs-active-picker__btn${isActive ? ' is-active' : ''}`}
+                onClick={() => onChange('featureTabsActiveId', tabId)}
+              >
+                {String(tab?.label || tab?.id || 'Tab')}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       <div className="bld-field">
         <label className="bld-label">Tab bar alignment</label>
@@ -32,21 +58,6 @@ export default function FeatureTabsControls({
           <option value="center">Center</option>
           <option value="left">Left</option>
           <option value="stretch">Full width (spread)</option>
-        </select>
-      </div>
-
-      <div className="bld-field">
-        <label className="bld-label">Preview tab (canvas)</label>
-        <select
-          className="bld-input"
-          value={previewTabId}
-          onChange={(e) => onChange('featureTabsActiveId', e.target.value)}
-        >
-          {featureTabsList.map((tab) => (
-            <option key={String(tab?.id || tab?.label)} value={String(tab?.id || '')}>
-              {String(tab?.label || tab?.id || 'Tab')}
-            </option>
-          ))}
         </select>
       </div>
 

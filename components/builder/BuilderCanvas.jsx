@@ -1095,7 +1095,7 @@ function NodeRenderer({
       const nextId = String(itemId || '').trim();
       if (String(node.props?.openItemId || '') === nextId) return;
       await onUpdateNode({
-        nodeId: node.id,
+        nodeId: node.id,               
         payload: {
           props: {
             ...(node.props || {}),
@@ -1231,8 +1231,8 @@ function NodeRenderer({
   const neutralizeBodyColorsPreview = neutralizeBodyColors;
   const neutralizeBodyColorsPersist = neutralizeBodyColors;
   const rawDevice = getDeviceStyle(node.style_json, device);
-  const surfaceReady = neutralizeLightSurfaceDeviceStyle(rawDevice, siteTheme, alignedContentTokens);
-  const themed = mergeNodeStyleWithSiteTheme(surfaceReady, siteTheme, node.nodeType);
+  const surfaceReady = neutralizeLightSurfaceDeviceStyle(rawDevice, siteTheme, alignedContentTokens, node);
+  const themed = mergeNodeStyleWithSiteTheme(surfaceReady, siteTheme, node.nodeType, { treeNode: node });
   const gapReady = withResolvedLayoutGap(themed, siteTheme);
   let deviceStyle = finalizeLeafDeviceStyle(
     node,

@@ -38,6 +38,21 @@ test('neutralizeLeafTextCssObject remaps pasted white text in dark content mode'
   assert.match(String(out.color), /live-section-fg/);
 });
 
+test('remapLegacyPlatformHeroFeatureCardBg maps template pastels to dark card fills', async () => {
+  const {
+    remapLegacyPlatformHeroFeatureCardBg,
+    PLATFORM_HERO_FEATURE_CARD_BG,
+    remapPlatformHeroFeatureCardSurface,
+  } = await import('../lib/sectionSurfaceNeutralization.js');
+  assert.equal(remapLegacyPlatformHeroFeatureCardBg('#f3e8de'), PLATFORM_HERO_FEATURE_CARD_BG.international);
+  assert.equal(remapLegacyPlatformHeroFeatureCardBg('#d8efe6'), PLATFORM_HERO_FEATURE_CARD_BG.bulk);
+  const out = remapPlatformHeroFeatureCardSurface(
+    { background: { backgroundColor: '#f3e8de' } },
+    { props: { meta: { tplRole: 'platform-feature-card' } } }
+  );
+  assert.equal(out.background.backgroundColor, PLATFORM_HERO_FEATURE_CARD_BG.international);
+});
+
 test('neutralizeLightSurfaceDeviceStyle remaps light hero gradient in dark mode', () => {
   const siteTheme = { ...SITE_THEME_PRESETS.dark, presetId: 'dark' };
   const out = neutralizeLightSurfaceDeviceStyle(

@@ -26,3 +26,50 @@
   :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text) {
   color: var(--live-section-fg-on-dark) !important;
 }
+
+/* Feature tabs panel copy — outside .live-leaf-wrap */
+:is(.live-doc, .bld-canvas__live-mirror)
+  .live-feature-tabs[data-section-tone='dark']
+  :is(.live-feature-tabs__heading, .live-feature-tabs__paragraph, .live-feature-tabs__bullets li),
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='featureTabs'][data-section-tone='dark']
+  .live-feature-tabs
+  :is(.live-feature-tabs__heading, .live-feature-tabs__paragraph, .live-feature-tabs__bullets li) {
+  color: var(--live-section-fg-on-dark) !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  .live-feature-tabs[data-section-tone='dark']
+  :is(.live-feature-tabs__paragraph, .live-feature-tabs__bullets li),
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='featureTabs'][data-section-tone='dark']
+  .live-feature-tabs
+  :is(.live-feature-tabs__paragraph, .live-feature-tabs__bullets li) {
+  color: var(--live-section-muted-on-dark, rgba(248, 250, 252, 0.82)) !important;
+}
+
+/* Platform hero feature cards — dark elevated surfaces inside pitch column */
+:is(.live-doc, .bld-canvas__live-mirror) .live-node[data-tpl-role='platform-feature-card'] {
+  --live-section-fg-on-dark: #f8fafc;
+  --live-section-muted-on-dark: rgba(248, 250, 252, 0.82);
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='platformHero']
+  :is(
+    > .live-node.bld-column:first-child,
+    .bld-node-children > .live-node.bld-column:first-child
+  )
+  .live-node.bld-stack[style*='f3e8de'] {
+  background-color: #241f1c !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='platformHero']
+  :is(
+    > .live-node.bld-column:first-child,
+    .bld-node-children > .live-node.bld-column:first-child
+  )
+  .live-node.bld-stack[style*='d8efe6'] {
+  background-color: #152420 !important;
+}
