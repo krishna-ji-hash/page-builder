@@ -912,22 +912,92 @@
   padding-bottom: 0;
 }
 
-.bld-split-hero-edit-hint {
-  position: absolute;
-  left: 12px;
-  bottom: 12px;
-  z-index: 6;
-  padding: 6px 12px;
-  border-radius: 999px;
-  font-size: 11px;
+.live-carousel--splitHero.live-carousel--builder .live-carousel__split-builder-hint {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.01em;
-  color: var(--bld-text);
-  background: color-mix(in srgb, var(--bld-surface) 94%, #fff 6%);
-  border: 1px solid color-mix(in srgb, var(--bld-primary) 45%, var(--bld-border));
-  box-shadow: 0 6px 18px color-mix(in srgb, #000 18%, transparent);
+  line-height: 1.4;
+  color: var(--live-section-muted, var(--color-muted));
+  background: color-mix(in srgb, var(--color-surface) 88%, var(--color-background) 12%);
+  border: 1px dashed var(--color-border);
+  border-radius: 8px;
+}
+
+.live-carousel--splitHero .live-carousel__split-editable {
+  outline: none;
+  cursor: text;
+  border-radius: 4px;
+  -webkit-text-fill-color: currentColor;
+}
+
+.live-carousel--splitHero .live-carousel__split-editable:focus {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 35%, transparent);
+  background: color-mix(in srgb, var(--color-surface) 92%, var(--color-background) 8%);
+}
+
+.live-carousel--splitHero .live-carousel__split-copy--editable .live-carousel__split-editable:empty::before {
+  content: 'Click to type…';
+  color: var(--live-section-muted, var(--color-muted));
+  font-weight: 400;
+}
+
+.live-carousel--splitHero .live-carousel__split-badge.live-carousel__split-editable:empty::before {
+  content: 'Badge';
+}
+
+.live-carousel--splitHero .live-carousel__split-title.live-carousel__split-editable:empty::before {
+  content: 'Heading';
+}
+
+.live-carousel--splitHero .live-carousel__split-body.live-carousel__split-editable:empty::before {
+  content: 'Body copy';
+}
+
+.live-carousel--splitHero .live-carousel__split-cta.live-carousel__split-editable:empty::before {
+  content: 'Button label';
+}
+
+.live-carousel--splitHero .live-carousel__split-visual--editable {
+  position: relative;
+}
+
+.live-carousel--splitHero .live-carousel__split-image-input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
   pointer-events: none;
-  user-select: none;
+}
+
+.live-carousel--splitHero .live-carousel__split-image-btn {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 2;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--token-button-text, var(--live-section-fg-on-dark));
+  background: color-mix(in srgb, var(--token-shadow-tint, var(--color-text)) 82%, transparent);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.live-carousel--splitHero .live-carousel__split-visual--editable:hover .live-carousel__split-image-btn,
+.live-carousel--splitHero .live-carousel__split-visual--editable:focus-within .live-carousel__split-image-btn {
+  opacity: 1;
+}
+
+.bld-canvas__live-mirror .live-carousel--splitHero.live-carousel--builder .live-carousel__split-copy,
+.bld-canvas__live-mirror .live-carousel--splitHero.live-carousel--builder .live-carousel__split-visual,
+.bld-canvas__live-mirror .live-carousel--splitHero.live-carousel--builder .live-carousel__split-editable,
+.bld-canvas__live-mirror .live-carousel--splitHero.live-carousel--builder .live-carousel__split-image-btn {
+  pointer-events: auto;
 }
 
 @media (max-width: 768px) {

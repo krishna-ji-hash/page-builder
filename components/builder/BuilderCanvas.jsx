@@ -425,6 +425,8 @@ function renderNodeContent(node, renderOpts = {}) {
     onFaqOpenChange = null,
     onFaqAccordionPatch = null,
     onFaqAccordionAddItem = null,
+    onSplitHeroSlidePatch = null,
+    onSplitHeroSlideImageFile = null,
     siteTheme = null,
     themeTokens = null,
     insideSiteHeaderRow = false,
@@ -438,7 +440,7 @@ function renderNodeContent(node, renderOpts = {}) {
   const bind = (s) => (cmsBindingContext ? applyBindingsToString(String(s || ''), cmsBindingContext) : s);
 
   const builderCanvasHooks =
-    onTabsActiveChange || onFaqOpenChange || sectionEditLocked
+    onTabsActiveChange || onFaqOpenChange || onSplitHeroSlidePatch || sectionEditLocked
       ? {
           sectionEditLocked,
           ...(onTabsActiveChange
@@ -456,6 +458,14 @@ function renderNodeContent(node, renderOpts = {}) {
                   onOpenItemChange: onFaqOpenChange,
                   onPatchItem: onFaqAccordionPatch,
                   onAddItem: onFaqAccordionAddItem,
+                },
+              }
+            : {}),
+          ...(onSplitHeroSlidePatch
+            ? {
+                splitHero: {
+                  onPatchSlide: onSplitHeroSlidePatch,
+                  onSlideImageFile: onSplitHeroSlideImageFile,
                 },
               }
             : {}),
@@ -1163,6 +1173,69 @@ function NodeRenderer({
     });
   }, [node.id, node.nodeType, node.props, onUpdateNode, sectionEditLocked]);
   const faqAccordionAddItemHandler = node.nodeType === 'accordion' ? handleFaqAccordionAddItem : null;
+  const handleSplitHeroSlidePatch = useCallback(
+    async (slideId, patch) => {
+      if (sectionEditLocked || !onUpdateNode || node.nodeType !== 'carousel' || !patch) return;
+      if (!isSplitHeroCarouselNode(node)) return;
+      const slides = Array.isArray(node.props?.slides) ? node.props.slides : [];
+      const index = slides.findIndex((s) => String(s?.id) === String(slideId));
+      if (index < 0) return;
+      const current = slides[index] || {};
+      const merged = { ...current, ...patch };
+      if (patch.cta && typeof patch.cta === 'object') {
+        merged.cta = { ...(current.cta || {}), ...patch.cta };
+      }
+      const next = slides.map((s, i) => (i === index ? merged : s));
+      await onUpdateNode({
+        nodeId: node.id,
+        payload: {
+          props: {
+            ...(node.props || {}),
+            slides: next,
+          },
+        },
+      });
+    },
+    [node, onUpdateNode, sectionEditLocked]
+  );
+  const handleSplitHeroSlideImageFile = useCallback(
+    async (slideId, file) => {
+      if (sectionEditLocked || !onUpdateNode || node.nodeType !== 'carousel' || !file?.type?.startsWith?.('image/')) return;
+      if (!isSplitHeroCarouselNode(node)) return;
+      const slides = Array.isArray(node.props?.slides) ? node.props.slides : [];
+      const index = slides.findIndex((s) => String(s?.id) === String(slideId));
+      if (index < 0) return;
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const src = typeof reader.result === 'string' ? reader.result : '';
+        if (!src) return;
+        const current = slides[index] || {};
+        const next = slides.map((s, i) =>
+          i === index
+            ? {
+                ...current,
+                imageSrc: src,
+                image: src,
+                imageAlt: String(file.name || '').replace(/\.[^.]+$/, '') || current.title || '',
+              }
+            : s
+        );
+        await onUpdateNode({
+          nodeId: node.id,
+          payload: {
+            props: {
+              ...(node.props || {}),
+              slides: next,
+            },
+          },
+        });
+      };
+      reader.readAsDataURL(file);
+    },
+    [node, onUpdateNode, sectionEditLocked]
+  );
+  const splitHeroSlidePatchHandler = isSplitHeroCarouselNode(node) ? handleSplitHeroSlidePatch : null;
+  const splitHeroSlideImageHandler = isSplitHeroCarouselNode(node) ? handleSplitHeroSlideImageFile : null;
   const headingTag = normalizeHeadingTag(node.props?.tag);
   const wpToolbarHeadingId = useId();
   const [isInlineEditing, setIsInlineEditing] = useState(false);
@@ -3619,6 +3692,8 @@ function NodeRenderer({
                   onFaqOpenChange: faqOpenChangeHandler,
                   onFaqAccordionPatch: faqAccordionPatchHandler,
                   onFaqAccordionAddItem: faqAccordionAddItemHandler,
+                  onSplitHeroSlidePatch: splitHeroSlidePatchHandler,
+                  onSplitHeroSlideImageFile: splitHeroSlideImageHandler,
                   siteTheme,
                   themeTokens: alignedContentTokens,
                   stylePresets,
@@ -3658,6 +3733,8 @@ function NodeRenderer({
                 onFaqOpenChange: faqOpenChangeHandler,
                 onFaqAccordionPatch: faqAccordionPatchHandler,
                 onFaqAccordionAddItem: faqAccordionAddItemHandler,
+                onSplitHeroSlidePatch: splitHeroSlidePatchHandler,
+                onSplitHeroSlideImageFile: splitHeroSlideImageHandler,
                 siteTheme,
                 themeTokens: alignedContentTokens,
                 stylePresets,
@@ -3670,15 +3747,6 @@ function NodeRenderer({
                 builderTree: tree,
               })
             )}
-            {isSelected && isSplitHeroCarouselNode(node) ? (
-              <div
-                className="bld-split-hero-edit-hint"
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={(event) => event.stopPropagation()}
-              >
-                Edit slides in the Content panel →
-              </div>
-            ) : null}
             {null}
             {(node.nodeType === 'image' || node.nodeType === 'menu') && isNodeActive ? (
               <div

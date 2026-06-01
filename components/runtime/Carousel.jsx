@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import FeatureTabCanvasField from '@/components/builder/canvas/FeatureTabCanvasField';
 import { liveCarouselSlideImageAttrs } from '@/lib/liveCarouselImageAttrs';
 import { resolveTickerScrollClasses } from '@/lib/carouselTickerShared';
 
@@ -255,7 +256,18 @@ function splitHeroCta(slide) {
   return { label, href, visible: Boolean(label) };
 }
 
-export default function Carousel({ slides = [], style, settings, device = 'desktop', builderPreview = false, ...restProps }) {
+export default function Carousel({
+  slides = [],
+  style,
+  settings,
+  device = 'desktop',
+  builderPreview = false,
+  builderMode = false,
+  builderEditable = false,
+  onPatchSlide,
+  onSlideImageFile,
+  ...restProps
+}) {
   const safeSlides = useMemo(
     () => (Array.isArray(slides) ? slides : []).filter((s) => s && typeof s === 'object').map(normalizeSlide),
     [slides]
@@ -317,7 +329,22 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
   const [instantTransition, setInstantTransition] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const indexRef = useRef(0);
+  const splitHeroImageInputRef = useRef(null);
   indexRef.current = index;
+
+  const canvasEditSplitHero = isSplitHeroVariant && builderMode && builderEditable;
+  const patchSplitHeroSlide = useCallback(
+    (slideId, patch) => {
+      if (!slideId || !patch || !onPatchSlide) return;
+      onPatchSlide(slideId, patch);
+    },
+    [onPatchSlide]
+  );
+  const stopSplitHeroCanvasBubble = builderMode
+    ? (event) => {
+        event.stopPropagation();
+      }
+    : undefined;
 
   const tickerDurationSec = useMemo(() => {
     const raw = Number(restProps?.tickerDurationSec ?? settings?.tickerDurationSec ?? 32);
@@ -544,23 +571,83 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
       '--carousel-easing': transitionEasingCss,
       '--carousel-image-fit': imageFit,
     };
+    const handleSplitHeroImageFile = (slideId, event) => {
+      const file = event.target.files?.[0];
+      event.target.value = '';
+      if (!file || !slideId) return;
+      onSlideImageFile?.(slideId, file);
+    };
     const renderSplitPanel = (slide, slideIndex) => {
       const badge = splitHeroBadgeLabel(slide);
       const title = splitHeroTitle(slide);
       const body = splitHeroBody(slide);
       const cta = splitHeroCta(slide);
+      const slideId = String(slide?.id || slideIndex);
       const imgAttrs = liveCarouselSlideImageAttrs(slide, {
         slideIndex,
         isFirstVisible: slideIndex === activeDotIndex,
       });
       return (
         <div className="live-carousel__split-panel-inner">
-          <div className="live-carousel__split-copy">
-            {badge ? <span className="live-carousel__split-badge">{badge}</span> : null}
-            {title ? <h2 className="live-carousel__split-title">{title}</h2> : null}
-            {body ? <p className="live-carousel__split-body">{body}</p> : null}
-            {cta.visible ? (
-              builderPreview ? (
+          <div
+            className={`live-carousel__split-copy${canvasEditSplitHero ? ' live-carousel__split-copy--editable' : ''}`}
+            onPointerDown={canvasEditSplitHero ? stopSplitHeroCanvasBubble : undefined}
+          >
+            {badge || canvasEditSplitHero ? (
+              canvasEditSplitHero ? (
+                <FeatureTabCanvasField
+                  as="span"
+                  className="live-carousel__split-badge live-carousel__split-editable"
+                  value={badge}
+                  onCommit={(next) => patchSplitHeroSlide(slideId, { badge: next })}
+                  onPointerDown={stopSplitHeroCanvasBubble}
+                />
+              ) : (
+                <span className="live-carousel__split-badge">{badge}</span>
+              )
+            ) : null}
+            {title || canvasEditSplitHero ? (
+              canvasEditSplitHero ? (
+                <FeatureTabCanvasField
+                  as="h2"
+                  className="live-carousel__split-title live-carousel__split-editable"
+                  value={title}
+                  onCommit={(next) => patchSplitHeroSlide(slideId, { title: next })}
+                  onPointerDown={stopSplitHeroCanvasBubble}
+                />
+              ) : (
+                <h2 className="live-carousel__split-title">{title}</h2>
+              )
+            ) : null}
+            {body || canvasEditSplitHero ? (
+              canvasEditSplitHero ? (
+                <FeatureTabCanvasField
+                  as="p"
+                  className="live-carousel__split-body live-carousel__split-editable"
+                  value={body}
+                  multiline
+                  onCommit={(next) => patchSplitHeroSlide(slideId, { body: next })}
+                  onPointerDown={stopSplitHeroCanvasBubble}
+                />
+              ) : (
+                <p className="live-carousel__split-body">{body}</p>
+              )
+            ) : null}
+            {cta.visible || canvasEditSplitHero ? (
+              canvasEditSplitHero ? (
+                <FeatureTabCanvasField
+                  as="span"
+                  className="live-carousel__split-cta live-carousel__split-editable"
+                  value={cta.label}
+                  onCommit={(next) =>
+                    patchSplitHeroSlide(slideId, {
+                      cta: { ...(slide?.cta || {}), label: next },
+                      buttonText: next,
+                    })
+                  }
+                  onPointerDown={stopSplitHeroCanvasBubble}
+                />
+              ) : builderPreview ? (
                 <span className="live-carousel__split-cta" role="link" tabIndex={-1}>
                   {cta.label}
                 </span>
@@ -571,7 +658,10 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
               )
             ) : null}
           </div>
-          <div className="live-carousel__split-visual">
+          <div
+            className={`live-carousel__split-visual${canvasEditSplitHero ? ' live-carousel__split-visual--editable' : ''}`}
+            onPointerDown={canvasEditSplitHero ? stopSplitHeroCanvasBubble : undefined}
+          >
             {slide.imageSrc ? (
               <img
                 className="live-carousel__split-img"
@@ -585,6 +675,29 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
                 Image
               </div>
             )}
+            {canvasEditSplitHero ? (
+              <>
+                <input
+                  ref={splitHeroImageInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="live-carousel__split-image-input"
+                  aria-hidden
+                  tabIndex={-1}
+                  onChange={(event) => handleSplitHeroImageFile(slideId, event)}
+                />
+                <button
+                  type="button"
+                  className="live-carousel__split-image-btn"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    splitHeroImageInputRef.current?.click();
+                  }}
+                >
+                  Change image
+                </button>
+              </>
+            ) : null}
           </div>
         </div>
       );
@@ -643,7 +756,7 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
     return (
       <section
         style={{ ...(style || {}), ...splitVars }}
-        className={`live-carousel live-carousel--splitHero ${isFade ? 'is-fade' : 'is-slide'} ${isPaused ? 'is-paused' : ''}`.trim()}
+        className={`live-carousel live-carousel--splitHero ${isFade ? 'is-fade' : 'is-slide'} ${isPaused ? 'is-paused' : ''} ${canvasEditSplitHero ? 'live-carousel--builder' : ''}`.trim()}
         aria-label="Split hero carousel"
         aria-roledescription="carousel"
         tabIndex={0}
@@ -651,6 +764,11 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
         onMouseEnter={() => (cfg.pauseOnHover ? setIsPaused(true) : null)}
         onMouseLeave={() => (cfg.pauseOnHover ? setIsPaused(false) : null)}
       >
+        {canvasEditSplitHero ? (
+          <p className="live-carousel__split-builder-hint" aria-hidden>
+            Click text to edit · use dots to switch slides · hover image for Change image
+          </p>
+        ) : null}
         <div className="live-carousel__split-viewport live-carousel__viewport">
           <article
             key={`split-hero-${activeDotIndex}-${String(activeSlide?.id || activeDotIndex)}`}
