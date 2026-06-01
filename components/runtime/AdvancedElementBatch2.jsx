@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import HeaderBrandLogo from '@/components/runtime/HeaderBrandLogo';
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
 
 function clamp(n, min, max) {
@@ -322,9 +323,45 @@ export function LiveLottieAnimation({ jsonUrl, widthPx = 240, heightPx = 240, al
   );
 }
 
-export function LiveLogoBlock({ src, alt, href, widthPx = 160, className = '' }) {
+export function LiveLogoBlock({
+  src,
+  alt,
+  href,
+  widthPx = 160,
+  className = '',
+  props: logoProps,
+  activeTone,
+  siteTheme,
+  themeTokens,
+  sectionTone,
+  builderTree,
+  nodeId,
+  device,
+}) {
+  const mergedProps =
+    logoProps && typeof logoProps === 'object'
+      ? { ...logoProps, src: logoProps.src || src, alt: logoProps.alt || alt, href: logoProps.href || href, widthPx }
+      : { src, alt, href, widthPx };
+  const rendered = (
+    <HeaderBrandLogo
+      props={mergedProps}
+      className={`bld-el bld-el-logo ${className}`.trim()}
+      href={href}
+      widthPx={clamp(Number(widthPx) || 160, 48, 400)}
+      activeTone={activeTone}
+      siteTheme={siteTheme}
+      themeTokens={themeTokens}
+      sectionTone={sectionTone}
+      builderTree={builderTree}
+      nodeId={nodeId}
+      device={device}
+    />
+  );
+  if (rendered) return rendered;
   const w = clamp(Number(widthPx) || 160, 48, 400);
-  const img = <img src={src || '/builder-placeholder.svg'} alt={alt || 'Logo'} style={{ width: w, height: 'auto' }} loading="lazy" />;
+  const img = (
+    <img src="/builder-placeholder.svg" alt={alt || 'Logo'} style={{ width: w, height: 'auto' }} loading="lazy" />
+  );
   if (href) {
     return (
       <a className={`bld-el bld-el-logo ${className}`.trim()} href={href}>

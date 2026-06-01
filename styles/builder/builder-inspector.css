@@ -1481,26 +1481,34 @@
   padding: 10px 12px 12px;
 }
 
-/* Media library modal (isolated; no layout overrides) */
+/* Media library modal — portaled under .bld-builder-root for theme tokens; fallbacks if not */
 .bld-media-modal__backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(2, 6, 23, 0.58);
+  background: rgba(2, 6, 23, 0.88);
   display: grid;
   place-items: center;
-  z-index: 70;
+  z-index: var(--bld-z-media-modal, 100000);
   padding: 24px;
+  isolation: isolate;
+  pointer-events: auto;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .bld-media-modal {
   width: min(1100px, 96vw);
   max-height: min(88vh, 980px);
   border-radius: 16px;
-  background: var(--bld-surface);
-  border: 1px solid var(--bld-border);
+  background: var(--bld-surface, #12151c);
+  border: 1px solid var(--bld-border, #2a3344);
   overflow: hidden;
   display: grid;
   grid-template-rows: auto auto 1fr;
+  box-shadow: 0 24px 64px rgba(2, 6, 23, 0.55);
+  position: relative;
+  z-index: 1;
+  color: var(--bld-text, #e8ecf4);
 }
 
 .bld-media-modal__head {
@@ -1509,8 +1517,8 @@
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--bld-border);
-  background: var(--bld-canvas-chrome);
+  border-bottom: 1px solid var(--bld-border, #2a3344);
+  background: var(--bld-canvas-chrome, #080a10);
 }
 
 .bld-media-modal__title {
@@ -1535,8 +1543,8 @@
   gap: 8px;
   align-items: center;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--bld-border);
-  background: var(--bld-surface);
+  border-bottom: 1px solid var(--bld-border, #2a3344);
+  background: var(--bld-surface, #12151c);
 }
 
 .bld-media-modal__search,
@@ -1576,6 +1584,7 @@
   border-right: 1px solid var(--bld-border);
   padding: 10px;
   overflow: auto;
+  background: var(--bld-surface-2, #1c2230);
 }
 
 .bld-media-modal__sectionTitle {
@@ -1691,6 +1700,7 @@
   display: grid;
   grid-template-rows: 1fr auto;
   min-height: 0;
+  background: var(--bld-surface, #12151c);
 }
 
 .bld-media-modal__error {
@@ -1819,6 +1829,17 @@
 .bld-media-modal__page {
   font-size: 11px;
   color: var(--bld-text-soft);
+}
+
+/* Hide canvas chrome while media picker is open (toolbars are portaled to body) */
+html.bld-media-modal-open .bld-floating-inline-toolbar,
+html.bld-media-modal-open .bld-floating-quick-toolbar,
+html.bld-media-modal-open .bld-add-section-hover-preview,
+html.bld-media-modal-open .bld-snap-guides,
+html.bld-media-modal-open .bld-spacing-guides,
+html.bld-media-modal-open .bld-grid-overlay {
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 
 .bld-media-inlinePreview {

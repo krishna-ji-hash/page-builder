@@ -31,6 +31,7 @@ export default function LayoutPanel({
   stripLayoutTargetRow = null,
   onPatchRootStripLayout = null,
   onPatchHeaderLayoutMode = null,
+  onPatchHeaderBehavior = null,
   onPatchSectionLayout = null,
 }) {
   if (!selectedNode) {
@@ -173,6 +174,67 @@ export default function LayoutPanel({
               </button>
             </div>
           </div>
+        ) : null}
+        {isHeaderSection && typeof onPatchHeaderBehavior === 'function' ? (
+          <>
+            <div className="bld-field">
+              <label className="bld-label" htmlFor="header-behavior-type">
+                Header type
+              </label>
+              <select
+                id="header-behavior-type"
+                className="bld-input"
+                value={form.headerBehaviorType || 'normal'}
+                onChange={(e) => onPatchHeaderBehavior({ type: e.target.value })}
+              >
+                <option value="normal">Normal</option>
+                <option value="sticky">Sticky</option>
+                <option value="fixed">Fixed</option>
+                <option value="revealOnScroll">Reveal on scroll</option>
+                <option value="mainReveal">Main + reveal</option>
+              </select>
+            </div>
+            {form.headerBehaviorType === 'mainReveal' ||
+            form.headerBehaviorType === 'revealOnScroll' ? (
+              <div className="bld-field">
+                <label className="bld-label" htmlFor="header-behavior-variant">
+                  Reveal variant
+                </label>
+                <select
+                  id="header-behavior-variant"
+                  className="bld-input"
+                  value={form.headerBehaviorVariant || 'default'}
+                  onChange={(e) => onPatchHeaderBehavior({ variant: e.target.value })}
+                >
+                  <option value="default">Default</option>
+                  <option value="compact">Compact</option>
+                  <option value="glass">Glass</option>
+                  <option value="floating">Floating</option>
+                  <option value="cta">CTA focus</option>
+                  <option value="dark">Dark</option>
+                </select>
+              </div>
+            ) : null}
+            {form.headerBehaviorType === 'revealOnScroll' ||
+            form.headerBehaviorType === 'mainReveal' ? (
+              <div className="bld-field">
+                <label className="bld-label" htmlFor="header-reveal-after">
+                  Reveal after (px scroll)
+                </label>
+                <input
+                  id="header-reveal-after"
+                  type="number"
+                  className="bld-input"
+                  min={0}
+                  max={2000}
+                  value={form.headerRevealAfter ?? 120}
+                  onChange={(e) =>
+                    onPatchHeaderBehavior({ revealAfter: Math.max(0, Number(e.target.value) || 0) })
+                  }
+                />
+              </div>
+            ) : null}
+          </>
         ) : null}
         <LayoutControls
           selectedNode={selectedNode}

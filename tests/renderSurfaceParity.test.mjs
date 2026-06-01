@@ -54,8 +54,9 @@ test('liveRenderer is the shared leaf pipeline', () => {
 });
 
 test('interaction scroll observers bind in LiveDoc and builder canvas mirror', () => {
-  assert.match(read('components/live/LiveDoc.jsx'), /bindInteractionObservers/);
+  const observerCleanup = /const unbindIx = bindInteractionObservers\([^)]+\)[\s\S]*return \(\) => \{[\s\S]*unbindIx\?\.\(\)/;
+  assert.match(read('components/live/LiveDoc.jsx'), observerCleanup);
   const canvas = read('components/builder/BuilderCanvas.jsx');
   assert.match(canvas, /bindInteractionObservers/);
-  assert.match(canvas, /return bindInteractionObservers/);
+  assert.match(canvas, observerCleanup);
 });

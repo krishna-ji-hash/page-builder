@@ -45,6 +45,14 @@ test('normalizeStyle preserves typography whiteSpace', () => {
   assert.equal(out.typography.whiteSpace, 'pre-wrap');
 });
 
+test('normalizeResponsiveStyle tolerates tablet menu overrides when desktop has no menu group', () => {
+  const out = normalizeResponsiveStyle({
+    desktop: { layout: { display: 'block' }, size: { width: '156px' } },
+    tablet: { menu: { dropdown: { width: '200px' } } },
+  });
+  assert.deepEqual(out.tablet?.menu, { dropdown: { width: '200px' } });
+});
+
 test('normalizeResponsiveStyle keeps header rows horizontal on mobile', () => {
   const out = normalizeResponsiveStyle(
     { desktop: { layout: { display: 'flex', flexDirection: 'row' } } },

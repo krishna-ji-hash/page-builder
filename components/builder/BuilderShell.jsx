@@ -26,7 +26,7 @@ import {
 } from '@/lib/headerLayoutMode';
 import { repairHeaderRowsInTree } from '@/lib/headerCompactLayout';
 import { getBlankSectionLayout, getBlankSectionLayoutForColumnCount } from '@/lib/blankSectionLayouts';
-import { materializeSectionTemplate, SECTION_TEMPLATES } from '@/lib/sectionTemplates';
+import { buildHeaderStarterSectionRoots, materializeSectionTemplate, SECTION_TEMPLATES } from '@/lib/sectionTemplates';
 import { getFullPageTemplateById } from '@/lib/fullPageTemplates';
 import { flattenTemplateToBulkNodes } from '@/lib/sectionTemplates';
 import { normalizeSiteTheme, themeSpacingPx } from '@/lib/siteDesignTheme';
@@ -2079,6 +2079,34 @@ export default function BuilderShell({ pageId }) {
 
       await reloadBuilder();
       setSelectedNodeId(row.id);
+      setHasUnpublishedEdits(true);
+    } catch (error) {
+      setUndoStack((prev) => prev.slice(0, -1));
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsCreatingNode(false);
+    }
+  };
+
+  const handleInsertHeaderStarter = async (starterId, { insertIndex = 0 } = {}) => {
+    const roots = buildHeaderStarterSectionRoots(starterId);
+    if (!roots?.length) return;
+    if (isCreatingNode) return;
+    const beforeTree = tree;
+    pushHistorySnapshot(beforeTree);
+    setIsCreatingNode(true);
+    setErrorMessage('');
+    try {
+      const rootIds = await materializeSectionTemplate(roots, {
+        bulkCreateNodesRequest: (nodes) => bulkCreateNodesRequest(nodes),
+        createNodeRequest: (payload) => createNodeRequest(payload),
+        positionIndex: Number.isInteger(Number(insertIndex)) ? Number(insertIndex) : 0,
+      });
+      await reloadBuilder();
+      if (rootIds?.length) {
+        setSelectedNodeId(rootIds[0]);
+        setFlashReorderNodeId(rootIds[0]);
+      }
       setHasUnpublishedEdits(true);
     } catch (error) {
       setUndoStack((prev) => prev.slice(0, -1));
@@ -4570,6 +4598,7 @@ export default function BuilderShell({ pageId }) {
                   onCreateSection={handleCreateSection}
                   onInsertStarterTemplate={handleInsertStarterTemplate}
                   onInsertHeaderTemplate={handleInsertHeaderTemplate}
+                  onInsertHeaderStarter={handleInsertHeaderStarter}
                   onCreateComponentPreset={handleCreateComponentPreset}
                   onInsertSectionTemplate={async (id) => {
                     if (id === 'header') {

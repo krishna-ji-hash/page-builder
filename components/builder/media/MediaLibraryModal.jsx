@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
 
 function humanBytes(bytes) {
@@ -26,7 +27,12 @@ async function fetchJson(url, init) {
   return data;
 }
 
-function UploadQueue({ projectId, folder, onUploaded }) {
+function getMediaModalPortalRoot() {
+  if (typeof document === 'undefined') return null;
+  return document.querySelector('.bld-builder-root') || document.body;
+}
+
+function UploadQueue({ projectId, folder, onUploaded, onUploadedItem }) {
   const [jobs, setJobs] = useState([]);
   const inputRef = useRef(null);
 
@@ -65,14 +71,25 @@ function UploadQueue({ projectId, folder, onUploaded }) {
         setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, progress: pct } : j)));
       };
       xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) resolve();
-        else reject(new Error('Upload failed'));
+        if (xhr.status >= 200 && xhr.status < 300) {
+          let item = null;
+          try {
+            const body = JSON.parse(xhr.responseText || '{}');
+            item = body?.item || body?.data?.item || null;
+          } catch {
+            item = null;
+          }
+          resolve(item);
+          return;
+        }
+        reject(new Error('Upload failed'));
       };
       xhr.onerror = () => reject(new Error('Upload failed'));
       xhr.send(fd);
     })
-      .then(() => {
+      .then((createdItem) => {
         setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, status: 'done', progress: 100 } : j)));
+        if (createdItem?.publicUrl) onUploadedItem?.(createdItem);
         onUploaded?.();
       })
       .catch((error) => {
@@ -157,6 +174,8 @@ export default function MediaLibraryModal({
   initialFolder = '',
   mode = 'pick',
   allowedKinds = null,
+  autoPickOnUpload = false,
+  pickLabel = 'Use selected',
   onClose,
   onPick,
 }) {
@@ -199,6 +218,13 @@ export default function MediaLibraryModal({
 
   useEffect(() => {
     if (!open) return;
+    setFolder(initialFolder || '');
+    setPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initialFolder]);
+
+  useEffect(() => {
+    if (!open) return;
     fetchPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, q, kind, sort, folder, page, recentOnly, projectId]);
@@ -207,6 +233,23 @@ export default function MediaLibraryModal({
     if (!open) return;
     setSelected(null);
   }, [open, view, q, kind, sort, folder, page, recentOnly]);
+
+  useEffect(() => {
+    if (!open || typeof document === 'undefined') return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose?.();
+    };
+    const root = document.documentElement;
+    const prevOverflow = root.style.overflow;
+    root.classList.add('bld-media-modal-open');
+    root.style.overflow = 'hidden';
+    document.addEventListener('keydown', onKey);
+    return () => {
+      root.classList.remove('bld-media-modal-open');
+      root.style.overflow = prevOverflow;
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open, onClose]);
 
   const items = useMemo(() => {
     const raw = Array.isArray(data?.items) ? data.items : [];
@@ -229,7 +272,7 @@ export default function MediaLibraryModal({
 
   if (!open) return null;
 
-  return (
+  const modalTree = (
     <div className="bld-media-modal__backdrop" role="presentation" onClick={onClose}>
       <div className="bld-media-modal" role="dialog" aria-modal="true" aria-label="Media library" onClick={(e) => e.stopPropagation()}>
         <div className="bld-media-modal__head">
@@ -277,6 +320,16 @@ export default function MediaLibraryModal({
               <button type="button" className={`bld-media-folder ${folder === 'Recent' ? 'is-active' : ''}`} onClick={() => { setFolder('Recent'); setPage(1); }}>
                 Recent uploads
               </button>
+              <button
+                type="button"
+                className={`bld-media-folder ${folder === 'brand-logos' ? 'is-active' : ''}`}
+                onClick={() => {
+                  setFolder('brand-logos');
+                  setPage(1);
+                }}
+              >
+                Brand logos
+              </button>
               <button type="button" className={`bld-media-folder ${folder === 'Brand' ? 'is-active' : ''}`} onClick={() => { setFolder('Brand'); setPage(1); }}>
                 Brand
               </button>
@@ -285,7 +338,16 @@ export default function MediaLibraryModal({
               </button>
             </div>
 
-            <UploadQueue projectId={projectId} folder={folder || ''} onUploaded={() => fetchPage()} />
+            <UploadQueue
+              projectId={projectId}
+              folder={folder || ''}
+              onUploaded={() => fetchPage()}
+              onUploadedItem={(item) => {
+                if (!autoPickOnUpload || !item?.publicUrl) return;
+                onPick?.(item);
+                onClose?.();
+              }}
+            />
           </div>
 
           <div className="bld-media-modal__main">
@@ -380,7 +442,7 @@ export default function MediaLibraryModal({
                 </button>
                 {mode === 'pick' ? (
                   <button type="button" className="bld-btn bld-btn--primary" onClick={pick} disabled={!selected}>
-                    Use selected
+                    {pickLabel}
                   </button>
                 ) : null}
               </div>
@@ -390,5 +452,9 @@ export default function MediaLibraryModal({
       </div>
     </div>
   );
+
+  const portalRoot = getMediaModalPortalRoot();
+  if (!portalRoot) return null;
+  return createPortal(modalTree, portalRoot);
 }
 

@@ -30,6 +30,17 @@ import {
   headerLayoutMetaPatch,
   resolveHeaderLayoutMode,
 } from '@/lib/headerLayoutMode';
+import {
+  applyBrandLogoSlotPatch,
+  brandLogoFormFields,
+  brandLogoPropsPatchFromFormKey,
+  isBrandLogoInspectorNode,
+} from '@/lib/headerLogo';
+import {
+  applyHeaderBehaviorToRowTree,
+  headerBehaviorMetaPatch,
+  normalizeHeaderBehavior,
+} from '@/lib/headerBehavior';
 import { isFooterRowNode, isHeaderRowNode, isLayoutLockedRow } from '@/lib/rowLayoutMeta';
 import { stripNaNFromStyleJson } from '@/lib/inspectorNumeric';
 import { getDeviceStyle, styleToCss } from '@/lib/styleToCss';
@@ -48,7 +59,12 @@ import OverflowSuggestions from './inspector/OverflowSuggestions';
 import { getGlobalLinkMeta, isLinkedGlobalPlaceholder } from '@/lib/globalComponentLinkMeta';
 import { isRootPageRow } from '@/lib/liveDocSectionSpacing';
 import { resolveSectionWidthMode, SECTION_WIDTH_MODES } from '@/lib/liveContentContainer';
-import { findAncestorRowNode, findDescendantNodeByType, findNodeInTree } from '@/lib/builderTree';
+import {
+  findAncestorRowNode,
+  findDescendantNodeByType,
+  findNodeInTree,
+  mergeNodePropsJsonPatch,
+} from '@/lib/builderTree';
 import {
   applySectionLayoutToStyleJson,
   findSectionItemsHostNode,
@@ -516,6 +532,39 @@ export default function BuilderInspector({
     [sectionStripLayoutRow, pageTree, editingDisabledBySectionLock, onUpdateNode]
   );
 
+  const patchHeaderBehavior = useCallback(
+    async (patch) => {
+      if (!sectionStripLayoutRow || sectionStripLayoutRow.nodeType !== 'row') return;
+      if (!isHeaderRowNode(sectionStripLayoutRow)) return;
+      if (isLinkedGlobalPlaceholder(sectionStripLayoutRow)) return;
+      if (editingDisabledBySectionLock) return;
+      if (!onUpdateNode) return;
+      const prevMeta =
+        sectionStripLayoutRow.props?.meta &&
+        typeof sectionStripLayoutRow.props.meta === 'object' &&
+        !Array.isArray(sectionStripLayoutRow.props.meta)
+          ? sectionStripLayoutRow.props.meta
+          : {};
+      const nextMeta = headerBehaviorMetaPatch(prevMeta, patch);
+      const patched = applyHeaderBehaviorToRowTree(
+        {
+          displayName: sectionStripLayoutRow.displayName,
+          props: { ...(sectionStripLayoutRow.props || {}), meta: nextMeta },
+          style_json: sectionStripLayoutRow.style_json,
+        },
+        nextMeta.headerBehavior
+      );
+      await onUpdateNode({
+        nodeId: sectionStripLayoutRow.id,
+        payload: {
+          props: patched.props,
+          style_json: patched.style_json,
+        },
+      });
+    },
+    [sectionStripLayoutRow, editingDisabledBySectionLock, onUpdateNode]
+  );
+
   const patchHeaderLayoutMode = useCallback(
     async (mode) => {
       if (!sectionStripLayoutRow || sectionStripLayoutRow.nodeType !== 'row') return;
@@ -692,6 +741,9 @@ export default function BuilderInspector({
     featureTabsImageHeightPx: '360',
     featureTabsTabAlign: 'center',
     faqAccordionJson: '[]',
+    headerBehaviorType: 'normal',
+    headerBehaviorVariant: 'default',
+    headerRevealAfter: 120,
     carouselVariant: 'image',
     carouselAutoplay: false,
     carouselLoop: true,
@@ -995,6 +1047,19 @@ export default function BuilderInspector({
         null,
         2
       ),
+      ...(isHeaderRowNode(selectedNode)
+        ? (() => {
+            const hb = normalizeHeaderBehavior(selectedNode.props?.meta?.headerBehavior);
+            return {
+              headerBehaviorType: hb.type,
+              headerBehaviorVariant: hb.variant,
+              headerRevealAfter: hb.revealAfter,
+            };
+          })()
+        : {}),
+      ...(isBrandLogoInspectorNode(selectedNode, pageTree)
+        ? brandLogoFormFields(selectedNode.props || {})
+        : {}),
       ...advancedElementFormFromProps(selectedNode.props || {}),
       carouselVariant: pickPending(
         'carouselVariant',
@@ -1114,10 +1179,7 @@ export default function BuilderInspector({
     if (!selectedNode) return;
     if (editingDisabledBySectionLock) return;
     await updateNode(selectedNode.id, {
-      props: {
-        ...(selectedNode.props || {}),
-        ...changes,
-      },
+      props: mergeNodePropsJsonPatch(selectedNode.props || {}, changes),
     });
   };
 
@@ -1468,6 +1530,22 @@ export default function BuilderInspector({
       return;
     }
 
+    if (key === 'brandLogoMediaPick' && isBrandLogoInspectorNode(selectedNode, pageTree)) {
+      const slot = value?.slot === 'dark' ? 'dark' : value?.slot === 'light' ? 'light' : null;
+      const publicUrl = String(value?.publicUrl || '').trim();
+      if (slot && publicUrl) {
+        const patch = applyBrandLogoSlotPatch(slot, publicUrl, selectedNode.props || {}, {
+          altText: value?.altText,
+        });
+        await updateProps(patch);
+        setForm((prev) => ({
+          ...prev,
+          ...brandLogoFormFields(mergeNodePropsJsonPatch(selectedNode.props || {}, patch)),
+        }));
+        return;
+      }
+    }
+
     if (key !== 'carouselEnsureSlide0Image') {
       setForm((prev) => ({ ...prev, [key]: value }));
     }
@@ -1481,10 +1559,48 @@ export default function BuilderInspector({
       pendingCarouselFormRef.current = { ...pending, [key]: { value, ts: Date.now() } };
     }
     if (key === 'text') await updateProps({ text: value });
-    if (key === 'href') await updateProps({ href: value });
+    if (key === 'href') {
+      if (isBrandLogoInspectorNode(selectedNode, pageTree)) {
+        const patch = brandLogoPropsPatchFromFormKey('logoLink', value, selectedNode.props || {});
+        if (patch) {
+          await updateProps(patch);
+          setForm((prev) => ({ ...prev, href: value, logoLink: value, ...brandLogoFormFields({ ...(selectedNode.props || {}), ...patch }) }));
+          return;
+        }
+      }
+      await updateProps({ href: value });
+    }
     if (key === 'openInNewTab') await updateProps({ openInNewTab: Boolean(value) });
     if (key === 'size') await updateProps({ size: value });
-    if (key === 'src') await updateProps({ src: value });
+    const brandLogoKeys = new Set([
+      'lightLogoUrl',
+      'darkLogoUrl',
+      'logoAlt',
+      'logoLink',
+      'logoWidth',
+      'logoHeight',
+      'logoTheme',
+    ]);
+    if (brandLogoKeys.has(key) && isBrandLogoInspectorNode(selectedNode, pageTree)) {
+      const mergedBase = mergeNodePropsJsonPatch(selectedNode.props || {}, { [key]: value });
+      const patch = brandLogoPropsPatchFromFormKey(key, value, mergedBase);
+      if (patch) {
+        await updateProps(patch);
+        setForm((prev) => ({ ...prev, ...brandLogoFormFields(mergeNodePropsJsonPatch(selectedNode.props || {}, patch)) }));
+        return;
+      }
+    }
+    if (key === 'src') {
+      if (isBrandLogoInspectorNode(selectedNode, pageTree)) {
+        const patch = brandLogoPropsPatchFromFormKey('lightLogoUrl', value, selectedNode.props || {});
+        if (patch) {
+          await updateProps(patch);
+          setForm((prev) => ({ ...prev, src: value, ...brandLogoFormFields({ ...(selectedNode.props || {}), ...patch }) }));
+          return;
+        }
+      }
+      await updateProps({ src: value });
+    }
     if (key === 'alt') await updateProps({ alt: value });
 
     // CMS bindings + repeater controls (additive; stored in props.meta.cms).
@@ -2424,13 +2540,11 @@ export default function BuilderInspector({
     if (!meta.isHeader && meta.role !== 'header') return;
     if (isLayoutLockedRow(selectedNode)) return;
     if (action === 'sticky') {
-      setForm((prev) => ({ ...prev, position: 'sticky', top: '0', zIndex: '50' }));
-      await updateStyle({ layout: { position: 'sticky', top: '0', zIndex: '50' } });
+      await patchHeaderBehavior({ type: 'sticky' });
       return;
     }
     if (action === 'static') {
-      setForm((prev) => ({ ...prev, position: 'static', top: '', zIndex: '' }));
-      await updateStyle({ layout: { position: 'static', top: 'auto', zIndex: 'auto' } });
+      await patchHeaderBehavior({ type: 'normal' });
     }
   };
 
@@ -2704,6 +2818,7 @@ export default function BuilderInspector({
           projectPages={projectPages}
           projectId={projectId}
           pageId={pageId}
+          pageTree={pageTree}
         />
       ) : null}
       {activeTab === 'layout' ? (
@@ -2723,6 +2838,7 @@ export default function BuilderInspector({
           stripLayoutTargetRow={sectionStripLayoutRow}
           onPatchRootStripLayout={patchRootStripLayout}
           onPatchHeaderLayoutMode={patchHeaderLayoutMode}
+          onPatchHeaderBehavior={patchHeaderBehavior}
           onPatchSectionLayout={patchSectionLayout}
         />
       ) : null}

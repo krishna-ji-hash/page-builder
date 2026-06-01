@@ -1,10 +1,19 @@
 'use client';
 
+import LogoBrandControls from '@/components/builder/inspector/LogoBrandControls';
 import { InspectorNumField, inspectorNumStringChange } from '@/components/builder/inspector/InspectorNumeric';
 
 /** Inspector fields for advanced elements batch 2. */
 
-export default function AdvancedElementControlsBatch2({ selectedNode, form, onChange, jsonErrors = {} }) {
+export default function AdvancedElementControlsBatch2({
+  selectedNode,
+  form,
+  onChange,
+  jsonErrors = {},
+  canUseMedia = false,
+  onOpenLogoMedia,
+  onLogoFileUpload,
+}) {
   const t = selectedNode?.nodeType;
   if (!t) return null;
 
@@ -191,12 +200,13 @@ export default function AdvancedElementControlsBatch2({ selectedNode, form, onCh
 
   if (t === 'logo_block') {
     return (
-      <>
-        <div className="bld-field"><label className="bld-label">Image URL</label><input className="bld-input" value={form.logoSrc || ''} onChange={(e) => onChange('logoSrc', e.target.value)} /></div>
-        <div className="bld-field"><label className="bld-label">Alt text</label><input className="bld-input" value={form.logoAlt || ''} onChange={(e) => onChange('logoAlt', e.target.value)} /></div>
-        <div className="bld-field"><label className="bld-label">Link URL</label><input className="bld-input" value={form.logoHref || ''} onChange={(e) => onChange('logoHref', e.target.value)} /></div>
-        <InspectorNumField id="logo-w" label="Width (px)" min={48} max={400} value={form.logoWidthPx ?? 160} onChange={inspectorNumStringChange(onChange, 'logoWidthPx')} />
-      </>
+      <LogoBrandControls
+        form={form}
+        onChange={onChange}
+        canUseMedia={Boolean(canUseMedia)}
+        onOpenMedia={onOpenLogoMedia}
+        onLogoFileUpload={onLogoFileUpload}
+      />
     );
   }
 

@@ -66,6 +66,12 @@ function clamp(n, min, max) {
   return Math.max(min, Math.min(max, x));
 }
 
+/** Event targets (e.g. relatedTarget on mouseleave) are not always Nodes in builder/portals. */
+function domTargetWithin(target, ...containers) {
+  if (!(target instanceof Node)) return false;
+  return containers.some((el) => el?.contains(target));
+}
+
 function useBodyScrollLock(locked) {
   useEffect(() => {
     if (!locked) return;
@@ -227,8 +233,7 @@ function DesktopDropdown({ item, currentPath, onNavigate, preferMega, dropdownSt
     if (!open) return;
     const onDoc = (e) => {
       const t = e.target;
-      if (btnRef.current && btnRef.current.contains(t)) return;
-      if (panelRef.current && panelRef.current.contains(t)) return;
+      if (domTargetWithin(t, btnRef.current, panelRef.current)) return;
       setOpen(false);
     };
     document.addEventListener('mousedown', onDoc);
@@ -260,8 +265,7 @@ function DesktopDropdown({ item, currentPath, onNavigate, preferMega, dropdownSt
         setOpen(true);
       }}
       onMouseLeave={(e) => {
-        const next = e.relatedTarget;
-        if (next && (btnRef.current?.contains(next) || panelRef.current?.contains(next))) return;
+        if (domTargetWithin(e.relatedTarget, btnRef.current, panelRef.current)) return;
         scheduleClose();
       }}
     >
@@ -293,8 +297,7 @@ function DesktopDropdown({ item, currentPath, onNavigate, preferMega, dropdownSt
           aria-label={`${item.label} submenu`}
           onMouseEnter={() => clearCloseTimer()}
           onMouseLeave={(e) => {
-            const next = e.relatedTarget;
-            if (next && (btnRef.current?.contains(next) || panelRef.current?.contains(next))) return;
+            if (domTargetWithin(e.relatedTarget, btnRef.current, panelRef.current)) return;
             scheduleClose();
           }}
           style={{

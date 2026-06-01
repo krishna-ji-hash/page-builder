@@ -32,6 +32,8 @@ import {
   wrapBuilderLeafForInlineEdit,
 } from '@/lib/builderLiveParity';
 import { renderNode } from '@/lib/liveRenderer';
+import HeaderBrandLogo from '@/components/runtime/HeaderBrandLogo';
+import { nodeLooksLikeBrandLogo } from '@/lib/headerLogo';
 import { RuntimeProvider } from '@/components/runtime/RuntimeProvider';
 import { sanitizeLiveFlowPositionCss, sanitizeLiveRootContentRowCss } from '@/lib/sanitizeLiveLayout';
 import { imageFitMode, mergeImageFigureStyleForContain } from '@/lib/imageFigureStyle';
@@ -42,6 +44,11 @@ import {
   resolveHeaderLayoutMode,
   sanitizeHeaderRowCss,
 } from '@/lib/headerLayoutMode';
+import {
+  headerBehaviorCssClasses,
+  headerBehaviorDataAttrs,
+  resolveHeaderBehaviorFromMeta,
+} from '@/lib/headerBehavior.js';
 import {
   landmarkContentDataAttrs,
   livePageCssVarOverridesForPage,
@@ -54,6 +61,7 @@ import {
   sectionContentDataAttrs,
 } from '@/lib/livePageCssVars';
 import { bindInteractionObservers } from '@/lib/interactionScrollRuntime';
+import { bindHeaderBehaviorScroll } from '@/lib/headerBehaviorScroll';
 import { interactionPresentationClass, resolveLeafInteractionShell } from '@/lib/nodeInteractionCss';
 import { getDeviceStyle, sanitizeInlineMarginCss, styleToCss } from '@/lib/styleToCss';
 import { useBuilderTheme } from '@/context/BuilderThemeContext';
@@ -658,6 +666,29 @@ function renderNodeContent(node, renderOpts = {}) {
       builderCanvas: builderCanvasHooks,
     });
     if (preview != null) return preview;
+  }
+
+  if (node.nodeType === 'image' && nodeLooksLikeBrandLogo(node)) {
+    const brandLive = renderViaLive();
+    if (brandLive) return brandLive;
+    const figureStyle =
+      imageFitMode(node.props?.imageFit) === 'contain'
+        ? mergeImageFigureStyleForContain(widgetCss || {})
+        : widgetCss || {};
+    return (
+      <figure className="bld-demo-image-wrap live-brand-logo" style={figureStyle}>
+        <HeaderBrandLogo
+          props={node.props}
+          siteTheme={siteTheme}
+          themeTokens={themeTokens}
+          sectionTone={sectionTone}
+          builderTree={renderOpts.builderTree}
+          nodeId={node.id}
+          device={device || 'desktop'}
+          inSiteHeader={insideSiteHeaderRow}
+        />
+      </figure>
+    );
   }
 
   const liveLeaf = renderViaLive();
@@ -1271,6 +1302,10 @@ function NodeRenderer({
       node.props?.meta?.headerLayout ||
       (isSiteHeaderRowForCompact(node) ? resolveHeaderLayoutMode(node.props?.meta || {}) : ''),
   });
+  const rowHeaderBehavior =
+    node.nodeType === 'row' ? resolveHeaderBehaviorFromMeta(node.props?.meta || {}) : null;
+  const headerBehaviorClass =
+    rowHeaderBehavior ? headerBehaviorCssClasses(rowHeaderBehavior) : '';
   const classNames = [
     ...(usesLiveNodeClass ? ['live-node'] : []),
     node.nodeType === 'row'
@@ -1281,6 +1316,7 @@ function NodeRenderer({
           ? 'bld-stack'
           : 'bld-block',
     headerBarClasses,
+    headerBehaviorClass,
     selKind,
     isSelected ? 'is-selected' : '',
     isDragging ? 'is-dragging' : '',
@@ -1290,6 +1326,7 @@ function NodeRenderer({
     isInlineEditing || isRichTextEditing ? 'bld-node--editing-focus' : '',
     sectionEditLocked ? 'bld-node--section-locked' : '',
     node.nodeType === 'image' ? 'bld-block--image' : '',
+    node.nodeType === 'image' && nodeLooksLikeBrandLogo(node) ? 'bld-block--brand-logo' : '',
     node.nodeType === 'carousel' ? 'bld-block--carousel' : '',
     isSplitHeroCarouselNode(node) ? 'bld-block--split-hero-carousel' : '',
     isDividerLeaf ? 'live-divider bld-divider-shell' : '',
@@ -3313,6 +3350,7 @@ function NodeRenderer({
                 'data-header-layout': String(
                   node.props?.meta?.headerLayout || resolveHeaderLayoutMode(node.props?.meta || {})
                 ),
+                ...(rowHeaderBehavior ? headerBehaviorDataAttrs(rowHeaderBehavior) : {}),
               }
             : {})}
           {...(rowSemanticTag === 'footer' || node.props?.meta?.isFooter || node.props?.meta?.role === 'footer'
@@ -3755,7 +3793,11 @@ function NodeRenderer({
                 onClick={(event) => event.stopPropagation()}
               >
                 {node.nodeType === 'image' ? (
-                  <div className="bld-image-toolbar bld-image-toolbar--compact">
+                  <div
+                    className={`bld-image-toolbar bld-image-toolbar--compact${
+                      nodeLooksLikeBrandLogo(node) ? ' bld-image-toolbar--brand-logo' : ''
+                    }`.trim()}
+                  >
                     <div className="bld-image-toolbar__line">
                       <span className="bld-image-toolbar__tag">Align</span>
                       <div className="bld-image-toolbar__segmented" role="group" aria-label="Image alignment">
@@ -3789,7 +3831,8 @@ function NodeRenderer({
                         })}
                       </div>
                     </div>
-                    <div className="bld-image-toolbar__line">
+                    {!nodeLooksLikeBrandLogo(node) ? (
+                    <div className="bld-image-toolbar__line bld-image-toolbar__line--size">
                       <span className="bld-image-toolbar__tag">Size</span>
                       <div className="bld-image-toolbar__size" role="group" aria-label="Image size and crop">
                         <button
@@ -3859,6 +3902,9 @@ function NodeRenderer({
                         </button>
                       </div>
                     </div>
+                    ) : (
+                      <p className="bld-image-toolbar__logo-hint">Logo width: use Content panel or Style → Size</p>
+                    )}
                   </div>
                 ) : (
                   <div className="bld-image-quick-tools">
@@ -4248,7 +4294,12 @@ export default function BuilderCanvas({
 
   useEffect(() => {
     if (!liveDocRef.current) return undefined;
-    return bindInteractionObservers(liveDocRef.current);
+    const unbindIx = bindInteractionObservers(liveDocRef.current);
+    const unbindHeader = bindHeaderBehaviorScroll(liveDocRef.current);
+    return () => {
+      unbindIx?.();
+      unbindHeader?.();
+    };
   }, [tree, device]);
 
   const setPreviewCssForNode = useCallback((nodeId, css, opts = {}) => {

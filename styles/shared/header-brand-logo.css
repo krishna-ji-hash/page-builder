@@ -1,0 +1,78 @@
+/* Brand logo — single <img>; tone is chosen at render time (data-brand-logo-tone). */
+
+.bld-logo {
+  display: inline-flex;
+  align-items: center;
+  line-height: 0;
+}
+
+.bld-logo-link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  color: inherit;
+}
+
+.bld-logo-img {
+  display: block;
+  height: auto;
+  max-width: 100%;
+}
+
+/* Safety: never stack duplicate logo imgs if legacy markup slips through */
+.bld-logo .bld-logo-img ~ .bld-logo-img,
+.bld-logo .bld-logo-light ~ .bld-logo-dark,
+.bld-logo .bld-logo-dark ~ .bld-logo-light {
+  display: none !important;
+}
+
+.live-brand-logo .bld-logo {
+  display: inline-flex;
+}
+
+/* Inspector: side-by-side light / dark logo previews */
+.bld-brand-logo-dual-preview {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.bld-brand-logo-dual-preview__label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--bld-text-muted, #64748b);
+  margin-bottom: 6px;
+}
+
+.bld-brand-logo-dual-preview__frame {
+  min-height: 72px;
+  border-radius: 8px;
+  border: 1px solid var(--bld-border, rgba(15, 23, 42, 0.12));
+  background-color: #f8fafc;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bld-brand-logo-dual-preview__frame--dark {
+  background-color: #0f172a;
+  border-color: rgba(248, 250, 252, 0.12);
+}
+
+.bld-brand-logo-dual-preview__empty {
+  font-size: 11px;
+  color: var(--bld-text-muted, #94a3b8);
+  padding: 8px;
+  text-align: center;
+}
+
+.bld-brand-logo-preview {
+  min-height: 64px;
+}

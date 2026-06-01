@@ -7,6 +7,8 @@
 @import '../shared/template-sections.css';
 @import '../shared/advanced-elements.css';
 @import '../shared/dark-surface-copy.css';
+@import '../shared/header-behaviors.css';
+@import '../shared/header-brand-logo.css';
 
 .live-site {
   min-height: 100vh;

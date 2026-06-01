@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { autoFixTree, reconcileStructuralParents, validateTree } from '../lib/builderTree.js';
+import {
+  autoFixTree,
+  mergeNodePropsJsonPatch,
+  reconcileStructuralParents,
+  validateTree,
+} from '../lib/builderTree.js';
 
 test('reconcileStructuralParents fixes stale parentNodeId from nested shape', () => {
   const row = { id: 1, nodeType: 'row', parentNodeId: 99, positionIndex: 5, children: [] };
@@ -71,4 +76,23 @@ test('autoFixTree moves row-level stacks into first column', () => {
   assert.equal(col.children.length, 1);
   assert.equal(col.children[0].nodeType, 'stack');
   assert.equal(col.children[0].id, 30);
+});
+
+test('mergeNodePropsJsonPatch deep-merges logo without dropping lightLogoUrl', () => {
+  const existing = {
+    lightLogoUrl: '/light.svg',
+    logo: { lightLogoUrl: '/light.svg', darkLogoUrl: '' },
+    meta: { brandLogo: true, sectionLocked: false },
+  };
+  const merged = mergeNodePropsJsonPatch(existing, {
+    darkLogoUrl: '/dark.svg',
+    logo: { darkLogoUrl: '/dark.svg' },
+    meta: { logoTheme: 'auto' },
+  });
+  assert.equal(merged.lightLogoUrl, '/light.svg');
+  assert.equal(merged.darkLogoUrl, '/dark.svg');
+  assert.equal(merged.logo.lightLogoUrl, '/light.svg');
+  assert.equal(merged.logo.darkLogoUrl, '/dark.svg');
+  assert.equal(merged.meta.sectionLocked, false);
+  assert.equal(merged.meta.logoTheme, 'auto');
 });

@@ -6,7 +6,7 @@ import {
   MENU_DRAWER_DENSITIES,
   MENU_HAMBURGER_ALIGNS,
 } from '@/lib/menuMobile';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import FormLeadsPanel from './FormLeadsPanel';
 import MediaLibraryModal from '@/components/builder/media/MediaLibraryModal';
 import MenuTreeEditor from '@/components/builder/inspector/MenuTreeEditor';
@@ -15,10 +15,14 @@ import InspectorTipChips from '@/components/builder/inspector/InspectorTipChips'
 import FeatureTabsControls from '@/components/builder/inspector/FeatureTabsControls';
 import FaqAccordionControls from '@/components/builder/inspector/FaqAccordionControls';
 import AdvancedElementControls, { isAdvancedElementNodeType } from '@/components/builder/inspector/AdvancedElementControls';
+import LogoBrandControls from '@/components/builder/inspector/LogoBrandControls';
+import { nodeIsInsideSiteHeader, nodeLooksLikeBrandLogo } from '@/lib/headerLogo';
+import { uploadProjectMediaFile } from '@/lib/media/uploadProjectMedia';
 import {
   InspectorNumField,
   InspectorNumInput,
   inspectorNumStringChange,
+  numInputDisplayValue,
 } from '@/components/builder/inspector/InspectorNumeric';
 
 export default function ContentPanel({
@@ -29,31 +33,77 @@ export default function ContentPanel({
   projectPages = [],
   projectId,
   pageId,
+  pageTree = null,
 }) {
   const [mediaOpen, setMediaOpen] = useState(false);
   const [mediaAllowedKinds, setMediaAllowedKinds] = useState(null);
   const [mediaPickTarget, setMediaPickTarget] = useState(null);
+  const [mediaFolder, setMediaFolder] = useState('brand-logos');
+  const [logoMediaError, setLogoMediaError] = useState('');
+  const mediaPickTargetRef = useRef(null);
 
   const canUseMedia = useMemo(() => Number.isInteger(Number(projectId)) && Number(projectId) > 0, [projectId]);
 
-  const openMedia = ({ target, allowedKinds }) => {
+  const openMedia = ({ target, allowedKinds, folder = 'brand-logos' }) => {
     if (!canUseMedia) return;
+    mediaPickTargetRef.current = target;
     setMediaPickTarget(target);
+    setLogoMediaError('');
     setMediaAllowedKinds(Array.isArray(allowedKinds) ? allowedKinds : null);
+    setMediaFolder(folder || 'brand-logos');
     setMediaOpen(true);
   };
 
-  const handlePicked = (item) => {
+  const isLogoMediaTarget = (target) => target === 'logoLight' || target === 'logoDark';
+
+  const applyLogoMediaPick = async (target, item) => {
+    const publicUrl = String(item?.publicUrl || '').trim();
+    if (!publicUrl || !isLogoMediaTarget(target)) return false;
+    try {
+      await onChange('brandLogoMediaPick', {
+        slot: target === 'logoDark' ? 'dark' : 'light',
+        publicUrl,
+        altText: item.altText || item.title || '',
+      });
+      setLogoMediaError('');
+      return true;
+    } catch (err) {
+      setLogoMediaError(err?.message || 'Could not apply logo from media library');
+      return false;
+    }
+  };
+
+  const handlePicked = async (item) => {
     if (!item?.publicUrl) return;
     const kind = String(item?.kind || '');
-    // Safety: only image/svg allowed for these fields.
-    if (kind !== 'image' && kind !== 'svg') return;
-    if (mediaPickTarget === 'image') {
+    const mime = String(item?.mimeType || '');
+    const isRasterOrSvg =
+      kind === 'image' ||
+      kind === 'svg' ||
+      mime.startsWith('image/') ||
+      /\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(String(item.publicUrl || ''));
+    if (!isRasterOrSvg) {
+      setLogoMediaError('Only images or SVG can be used as a logo.');
+      return;
+    }
+
+    const target = mediaPickTargetRef.current ?? mediaPickTarget;
+    if (isLogoMediaTarget(target)) {
+      const ok = await applyLogoMediaPick(target, item);
+      if (ok) {
+        setMediaOpen(false);
+        mediaPickTargetRef.current = null;
+        setMediaPickTarget(null);
+      }
+      return;
+    }
+
+    if (target === 'image') {
       onChange('src', item.publicUrl);
       if (!form.alt?.trim() && item.altText) onChange('alt', item.altText);
       if (item.title) onChange('imageTitle', item.title);
-    } else if (typeof mediaPickTarget === 'object' && mediaPickTarget?.type === 'carouselSlide') {
-      const idx = Number(mediaPickTarget.index);
+    } else if (typeof target === 'object' && target?.type === 'carouselSlide') {
+      const idx = Number(target.index);
       if (!Number.isInteger(idx) || idx < 0) return;
       onChange('carouselSlidePatch', {
         index: idx,
@@ -64,8 +114,8 @@ export default function ContentPanel({
           imageTitle: item.title || '',
         },
       });
-    } else if (typeof mediaPickTarget === 'object' && mediaPickTarget?.type === 'featureTab') {
-      const idx = Number(mediaPickTarget.index);
+    } else if (typeof target === 'object' && target?.type === 'featureTab') {
+      const idx = Number(target.index);
       if (!Number.isInteger(idx) || idx < 0) return;
       onChange('featureTabsPatch', {
         index: idx,
@@ -77,6 +127,37 @@ export default function ContentPanel({
       });
     }
     setMediaOpen(false);
+  };
+
+  const handleLogoFileUpload = async (formKey, event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!file.type?.startsWith('image/')) return;
+
+    if (canUseMedia) {
+      try {
+        const { publicUrl } = await uploadProjectMediaFile(Number(projectId), file, { folder: 'brand-logos' });
+        const target = formKey === 'darkLogoUrl' ? 'logoDark' : 'logoLight';
+        const ok = await applyLogoMediaPick(target, { publicUrl });
+        if (!ok) onChange(formKey, publicUrl);
+        return;
+      } catch {
+        /* fall through to inline data URL */
+      }
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const src = typeof reader.result === 'string' ? reader.result : '';
+      if (src) {
+        const target = formKey === 'darkLogoUrl' ? 'logoDark' : 'logoLight';
+        const ok = await applyLogoMediaPick(target, { publicUrl: src });
+        if (!ok) onChange(formKey, src);
+      }
+    };
+    reader.onerror = () => {};
+    reader.readAsDataURL(file);
   };
 
   const handleImageUpload = (event) => {
@@ -146,6 +227,14 @@ export default function ContentPanel({
     reader.readAsDataURL(file);
   };
 
+  const inSiteHeader = useMemo(
+    () =>
+      pageTree?.length && selectedNode?.id != null
+        ? nodeIsInsideSiteHeader(pageTree, selectedNode.id)
+        : false,
+    [pageTree, selectedNode?.id]
+  );
+
   if (!selectedNode) {
     return (
       <div className="bld-panel">
@@ -157,6 +246,8 @@ export default function ContentPanel({
   const isButton = selectedNode.nodeType === 'button';
   const isTextLike = selectedNode.nodeType === 'heading' || selectedNode.nodeType === 'text' || isButton;
   const isImage = selectedNode.nodeType === 'image';
+  const isBrandLogo =
+    isImage && nodeLooksLikeBrandLogo(selectedNode, { tree: pageTree, inSiteHeader });
   const isMenu = selectedNode.nodeType === 'menu';
   const isTable = selectedNode.nodeType === 'table';
   const isForm = selectedNode.nodeType === 'form';
@@ -342,8 +433,31 @@ export default function ContentPanel({
           </div>
         </>
       ) : null}
-      {isImage ? (
+      {isBrandLogo ? (
+        <LogoBrandControls
+          form={form}
+          onChange={onChange}
+          canUseMedia={canUseMedia}
+          logoMediaError={logoMediaError}
+          mediaDisabledHint={
+            canUseMedia
+              ? ''
+              : 'Save the project first to use Media Library (upload still works as a local preview URL).'
+          }
+          onOpenMedia={(target) =>
+            openMedia({ target, allowedKinds: ['image', 'svg'], folder: 'brand-logos' })
+          }
+          onLogoFileUpload={handleLogoFileUpload}
+        />
+      ) : null}
+      {isImage && !isBrandLogo ? (
         <>
+          <div className="bld-field">
+            <p className="bld-field-note">
+              Light + dark logo uploads appear when you select the header logo (layer name &quot;Logo&quot;) or any image
+              inside the site header row.
+            </p>
+          </div>
           <div className="bld-field">
             <label className="bld-label">Image quick tools</label>
             <InspectorTipChips
@@ -1250,7 +1364,17 @@ export default function ContentPanel({
         />
       ) : null}
       {isAdvancedElement ? (
-        <AdvancedElementControls selectedNode={selectedNode} form={form} onChange={onChange} jsonErrors={jsonErrors} />
+        <AdvancedElementControls
+          selectedNode={selectedNode}
+          form={form}
+          onChange={onChange}
+          jsonErrors={jsonErrors}
+          canUseMedia={canUseMedia}
+          onOpenLogoMedia={(target) =>
+            openMedia({ target, allowedKinds: ['image', 'svg'], folder: 'brand-logos' })
+          }
+          onLogoFileUpload={handleLogoFileUpload}
+        />
       ) : null}
       {isTable ? (
         <>
@@ -1591,8 +1715,21 @@ export default function ContentPanel({
       <MediaLibraryModal
         open={mediaOpen}
         projectId={Number(projectId) || 0}
+        initialFolder={mediaFolder}
         allowedKinds={mediaAllowedKinds}
-        onClose={() => setMediaOpen(false)}
+        autoPickOnUpload={isLogoMediaTarget(mediaPickTargetRef.current ?? mediaPickTarget)}
+        pickLabel={
+          (mediaPickTargetRef.current ?? mediaPickTarget) === 'logoDark'
+            ? 'Use as dark logo'
+            : (mediaPickTargetRef.current ?? mediaPickTarget) === 'logoLight'
+              ? 'Use as light logo'
+              : 'Use selected'
+        }
+        onClose={() => {
+          setMediaOpen(false);
+          mediaPickTargetRef.current = null;
+          setMediaPickTarget(null);
+        }}
         onPick={handlePicked}
       />
     </div>

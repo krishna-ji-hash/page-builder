@@ -22,6 +22,7 @@
   --bld-z-canvas-content: 1;
   --bld-z-canvas-overlay: 10;
   --bld-z-canvas-floating: 50;
+  --bld-z-media-modal: 100000;
   /* Typography scale (compact for dense builder UI) */
   --bld-fs-xs: 10px;
   --bld-fs-sm: 11px;

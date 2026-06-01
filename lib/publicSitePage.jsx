@@ -125,6 +125,7 @@ export default async function PublicSitePageView({ projectSlug, pageSlug, search
   return (
     <div
       className="live-site"
+      data-site-preset={siteTheme.presetId || 'light'}
       data-project-slug={projectSlug}
       data-page-slug={pageSlug}
       data-route-kind="published"

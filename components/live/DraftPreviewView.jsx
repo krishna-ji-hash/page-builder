@@ -94,6 +94,7 @@ export default async function DraftPreviewView({ pageId }) {
   return (
     <div
       className="live-site"
+      data-site-preset={siteTheme.presetId || 'light'}
       data-project-slug={state.page.projectSlug}
       data-page-slug={state.page.slug}
       data-route-kind="draft-preview"

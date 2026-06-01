@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { bindInteractionObservers } from '@/lib/interactionScrollRuntime';
+import { bindHeaderBehaviorScroll } from '@/lib/headerBehaviorScroll';
 
 /**
  * Published / preview document root. suppressHydrationWarning avoids dev-only noise when
@@ -12,7 +13,12 @@ export default function LiveDoc({ children }) {
 
   useEffect(() => {
     if (!ref.current) return undefined;
-    return bindInteractionObservers(ref.current);
+    const unbindIx = bindInteractionObservers(ref.current);
+    const unbindHeader = bindHeaderBehaviorScroll(ref.current);
+    return () => {
+      unbindIx?.();
+      unbindHeader?.();
+    };
   }, []);
 
   return (

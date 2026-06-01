@@ -3071,13 +3071,22 @@
 }
 
 .bld-canvas__page .bld-node__shell.bld-block--image > .bld-node__chrome--overlay {
-  max-width: min(100%, 320px);
+  max-width: min(100%, 420px);
   margin-left: auto;
   margin-right: 0;
   left: auto;
   right: 0;
   border-radius: 8px;
   box-shadow: 0 4px 14px color-mix(in srgb, #000 14%, transparent);
+}
+
+.bld-canvas__page .bld-node__shell.bld-block--image.bld-selected {
+  min-width: min(100%, 300px);
+  max-width: min(100%, 440px);
+}
+
+.bld-canvas__page .bld-node__shell.bld-block--image.bld-selected.bld-block--brand-logo {
+  min-width: min(100%, 240px);
 }
 
 .bld-canvas__page .bld-node__shell.bld-block--image .bld-node__media-toolbar {
@@ -3090,6 +3099,11 @@
   background: transparent;
   border-radius: 0;
   box-shadow: none;
+}
+
+.bld-canvas__page .bld-node__shell.bld-block--image.bld-selected .bld-node__media-toolbar {
+  min-width: 100%;
+  width: 100%;
 }
 
 /* Image / menu width & crop controls: in-flow under the asset (not over the graphic). */
@@ -3239,7 +3253,8 @@
   flex-direction: column;
   gap: 5px;
   width: 100%;
-  max-width: 280px;
+  min-width: 0;
+  max-width: 100%;
   padding: 6px 7px;
   border-radius: 6px;
   border: 1px solid color-mix(in srgb, var(--bld-border) 72%, transparent);
@@ -3249,11 +3264,30 @@
   font-family: var(--bld-font, system-ui, sans-serif);
 }
 
+.bld-image-toolbar--brand-logo {
+  max-width: 100%;
+}
+
+.bld-image-toolbar__logo-hint {
+  margin: 0;
+  padding: 2px 0 0;
+  font-size: 9px;
+  line-height: 1.35;
+  color: var(--bld-text-soft);
+}
+
 .bld-image-toolbar__line {
   display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
+  width: 100%;
+}
+
+.bld-image-toolbar__line--size {
+  flex-wrap: wrap;
+  align-items: flex-start;
+  row-gap: 4px;
 }
 
 .bld-image-toolbar__tag {
@@ -3326,15 +3360,16 @@
 .bld-image-toolbar__size {
   flex: 1 1 auto;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   min-width: 0;
-  flex-wrap: nowrap;
 }
 
 .bld-image-toolbar__btn {
   height: 24px;
-  min-width: 0;
+  flex-shrink: 0;
+  min-width: 28px;
   padding: 0 6px;
   border-radius: 5px;
   border: 1px solid color-mix(in srgb, var(--bld-border) 78%, transparent);
@@ -3356,12 +3391,11 @@
 }
 
 .bld-image-toolbar__btn--fit {
-  flex: 1 1 auto;
-  min-width: 44px;
-  max-width: 72px;
-  padding: 0 5px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex: 0 1 auto;
+  min-width: 52px;
+  max-width: none;
+  padding: 0 8px;
+  white-space: nowrap;
 }
 
 .bld-image-toolbar__btn:hover:not(:disabled) {

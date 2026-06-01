@@ -6,7 +6,15 @@ import { ADVANCED_BLOCK_NODE_TYPES } from '@/lib/advancedElementRegistry';
 
 /** Inspector fields for advanced element node types (lib/advancedElementRegistry.js). */
 
-export default function AdvancedElementControls({ selectedNode, form, onChange, jsonErrors = {} }) {
+export default function AdvancedElementControls({
+  selectedNode,
+  form,
+  onChange,
+  jsonErrors = {},
+  canUseMedia = false,
+  onOpenLogoMedia,
+  onLogoFileUpload,
+}) {
   const t = selectedNode?.nodeType;
   if (!t) return null;
 
@@ -209,7 +217,15 @@ export default function AdvancedElementControls({ selectedNode, form, onChange, 
     );
   }
 
-  const batch2 = AdvancedElementControlsBatch2({ selectedNode, form, onChange, jsonErrors });
+  const batch2 = AdvancedElementControlsBatch2({
+    selectedNode,
+    form,
+    onChange,
+    jsonErrors,
+    canUseMedia,
+    onOpenLogoMedia,
+    onLogoFileUpload,
+  });
   if (batch2) return batch2;
 
   if (t === 'social_icons') {

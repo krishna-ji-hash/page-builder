@@ -10,6 +10,7 @@ import { isSectionLockedRow, isStrictAncestorSectionLocked } from '@/lib/rowLayo
 import { EXTRA_ADVANCED_ELEMENT_CARDS } from '@/lib/advancedElementRegistry';
 import { PDP_ELEMENT_CARDS } from '@/lib/pdpElementRegistry';
 import { InspectorNumInput } from '@/components/builder/inspector/InspectorNumeric';
+import { HEADER_STARTER_CARDS } from '@/lib/headerBehavior.js';
 
 const ELEMENT_CARDS = [
   { id: 'heading', label: 'Heading', icon: 'H', supported: true },
@@ -237,6 +238,7 @@ export default function BuilderSidebar({
   onCreateSection,
   onInsertStarterTemplate,
   onInsertHeaderTemplate,
+  onInsertHeaderStarter,
   onCreateComponentPreset,
   onInsertSectionTemplate,
   onApplyFullPageTemplate,
@@ -598,6 +600,19 @@ export default function BuilderSidebar({
                   <span className="bld-block-card__icon">HDR</span>
                   <span className="bld-block-card__label">Header</span>
                 </button>
+                {HEADER_STARTER_CARDS.map((card) => (
+                  <button
+                    key={card.id}
+                    type="button"
+                    className="bld-block-card"
+                    onClick={() => onInsertHeaderStarter?.(card.id)}
+                    disabled={isCreatingNode}
+                    title={card.label}
+                  >
+                    <span className="bld-block-card__icon">{card.icon}</span>
+                    <span className="bld-block-card__label">{card.label}</span>
+                  </button>
+                ))}
               </div>
             </details>
             <details className="bld-acc" open>
