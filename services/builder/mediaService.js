@@ -1,3 +1,5 @@
+import fs from 'fs/promises';
+import path from 'path';
 import { getDbPool } from '@/lib/db';
 
 function asFolder(value) {
@@ -163,5 +165,35 @@ export async function updateMediaAssetMetadata({ projectId, mediaId, title, altT
   );
   const [rows] = await pool.query(`SELECT * FROM media_assets WHERE id = ? AND project_id = ? LIMIT 1`, [id, pid]);
   return rows.length ? normalizeMediaRow(rows[0]) : null;
+}
+
+/**
+ * Delete a media asset (DB row + files on disk). Idempotent if already removed.
+ * @param {{ projectId: number, mediaId: number }} params
+ */
+export async function deleteMediaAsset({ projectId, mediaId }) {
+  const pid = Number(projectId);
+  const id = Number(mediaId);
+  if (!Number.isInteger(pid) || pid <= 0) throw new Error('Invalid projectId');
+  if (!Number.isInteger(id) || id <= 0) throw new Error('Invalid mediaId');
+
+  const pool = getDbPool();
+  const [rows] = await pool.query(`SELECT * FROM media_assets WHERE id = ? AND project_id = ? LIMIT 1`, [id, pid]);
+  if (!rows.length) return { deleted: false };
+
+  const row = rows[0];
+  await pool.query(`DELETE FROM media_assets WHERE id = ? AND project_id = ?`, [id, pid]);
+
+  const storagePath = String(row.storage_path || '').trim();
+  if (storagePath) {
+    await fs.unlink(storagePath).catch(() => {});
+  }
+  const thumbUrl = String(row.thumb_url || '').trim();
+  if (thumbUrl.startsWith('/')) {
+    const thumbAbs = path.join(process.cwd(), 'public', thumbUrl.replace(/^\//, ''));
+    await fs.unlink(thumbAbs).catch(() => {});
+  }
+
+  return { deleted: true, id };
 }
 

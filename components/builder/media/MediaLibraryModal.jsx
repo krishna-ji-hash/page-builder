@@ -13,11 +13,37 @@ function humanBytes(bytes) {
   return `${val.toFixed(exp === 0 ? 0 : 1)} ${units[exp]}`;
 }
 
+const MEDIA_GRID_COLS = 5;
+
 function kindIcon(kind) {
   if (kind === 'video') return 'VID';
   if (kind === 'svg') return 'SVG';
   if (kind === 'document') return 'DOC';
   return 'IMG';
+}
+
+function MediaDeleteButton({ label, busy, onClick }) {
+  return (
+    <button
+      type="button"
+      className="bld-media-delete"
+      aria-label={label}
+      title={label}
+      disabled={busy}
+      onClick={onClick}
+    >
+      {busy ? (
+        <span aria-hidden>…</span>
+      ) : (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+          <path
+            d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v10h-2V9zm4 0h2v10h-2V9zM7 9h2v10H7V9z"
+            fill="currentColor"
+          />
+        </svg>
+      )}
+    </button>
+  );
 }
 
 async function fetchJson(url, init) {
@@ -190,8 +216,30 @@ export default function MediaLibraryModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
 
   const parentRef = useRef(null);
+
+  const deleteMediaItem = async (item) => {
+    if (!projectId || !item?.id) return;
+    const name = item.originalName || 'this file';
+    if (typeof window !== 'undefined' && !window.confirm(`Delete "${name}" from the media library? This cannot be undone.`)) {
+      return;
+    }
+    setDeletingId(item.id);
+    setError('');
+    try {
+      const res = await fetch(`/api/projects/${projectId}/media/${item.id}`, { method: 'DELETE' });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || 'Delete failed');
+      if (selected?.id === item.id) setSelected(null);
+      await fetchPage();
+    } catch (e) {
+      setError(e?.message || 'Failed to delete file');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const fetchPage = async () => {
     if (!projectId) return;
@@ -259,9 +307,9 @@ export default function MediaLibraryModal({
   }, [data, allowedKinds]);
 
   const rowVirtualizer = useVirtualizer({
-    count: view === 'list' ? items.length : Math.ceil(items.length / 4),
+    count: view === 'list' ? items.length : Math.ceil(items.length / MEDIA_GRID_COLS) || 0,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => (view === 'list' ? 62 : 210),
+    estimateSize: () => (view === 'list' ? 68 : 248),
     overscan: 6,
   });
 
@@ -381,12 +429,20 @@ export default function MediaLibraryModal({
                             {it.kind} · {it.mimeType} · {humanBytes(it.bytes)}
                           </div>
                         </div>
+                        <MediaDeleteButton
+                          label={`Delete ${it.originalName}`}
+                          busy={deletingId === it.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteMediaItem(it);
+                          }}
+                        />
                       </div>
                     );
                   }
 
-                  const start = idx * 4;
-                  const rowItems = items.slice(start, start + 4);
+                  const start = idx * MEDIA_GRID_COLS;
+                  const rowItems = items.slice(start, start + MEDIA_GRID_COLS);
                   return (
                     <div
                       key={virtualRow.key}
@@ -407,7 +463,19 @@ export default function MediaLibraryModal({
                             title={it.originalName}
                           >
                             <div className="bld-media-card__thumb" aria-hidden>
-                              {it.thumbUrl ? <img src={it.thumbUrl} alt="" loading="lazy" /> : <span>{kindIcon(it.kind)}</span>}
+                              {it.thumbUrl ? (
+                                <img src={it.thumbUrl || it.publicUrl} alt="" loading="lazy" />
+                              ) : (
+                                <span>{kindIcon(it.kind)}</span>
+                              )}
+                              <MediaDeleteButton
+                                label={`Delete ${it.originalName}`}
+                                busy={deletingId === it.id}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteMediaItem(it);
+                                }}
+                              />
                             </div>
                             <div className="bld-media-card__name">{it.originalName}</div>
                           </div>
@@ -437,6 +505,16 @@ export default function MediaLibraryModal({
                 </button>
               </div>
               <div className="bld-media-modal__actions">
+                {selected ? (
+                  <button
+                    type="button"
+                    className="bld-btn bld-btn--danger"
+                    disabled={Boolean(deletingId)}
+                    onClick={() => deleteMediaItem(selected)}
+                  >
+                    Delete selected
+                  </button>
+                ) : null}
                 <button type="button" className="bld-btn" onClick={onClose}>
                   Close
                 </button>
