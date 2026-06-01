@@ -28,8 +28,8 @@ test('shouldNeutralizeBodyTextColors is true for dark site preset', () => {
   assert.equal(shouldNeutralizeBodyTextColors(darkSite), true);
 });
 
-test('shouldNeutralizeBodyTextColors is true when theme token mode is dark', () => {
-  assert.equal(shouldNeutralizeBodyTextColors(lightSite, { mode: 'dark' }), true);
+test('shouldNeutralizeBodyTextColors is false when theme token mode is dark but site preset is light (aligned)', () => {
+  assert.equal(shouldNeutralizeBodyTextColors(lightSite, { mode: 'dark' }), false);
 });
 
 test('dark content mode remaps pasted dark and light text to section fg', () => {

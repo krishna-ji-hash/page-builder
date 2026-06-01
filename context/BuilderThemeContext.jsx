@@ -393,21 +393,8 @@ export function BuilderThemeProvider({ children, persistence = null, persistFlus
     const sig = `${projectId}:${JSON.stringify(fromDb ?? null)}:${JSON.stringify(fromDbTokens ?? null)}:${JSON.stringify(fromDbPresets ?? null)}:${JSON.stringify(fromDbAnimPresets ?? null)}`;
     if (lastHydrateSigRef.current === sig) return;
     lastHydrateSigRef.current = sig;
-    let next = normalizeSiteTheme(fromDb ?? undefined);
+    const next = normalizeSiteTheme(fromDb ?? undefined);
     const nextTokensRaw = normalizeThemeTokens(fromDbTokens ?? undefined);
-
-    if (typeof window !== 'undefined') {
-      const uiTheme = window.localStorage.getItem(STORAGE_UI);
-      if ((uiTheme === 'dark' || uiTheme === 'light') && next.presetId !== uiTheme) {
-        const preset = SITE_THEME_PRESETS[uiTheme];
-        if (preset) {
-          next = normalizeSiteTheme(
-            { ...preset, presetId: uiTheme },
-            { defaultRevision: next.revision, defaultSchemaVersion: next.schemaVersion }
-          );
-        }
-      }
-    }
 
     const json = JSON.stringify(next);
     setSiteThemeState(next);
@@ -415,18 +402,7 @@ export function BuilderThemeProvider({ children, persistence = null, persistFlus
     writeSiteThemeCache(projectId, next);
     setSiteThemePersist({ status: 'idle', error: '' });
 
-    let nextTokens = alignThemeTokensWithSiteTheme(next, nextTokensRaw);
-    if (typeof window !== 'undefined') {
-      const uiTheme = window.localStorage.getItem(STORAGE_UI);
-      if (uiTheme === 'dark' || uiTheme === 'light') {
-        if (hasModePalettes(nextTokens)) {
-          if (nextTokens.mode !== uiTheme) nextTokens = normalizeThemeTokens({ ...nextTokens, mode: uiTheme });
-        } else {
-          const { light, dark } = createModePalettesFromFlat(nextTokens);
-          nextTokens = normalizeThemeTokens({ ...nextTokens, mode: uiTheme, light, dark });
-        }
-      }
-    }
+    const nextTokens = alignThemeTokensWithSiteTheme(next, nextTokensRaw);
     setThemeTokensState(nextTokens);
     lastSavedTokensJsonRef.current = JSON.stringify(nextTokens);
     setThemeTokensPersist({ status: 'idle', error: '' });

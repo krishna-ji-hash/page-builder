@@ -171,6 +171,7 @@ export default function ContentPanel({
       ? form.carouselVariant
       : 'image';
   const isLogoSlider = isCarousel && form.carouselVariant === 'logo';
+  const isSplitHeroSlider = isCarousel && form.carouselVariant === 'splitHero';
   const isTickerSlider = isCarousel && form.carouselVariant === 'ticker';
   const isMarqueeSlider = isCarousel && form.carouselVariant === 'marquee';
   const isTickerOrMarquee = isCarousel && (isTickerSlider || isMarqueeSlider);
@@ -669,6 +670,7 @@ export default function ContentPanel({
             >
               <option value="image">Image slider</option>
               <option value="hero">Hero slider</option>
+              <option value="splitHero">Split hero carousel</option>
               <option value="card">Card carousel</option>
               <option value="logo">Logo strip</option>
               <option value="ticker">Logo ticker (dual row)</option>
@@ -742,6 +744,17 @@ export default function ContentPanel({
                     <span className="bld-carousel-editor__meta">{slide?.imageSrc ? 'Image' : 'No image'}</span>
                   </summary>
                   <div className="bld-carousel-editor__body">
+                    {isSplitHeroSlider ? (
+                      <div className="bld-field">
+                        <label className="bld-label">Badge</label>
+                        <input
+                          className="bld-input"
+                          value={String(slide?.badge || '')}
+                          onChange={(e) => onChange('carouselSlidePatch', { index: idx, patch: { badge: e.target.value } })}
+                          placeholder="e.g. New • Premium templates"
+                        />
+                      </div>
+                    ) : null}
                     <div className="bld-field-grid">
                       <div className="bld-field">
                         <label className="bld-label">Title</label>
@@ -1159,6 +1172,21 @@ export default function ContentPanel({
               <label className="bld-label">Transition</label>
               <select
                 className="bld-input"
+                value={form.carouselTransitionEffect || 'slide'}
+                onChange={(e) => onChange('carouselTransitionEffect', e.target.value)}
+              >
+                <option value="slide">Slide</option>
+                <option value="fade">Fade</option>
+              </select>
+              <p className="bld-field-note">Animation style</p>
+            </div>
+          ) : null}
+
+          {!isTickerOrMarquee ? (
+            <div className="bld-field">
+              <label className="bld-label">Transition easing</label>
+              <select
+                className="bld-input"
                 value={form.carouselTransitionEasing || 'ease'}
                 onChange={(e) => onChange('carouselTransitionEasing', e.target.value)}
               >
@@ -1167,7 +1195,7 @@ export default function ContentPanel({
                 <option value="ease-in-out">Smooth</option>
                 <option value="ease-out">Out</option>
               </select>
-              <p className="bld-field-note">Easing</p>
+              <p className="bld-field-note">Easing curve</p>
             </div>
           ) : null}
 

@@ -10,6 +10,7 @@ import { getWidgetDefinition, isWidgetAllowed } from '@/lib/builder/widgetRegist
 import { canDeleteProjectPage, normalizeBuilderSlug } from '@/lib/builder/projectPageRules';
 import { normalizeResponsiveStyle } from '@/lib/styleNormalizer';
 import { DEFAULT_SITE_THEME, themeSpacingPx } from '@/lib/siteDesignTheme';
+import { DEFAULT_THEME_TOKENS, createModePalettesFromFlat, normalizeThemeTokens } from '@/lib/themeTokens';
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
 import { isSectionLockedFlagValue, metaRepresentsExplicitSectionUnlock } from '@/lib/rowLayoutMeta';
 import { freezeGlobalSectionsForPublish } from '@/lib/globalSectionSnapshot';
@@ -1390,10 +1391,18 @@ export async function createProjectWithDefaultPage({ name, slug, type = 'website
       throw new Error('Project slug already exists');
     }
 
+    const initialConfig = {
+      siteTheme: normalizeSiteTheme(DEFAULT_SITE_THEME),
+      themeTokens: normalizeThemeTokens({
+        ...DEFAULT_THEME_TOKENS,
+        ...createModePalettesFromFlat(DEFAULT_THEME_TOKENS),
+      }),
+    };
+
     const [insertProject] = await connection.query(
       `INSERT INTO projects (name, title, slug, type, config_json)
-       VALUES (?, ?, ?, ?, NULL)`,
-      [name.trim(), name.trim(), normalizedSlug, normalizedType]
+       VALUES (?, ?, ?, ?, ?)`,
+      [name.trim(), name.trim(), normalizedSlug, normalizedType, JSON.stringify(initialConfig)]
     );
     const projectId = insertProject.insertId;
 

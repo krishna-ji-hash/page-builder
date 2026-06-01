@@ -19,7 +19,8 @@
     "battle-test:lighthouse": "node scripts/lighthouse-history.mjs",
     "lines:remove-all": "node --env-file=.env scripts/remove-all-divider-nodes.mjs",
     "test": "node scripts/test-all.mjs",
-    "audit:section-contrast": "node scripts/audit-hardcoded-colors.mjs --section-contrast"
+    "audit:section-contrast": "node scripts/audit-hardcoded-colors.mjs --section-contrast",
+    "test:pat": "node scripts/production-acceptance.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

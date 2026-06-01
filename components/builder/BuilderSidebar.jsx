@@ -619,6 +619,10 @@ export default function BuilderSidebar({
                   <span className="bld-block-card__icon">1P</span>
                   <span className="bld-block-card__label">Platform Hero</span>
                 </button>
+                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('splitHeroCarousel')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">SHC</span>
+                  <span className="bld-block-card__label">Split Hero Carousel</span>
+                </button>
                 <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('whyChooseCourier')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">WC</span>
                   <span className="bld-block-card__label">Why Choose</span>

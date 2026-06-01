@@ -278,6 +278,25 @@
   color: var(--live-section-muted, #cbd5e1);
 }
 
+/* Light sections: ensure tab copy uses row contrast tokens (fixes stale dark-mode muted on light bands). */
+.live-feature-tabs[data-section-tone='light'] .live-feature-tabs__heading,
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='featureTabs'][data-section-tone='light']
+  .live-feature-tabs__heading {
+  color: var(--live-section-fg, var(--color-text));
+}
+
+.live-feature-tabs[data-section-tone='light'] .live-feature-tabs__paragraph,
+.live-feature-tabs[data-section-tone='light'] .live-feature-tabs__bullets li,
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='featureTabs'][data-section-tone='light']
+  .live-feature-tabs__paragraph,
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='featureTabs'][data-section-tone='light']
+  .live-feature-tabs__bullets li {
+  color: var(--live-section-muted, var(--color-muted));
+}
+
 .live-feature-tabs__editable:focus {
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35);
   background: rgba(255, 255, 255, 0.92);

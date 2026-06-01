@@ -143,7 +143,7 @@ test('hero landing row remaps to dark contrast in dark content mode', () => {
   assert.equal(css['--live-section-fg'], LIVE_SECTION_FG_ON_DARK);
 });
 
-test('coerceSectionAwareTextColor remaps white only in dark content mode', () => {
+test('coerceSectionAwareTextColor remaps neutral white in dark content mode', () => {
   assert.equal(coerceSectionAwareTextColor('#ffffff'), '#ffffff');
   assert.match(String(coerceSectionAwareTextColor('#ffffff', { darkContentMode: true })), /live-section-fg/);
   assert.match(String(coerceSectionAwareTextColor('white', { darkContentMode: true })), /live-section-fg/);

@@ -15,6 +15,11 @@ const PRESETS = [
     description: 'Bento layout: dark pitch card, image, and two feature tiles.',
   },
   {
+    id: 'splitHeroCarousel',
+    title: 'Split Hero Carousel',
+    description: 'Left copy + right mockup synced in one slider with dots and arrows.',
+  },
+  {
     id: 'whyChooseCourier',
     title: 'Why Choose Courier',
     description: 'Headline, subtitle, and 2×2 feature grid with icon boxes.',

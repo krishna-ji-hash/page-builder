@@ -707,6 +707,7 @@ export default function BuilderInspector({
     carouselTickerDurationSec: '32',
     carouselScrollDirection: 'right',
     carouselTransitionEasing: 'ease',
+    carouselTransitionEffect: 'slide',
     carouselShowOverlay: false,
   });
 
@@ -1066,6 +1067,10 @@ export default function BuilderInspector({
       carouselTransitionEasing: pickPending(
         'carouselTransitionEasing',
         String(selectedNode.props?.transitionEasing || selectedNode.props?.settings?.transitionEasing || 'ease')
+      ),
+      carouselTransitionEffect: pickPending(
+        'carouselTransitionEffect',
+        String(selectedNode.props?.transitionEffect || selectedNode.props?.settings?.transitionEffect || 'slide')
       ),
       carouselShowOverlay: pickPending(
         'carouselShowOverlay',
@@ -1839,6 +1844,12 @@ export default function BuilderInspector({
         const allowed = new Set(['ease', 'linear', 'ease-in-out', 'ease-out']);
         const easing = allowed.has(raw) ? raw : 'ease';
         await updateCarouselMirrored({ transitionEasing: easing }, { transitionEasing: easing });
+        return;
+      }
+      if (key === 'carouselTransitionEffect') {
+        const raw = String(value || 'slide').toLowerCase().trim();
+        const effect = raw === 'fade' ? 'fade' : 'slide';
+        await updateCarouselMirrored({ transitionEffect: effect }, { transitionEffect: effect });
         return;
       }
       if (key === 'carouselScrollDirection') {

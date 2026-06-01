@@ -139,12 +139,10 @@
   color: var(--live-section-fg-on-dark) !important;
 }
 
-.bld-builder-root .bld-canvas__live-mirror .live-node:is(.bld-row, .bld-column, .bld-stack)[data-section-tone='light'] > .live-leaf-wrap > :is(h1, h2, h3, h4, h5, h6, p),
-.bld-builder-root .bld-canvas__live-mirror .live-node:is(.bld-row, .bld-column, .bld-stack)[data-section-tone='light'] > .live-leaf-wrap > .live-rich-text,
-.live-site .live-node:is(.bld-row, .bld-column, .bld-stack)[data-section-tone='light'] > .live-leaf-wrap > :is(h1, h2, h3, h4, h5, h6, p),
-.live-site .live-node:is(.bld-row, .bld-column, .bld-stack)[data-section-tone='light'] > .live-leaf-wrap > .live-rich-text,
 .bld-builder-root .bld-canvas__live-mirror .live-leaf-wrap[data-section-tone='light'] > :is(h1, h2, h3, h4, h5, h6, p),
-.live-site .live-leaf-wrap[data-section-tone='light'] > :is(h1, h2, h3, h4, h5, h6, p) {
+.bld-builder-root .bld-canvas__live-mirror .live-leaf-wrap[data-section-tone='light'] > .live-rich-text,
+.live-site .live-leaf-wrap[data-section-tone='light'] > :is(h1, h2, h3, h4, h5, h6, p),
+.live-site .live-leaf-wrap[data-section-tone='light'] > .live-rich-text {
   color: var(--live-section-fg) !important;
 }
 

@@ -49,6 +49,7 @@ import {
 import { buildReusableBulkOrderedNodes } from '@/lib/reusableBlockInsert';
 import PageSeoModal from './seo/PageSeoModal';
 import AuditModal from './audits/AuditModal';
+import VersionHistoryModal from '@/components/platform/VersionHistoryModal';
 import AuditBadgesOverlay from './audits/AuditBadgesOverlay';
 import ProjectBrandPanel from './inspector/ProjectBrandPanel';
 import {
@@ -919,11 +920,14 @@ export default function BuilderShell({ pageId }) {
     setSelectedNodeId(nodeId);
     const node = findNodeInTree(tree, nodeId);
     if (!node) return;
+    if (node.nodeType === 'carousel') {
+      setInspectorTab('content');
+      return;
+    }
     const isContainer = node.nodeType === 'row' || node.nodeType === 'column' || node.nodeType === 'stack';
     const styleFirst =
       isContainer ||
       node.nodeType === 'image' ||
-      node.nodeType === 'carousel' ||
       node.nodeType === 'heading' ||
       node.nodeType === 'text' ||
       node.nodeType === 'button' ||
@@ -3730,7 +3734,7 @@ export default function BuilderShell({ pageId }) {
         }
       } else if (presetId === 'pricing') {
         const rowStack = await createNodeRequest({
-          nodeType: 'stack',
+          nodeType: 'stack', 
           parentNodeId: targetStackId,
           displayName: 'Preset Pricing Row',
           style_json: { desktop: { layout: { flexDirection: 'row', alignItems: 'stretch', gap: 12 } } },
@@ -3963,29 +3967,11 @@ export default function BuilderShell({ pageId }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pid]);
 
+  const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
+
   const handleOpenHistory = useCallback(() => {
-    const list = undoStack
-      .slice(-10)
-      .map((e, i) => {
-        const ts = e?.ts ? new Date(e.ts).toLocaleTimeString() : '';
-        return `${i + 1}. Snapshot ${ts}`;
-      })
-      .join('\n');
-    const msg =
-      'Restore snapshot (last 10):\n\n' +
-      (list || '(no snapshots yet)') +
-      '\n\nEnter a number (1-10) to restore, or Cancel.';
-    const raw = window.prompt(msg, '');
-    if (!raw) return;
-    const n = Number(raw);
-    if (!Number.isInteger(n)) return;
-    const slice = undoStack.slice(-10);
-    const entry = slice[n - 1];
-    if (!entry?.tree) return;
-    pushHistorySnapshot(cloneTreeSnapshot(tree));
-    applyTreeWithSelectionGuard(cloneTreeSnapshot(entry.tree));
-    setHasUnpublishedEdits(true);
-  }, [applyTreeWithSelectionGuard, pushHistorySnapshot, tree, undoStack]);
+    setVersionHistoryOpen(true);
+  }, []);
 
   const handleResetToBlank = useCallback(() => {
     if (!tree.length) return;
@@ -4075,6 +4061,17 @@ export default function BuilderShell({ pageId }) {
           onToggleLayoutDebug={() => setIsLayoutDebug((prev) => !prev)}
           showGrid={showGrid}
           onToggleGrid={() => setShowGrid((p) => !p)}
+        />
+
+        <VersionHistoryModal
+          open={versionHistoryOpen}
+          pageId={pid}
+          pageTitle={page?.title}
+          onClose={() => setVersionHistoryOpen(false)}
+          onRestored={async () => {
+            await reloadBuilder();
+            setHasUnpublishedEdits(true);
+          }}
         />
 
         <PageSeoModal

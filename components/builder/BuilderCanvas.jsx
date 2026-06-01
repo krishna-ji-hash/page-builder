@@ -15,6 +15,7 @@ import {
 import { isValidNodeHierarchy } from '@/lib/builderHierarchy';
 import { computeReorderFromDrop, findNodeInTree } from '@/lib/builderTree';
 import { isFooterRowNode, isHeaderRowNode, isNodeEditsDisabledBySectionLock } from '@/lib/rowLayoutMeta';
+import { resolveBuilderCanvasSelectTarget, isSplitHeroCarouselNode } from '@/lib/builderCanvasSelect.js';
 import { normalizeResponsiveStyle } from '@/lib/styleNormalizer';
 import { withResolvedLayoutGap } from '@/lib/layoutGapUtils';
 import { mergeDeviceStyleWithTypeDefaults, mergeMenuDeviceStyle } from '@/lib/nodeLayoutDefaults';
@@ -965,8 +966,27 @@ function NodeRenderer({
 }) {
   const isSelected = node.id === selectedNodeId;
   const handleSelect = (event) => {
+    const selectTarget = resolveBuilderCanvasSelectTarget(event, node.id);
+    if (selectTarget === 'nav') {
+      event.stopPropagation();
+      return;
+    }
+    if (String(selectTarget) !== String(node.id)) {
+      event.stopPropagation();
+      onSelectNode(selectTarget);
+      return;
+    }
     event.stopPropagation();
     onSelectNode(node.id);
+  };
+
+  /** Capture phase: parent column/stack must select nested split-hero carousel before bubble stops. */
+  const handleSelectCapture = (event) => {
+    const selectTarget = resolveBuilderCanvasSelectTarget(event, node.id);
+    if (selectTarget === 'nav') return;
+    if (String(selectTarget) !== String(node.id)) {
+      onSelectNode(selectTarget);
+    }
   };
 
   const handleContextMenu = (event) => {
@@ -1097,8 +1117,7 @@ function NodeRenderer({
       await onUpdateNode({
         nodeId: node.id,               
         payload: {
-          props: {
-            ...(node.props || {}),
+          props: {        
             openItemId: nextId,
           },
         },
@@ -1155,7 +1174,11 @@ function NodeRenderer({
     disabled: dragLocked,
   });
   const usesLiveNodeClass =
-    isContainer || node.nodeType === 'menu' || node.nodeType === 'rich_text' || node.nodeType === 'divider';
+    isContainer ||
+    node.nodeType === 'menu' ||
+    node.nodeType === 'rich_text' ||
+    node.nodeType === 'divider' ||
+    node.nodeType === 'carousel';
   const isDividerLeaf = node.nodeType === 'divider';
   const shellCarriesLeafLayout = isContainer || isDividerLeaf;
   const selKind =
@@ -1194,6 +1217,8 @@ function NodeRenderer({
     isInlineEditing || isRichTextEditing ? 'bld-node--editing-focus' : '',
     sectionEditLocked ? 'bld-node--section-locked' : '',
     node.nodeType === 'image' ? 'bld-block--image' : '',
+    node.nodeType === 'carousel' ? 'bld-block--carousel' : '',
+    isSplitHeroCarouselNode(node) ? 'bld-block--split-hero-carousel' : '',
     isDividerLeaf ? 'live-divider bld-divider-shell' : '',
   ]
     .filter(Boolean)
@@ -1226,7 +1251,7 @@ function NodeRenderer({
         : null,
     [tree, node?.id, device, siteTheme, alignedContentTokens]
   );
-  const darkContentMode = isSiteContentDarkMode(siteTheme, themeTokens);
+  const darkContentMode = isSiteContentDarkMode(siteTheme, alignedContentTokens);
   const neutralizeBodyColors = darkContentMode;
   const neutralizeBodyColorsPreview = neutralizeBodyColors;
   const neutralizeBodyColorsPersist = neutralizeBodyColors;
@@ -1847,7 +1872,7 @@ function NodeRenderer({
       }
     }
     const interactiveSelector =
-      'button,input,textarea,select,a,[role="button"],[role="tab"],.live-feature-tabs__tab,.live-feature-tabs__image-btn,.live-faq-accordion__chevron-btn,.live-faq-accordion__add-btn,.live-faq-accordion__editable,.bld-demo-feature-tabs .live-feature-tabs__copy--editable,[data-bld-feature-tab-field],[contenteditable="true"],[contenteditable=""],.bld-transform-handle,.bld-node-controls,.bld-canvas-toolbar,.bld-canvas-toolbar__dropdown';
+      'button,input,textarea,select,a,[role="button"],[role="tab"],.live-feature-tabs__tab,.live-feature-tabs__image-btn,.live-faq-accordion__chevron-btn,.live-faq-accordion__add-btn,.live-faq-accordion__editable,.bld-demo-feature-tabs .live-feature-tabs__copy--editable,[data-bld-feature-tab-field],[contenteditable="true"],[contenteditable=""],.bld-transform-handle,.bld-node-controls,.bld-canvas-toolbar,.bld-canvas-toolbar__dropdown,.live-carousel__split-nav,.live-carousel__split-arrow,.live-carousel__split-dot,.live-carousel__arrow,.live-carousel__dot';
     if (target.closest(interactiveSelector)) return;
     startMoveWithMouse(event);
   };
@@ -3223,6 +3248,7 @@ function NodeRenderer({
           className={`${classNames} ${interactionPresentationClass(deviceStyle, animationPresets)} bld-node ${isSelected ? 'bld-selected' : ''}`.trim()}
           style={inlineStyle}
           onClick={handleSelect}
+          onClickCapture={handleSelectCapture}
           onMouseDown={maybeStartDirectMove}
           onKeyDown={handleKeyDown}
           onMouseEnter={() => onHoverNode?.(node.id)}
@@ -3437,6 +3463,7 @@ function NodeRenderer({
                 : leafInteractionShell.ixStyle || undefined
           }
           onClick={handleSelect}
+          onClickCapture={handleSelectCapture}
           onMouseDown={maybeStartDirectMove}
           onKeyDown={handleKeyDown}
           role={
@@ -3643,6 +3670,15 @@ function NodeRenderer({
                 builderTree: tree,
               })
             )}
+            {isSelected && isSplitHeroCarouselNode(node) ? (
+              <div
+                className="bld-split-hero-edit-hint"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => event.stopPropagation()}
+              >
+                Edit slides in the Content panel →
+              </div>
+            ) : null}
             {null}
             {(node.nodeType === 'image' || node.nodeType === 'menu') && isNodeActive ? (
               <div

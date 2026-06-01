@@ -12,10 +12,16 @@ import { SITE_THEME_PRESETS } from '../lib/siteDesignTheme.js';
 const darkSite = { ...SITE_THEME_PRESETS.dark, presetId: 'dark', revision: 1, schemaVersion: 1 };
 const lightSite = { ...SITE_THEME_PRESETS.light, presetId: 'light', revision: 1, schemaVersion: 1 };
 
-test('applySectionToneToLeafCss keeps white on light sections (nested dark cards)', () => {
+test('applySectionToneToLeafCss remaps white on light sections to readable dark copy', () => {
   const out = applySectionToneToLeafCss({ color: '#ffffff', '--node-text': '#ffffff' }, 'light');
-  assert.equal(out.color, '#ffffff');
-  assert.equal(out['--node-text'], '#ffffff');
+  assert.equal(out.color, LIVE_SECTION_FG_ON_LIGHT);
+  assert.equal(out['--node-text'], LIVE_SECTION_FG_ON_LIGHT);
+});
+
+test('applySectionToneToLeafCss keeps section fg token on light sections', () => {
+  const css = { color: 'var(--live-section-fg, var(--color-text))' };
+  const out = applySectionToneToLeafCss(css, 'light');
+  assert.equal(out.color, css.color);
 });
 
 test('applySectionToneToLeafCss remaps dark neutrals on light sections', () => {

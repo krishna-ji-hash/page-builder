@@ -8,6 +8,7 @@ import {
   isDuplicatePageSlugInProject,
   isLivePagePublished,
 } from '@/lib/builder/projectPageRules';
+import ProjectWizard from '@/components/platform/ProjectWizard';
 import '@/styles/builder/projects-manager.css';
 
 async function readJsonSafe(response) {
@@ -80,6 +81,7 @@ export default function BuilderProjectsManager() {
   const [editPageError, setEditPageError] = useState('');
   const [editProjectDraft, setEditProjectDraft] = useState(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const [projectSearch, setProjectSearch] = useState('');
 
   const openProject = useMemo(
@@ -398,6 +400,9 @@ export default function BuilderProjectsManager() {
               <strong>{stats.publishedPages}</strong> live
             </span>
           </div>
+          <Link className="pm-topbar__link" href="/admin/publishing">
+            Publishing
+          </Link>
           <Link className="pm-topbar__link" href="/">
             Dashboard
           </Link>
@@ -473,9 +478,31 @@ export default function BuilderProjectsManager() {
                   <button className="pm-btn pm-btn--primary pm-btn--block" type="submit" disabled={isCreatingProject}>
                     {isCreatingProject ? 'Creating…' : 'Create project'}
                   </button>
+                  <button
+                    type="button"
+                    className="pm-btn pm-btn--block"
+                    style={{ marginTop: 8 }}
+                    onClick={() => setWizardOpen(true)}
+                  >
+                    Website wizard…
+                  </button>
                 </form>
               ) : null}
             </section>
+
+            <ProjectWizard
+              open={wizardOpen}
+              onClose={() => setWizardOpen(false)}
+              onComplete={async (data) => {
+                await loadProjects();
+                if (data?.project?.id) {
+                  setOpenProjectId(data.project.id);
+                  await loadPages(data.project.id);
+                }
+                setSuccessMessage('Project generated with pages, SEO, and global sections.');
+                setWizardOpen(false);
+              }}
+            />
 
             <aside className="pm-sidebar">
             <div className="pm-sidebar__head">

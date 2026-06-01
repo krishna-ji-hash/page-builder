@@ -77,6 +77,7 @@ function normalizeSlide(slide, index) {
   const ih = Math.round(Number(s.imageHeightPx));
   return {
     id: typeof s.id === 'string' && s.id ? s.id : `slide-${index}`,
+    badge: typeof s.badge === 'string' ? s.badge : '',
     title: typeof s.title === 'string' ? s.title : `Slide ${index + 1}`,
     subtitle: typeof s.subtitle === 'string' ? s.subtitle : '',
     body: typeof s.body === 'string' ? s.body : '',
@@ -228,7 +229,33 @@ function tickerSlideImgStyle(slide) {
   return sty;
 }
 
-export default function Carousel({ slides = [], style, settings, device = 'desktop', ...restProps }) {
+function splitHeroBadgeLabel(slide) {
+  const badge = String(slide?.badge || '').trim();
+  if (badge) return badge;
+  const subtitle = String(slide?.subtitle || '').trim();
+  if (subtitle && !isPlaceholderOverlayBody(subtitle)) return subtitle;
+  return '';
+}
+
+function splitHeroTitle(slide) {
+  const title = String(slide?.title || '').trim();
+  if (!title || isPlaceholderOverlayTitle(title)) return '';
+  return title;
+}
+
+function splitHeroBody(slide) {
+  const body = String(slide?.body || '').trim();
+  if (!body || isPlaceholderOverlayBody(body)) return '';
+  return body;
+}
+
+function splitHeroCta(slide) {
+  const label = String(slide?.cta?.label || slide?.buttonText || '').trim();
+  const href = String(slide?.cta?.href || slide?.buttonUrl || '#').trim() || '#';
+  return { label, href, visible: Boolean(label) };
+}
+
+export default function Carousel({ slides = [], style, settings, device = 'desktop', builderPreview = false, ...restProps }) {
   const safeSlides = useMemo(
     () => (Array.isArray(slides) ? slides : []).filter((s) => s && typeof s === 'object').map(normalizeSlide),
     [slides]
@@ -243,6 +270,7 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
   const isMarqueeVariant = variantKey === 'marquee';
   const isTickerOrMarquee = isTickerVariant || isMarqueeVariant;
   const isLogoVariant = variantKey === 'logo';
+  const isSplitHeroVariant = variantKey === 'splithero';
   const imageFitRaw = restProps?.imageFit ?? settings?.imageFit ?? 'cover';
   const imageFitBase = String(imageFitRaw || 'cover').toLowerCase() === 'contain' ? 'contain' : 'cover';
   const imageFit = isLogoVariant ? 'contain' : imageFitBase;
@@ -269,10 +297,10 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
     variantForOverlay !== 'marquee';
   const showOverlay =
     showOverlayRaw === undefined ? overlayDefaultOn : Boolean(showOverlayRaw);
-  const perView = clamp(cfg.perView, 1, 6);
+  const perView = isSplitHeroVariant ? 1 : clamp(cfg.perView, 1, 6);
   const maxIndex = Math.max(0, safeSlides.length - perView);
   const nSlides = safeSlides.length;
-  const useSeamlessLoop = Boolean(cfg.loop) && nSlides > 1 && perView === 1;
+  const useSeamlessLoop = Boolean(cfg.loop) && nSlides > 1 && perView === 1 && !isSplitHeroVariant;
 
   const trackSlides = useMemo(() => {
     if (!useSeamlessLoop) return safeSlides.map((slide) => ({ slide, key: String(slide.id) }));
@@ -501,6 +529,141 @@ export default function Carousel({ slides = [], style, settings, device = 'deskt
       setIndex(useSeamlessLoop ? nSlides : maxIndex);
     }
   };
+
+  if (isSplitHeroVariant) {
+    const transitionEffectRaw = String(
+      restProps?.transitionEffect ?? settings?.transitionEffect ?? 'slide'
+    )
+      .toLowerCase()
+      .trim();
+    const isFade = transitionEffectRaw === 'fade';
+    const splitVars = {
+      '--carousel-gap': `${cfg.gapPx}px`,
+      '--carousel-per-view': '1',
+      '--carousel-speed': `${cfg.speedMs}ms`,
+      '--carousel-easing': transitionEasingCss,
+      '--carousel-image-fit': imageFit,
+    };
+    const renderSplitPanel = (slide, slideIndex) => {
+      const badge = splitHeroBadgeLabel(slide);
+      const title = splitHeroTitle(slide);
+      const body = splitHeroBody(slide);
+      const cta = splitHeroCta(slide);
+      const imgAttrs = liveCarouselSlideImageAttrs(slide, {
+        slideIndex,
+        isFirstVisible: slideIndex === activeDotIndex,
+      });
+      return (
+        <div className="live-carousel__split-panel-inner">
+          <div className="live-carousel__split-copy">
+            {badge ? <span className="live-carousel__split-badge">{badge}</span> : null}
+            {title ? <h2 className="live-carousel__split-title">{title}</h2> : null}
+            {body ? <p className="live-carousel__split-body">{body}</p> : null}
+            {cta.visible ? (
+              builderPreview ? (
+                <span className="live-carousel__split-cta" role="link" tabIndex={-1}>
+                  {cta.label}
+                </span>
+              ) : (
+                <a className="live-carousel__split-cta" href={cta.href}>
+                  {cta.label}
+                </a>
+              )
+            ) : null}
+          </div>
+          <div className="live-carousel__split-visual">
+            {slide.imageSrc ? (
+              <img
+                className="live-carousel__split-img"
+                src={slide.imageSrc}
+                alt={slide.imageAlt || ''}
+                style={slideImageStyle(slide, imageFit, imageObjectPosition)}
+                {...imgAttrs}
+              />
+            ) : (
+              <div className="live-carousel__split-img-placeholder" aria-hidden="true">
+                Image
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    };
+    const splitNav =
+      (cfg.arrows && safeSlides.length > 1) || (cfg.dots && pages > 1) ? (
+        <div className="live-carousel__split-nav" role="group" aria-label="Carousel navigation">
+          {cfg.arrows && safeSlides.length > 1 ? (
+            <button
+              type="button"
+              className="live-carousel__split-arrow"
+              onClick={(event) => {
+                event.stopPropagation();
+                prev();
+              }}
+              aria-label="Previous slide"
+            >
+              ‹
+            </button>
+          ) : null}
+          {cfg.dots && pages > 1 ? (
+            <div className="live-carousel__split-dots" aria-label="Slides">
+              {Array.from({ length: pages }).map((_, i) => (
+                <button
+                  key={String(i)}
+                  type="button"
+                  className={`live-carousel__split-dot ${i === activeDotIndex ? 'is-active' : ''}`.trim()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setIndex(i);
+                  }}
+                  aria-label={`Go to slide ${i + 1}`}
+                  aria-pressed={i === activeDotIndex}
+                />
+              ))}
+            </div>
+          ) : null}
+          {cfg.arrows && safeSlides.length > 1 ? (
+            <button
+              type="button"
+              className="live-carousel__split-arrow"
+              onClick={(event) => {
+                event.stopPropagation();
+                next();
+              }}
+              aria-label="Next slide"
+            >
+              ›
+            </button>
+          ) : null}
+        </div>
+      ) : null;
+
+    const activeSlide = safeSlides[activeDotIndex] ?? safeSlides[0];
+
+    return (
+      <section
+        style={{ ...(style || {}), ...splitVars }}
+        className={`live-carousel live-carousel--splitHero ${isFade ? 'is-fade' : 'is-slide'} ${isPaused ? 'is-paused' : ''}`.trim()}
+        aria-label="Split hero carousel"
+        aria-roledescription="carousel"
+        tabIndex={0}
+        onKeyDown={onKeyDown}
+        onMouseEnter={() => (cfg.pauseOnHover ? setIsPaused(true) : null)}
+        onMouseLeave={() => (cfg.pauseOnHover ? setIsPaused(false) : null)}
+      >
+        <div className="live-carousel__split-viewport live-carousel__viewport">
+          <article
+            key={`split-hero-${activeDotIndex}-${String(activeSlide?.id || activeDotIndex)}`}
+            className="live-carousel__split-panel is-active"
+            aria-live="polite"
+          >
+            {renderSplitPanel(activeSlide, activeDotIndex)}
+          </article>
+        </div>
+        {splitNav}
+      </section>
+    );
+  }
 
   return (
     <section
