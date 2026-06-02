@@ -33,6 +33,8 @@ test('shouldStripNeutralDarkCssColor detects pasted slate body colors', () => {
   assert.equal(shouldStripNeutralDarkCssColor('hsl(222, 47%, 11%)'), true);
   assert.deepEqual(parseCssColorToRgb('black'), [0, 0, 0]);
   assert.equal(shouldStripNeutralDarkCssColor('#f97316'), false);
+  assert.equal(shouldStripNeutralDarkCssColor('#ef4444'), false);
+  assert.equal(shouldStripNeutralDarkCssColor('#dc2626'), false);
   assert.equal(shouldStripNeutralDarkCssColor('var(--color-text)'), false);
 });
 

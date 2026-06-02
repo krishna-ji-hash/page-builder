@@ -1,11 +1,11 @@
 import PublishedLiveTree from '@/components/live/PublishedLiveTree';
 import { getPageVarsBucket, livePageCssVarOverridesForPage, resolveBodyLayout } from '@/lib/livePageCssVars';
-import { normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesignTheme';
+import { siteThemeToCssVariableStyle } from '@/lib/siteDesignTheme';
+import { themeTokensToCssVariableStyle } from '@/lib/themeTokens';
 import {
-  alignThemeTokensWithSiteTheme,
-  normalizeThemeTokens,
-  themeTokensToCssVariableStyle,
-} from '@/lib/themeTokens';
+  buildPublishedLiveRenderOptions,
+  prepareNodesForLiveRender,
+} from '@/lib/prepareLivePageRender';
 import { buildRenderNodesWithGlobals } from '@/lib/globalSectionMerge';
 import { expandLinkedGlobalComponents } from '@/lib/globalComponentExpand';
 import { expandCms } from '@/lib/cms/cmsExpand';
@@ -72,19 +72,18 @@ export default async function DraftPreviewView({ pageId }) {
 
   renderBase = await expandCms(renderBase, { projectId: state.page.projectId, cmsService });
 
-  const renderNodes = buildRenderNodesWithGlobals(renderBase, globalHeader, globalFooter, cloneGlobalNode);
+  const mergedNodes = buildRenderNodesWithGlobals(renderBase, globalHeader, globalFooter, cloneGlobalNode);
+  const { nodes: renderNodes, siteTheme, themeTokens } = prepareNodesForLiveRender(
+    mergedNodes,
+    state.page?.projectConfig
+  );
   const currentPath = publicPagePath(state.page.projectSlug, state.page.slug);
   const projectPages = (state.projectPages || []).map((page) => ({
     slug: page.slug,
     title: page.title,
     href: publicPagePath(state.page.projectSlug, page.slug),
   }));
-  const siteTheme = normalizeSiteTheme(state.page?.projectConfig?.siteTheme);
   const siteCssVars = siteThemeToCssVariableStyle(siteTheme);
-  const themeTokens = alignThemeTokensWithSiteTheme(
-    siteTheme,
-    normalizeThemeTokens(state.page?.projectConfig?.themeTokens)
-  );
   const tokenVars = themeTokensToCssVariableStyle(themeTokens);
   const pageSlug = state.page.slug;
   const pageVars = getPageVarsBucket(siteTheme, pageSlug);
@@ -95,6 +94,7 @@ export default async function DraftPreviewView({ pageId }) {
     <div
       className="live-site"
       data-site-preset={siteTheme.presetId || 'light'}
+      data-token-mode={themeTokens.mode === 'dark' ? 'dark' : 'light'}
       data-project-slug={state.page.projectSlug}
       data-page-slug={state.page.slug}
       data-route-kind="draft-preview"
@@ -111,15 +111,15 @@ export default async function DraftPreviewView({ pageId }) {
       <LiveDoc>
         <PublishedLiveTree
           nodes={renderNodes}
-          options={{
+          options={buildPublishedLiveRenderOptions(state.page?.projectConfig, {
             currentPath,
             projectPages,
-            siteTheme,
             pageSlug,
             pageId: state.page.id,
             projectId: state.page.projectId,
             projectSlug: state.page.projectSlug,
-          }}
+            builderTree: renderNodes,
+          })}
         />
       </LiveDoc>
     </div>

@@ -54,7 +54,7 @@ export default function HeaderBrandLogo({
   const height = normalized.height;
 
   const sizeStyle = {
-    width: widthPx,
+    width: `${widthPx}px`,
     maxWidth: '100%',
     height: height === 'auto' || height === '' || height == null ? 'auto' : height,
     ...imgStyle,
@@ -62,7 +62,7 @@ export default function HeaderBrandLogo({
 
   const img = (
     <img
-      key={`${activeTone}:${src}`}
+      key={`${activeTone}:${src}:${widthPx}`}
       src={src}
       alt={normalized.alt || 'Logo'}
       className={['bld-logo-img', imgClassName].filter(Boolean).join(' ')}

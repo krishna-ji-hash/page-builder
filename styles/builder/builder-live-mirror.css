@@ -2,6 +2,8 @@
  * Makes the artboard use the same live/preview CSS pipeline (.live-site > .live-doc) so
  * headings, menu, images, and overflow rules match Draft Preview and published pages.
  */
+@import '../shared/live-header-stack.css';
+@import '../shared/rich-text-controls.css';
 
 .bld-builder-root .bld-canvas__live-mirror.live-site {
   /* Grow with sections; do not shrink below content (min-height:0 caused clipped/tight artboard vs scroll parent). */
@@ -136,14 +138,14 @@
 .bld-builder-root .bld-canvas__live-mirror .live-leaf-wrap[data-section-tone='dark'] > .live-rich-text,
 .live-site .live-leaf-wrap[data-section-tone='dark'] > :is(h1, h2, h3, h4, h5, h6, p),
 .live-site .live-leaf-wrap[data-section-tone='dark'] > .live-rich-text {
-  color: var(--live-section-fg-on-dark) !important;
+  color: var(--node-text, var(--live-section-fg-on-dark));
 }
 
 .bld-builder-root .bld-canvas__live-mirror .live-leaf-wrap[data-section-tone='light'] > :is(h1, h2, h3, h4, h5, h6, p),
 .bld-builder-root .bld-canvas__live-mirror .live-leaf-wrap[data-section-tone='light'] > .live-rich-text,
 .live-site .live-leaf-wrap[data-section-tone='light'] > :is(h1, h2, h3, h4, h5, h6, p),
 .live-site .live-leaf-wrap[data-section-tone='light'] > .live-rich-text {
-  color: var(--live-section-fg) !important;
+  color: var(--node-text, var(--live-section-fg));
 }
 
 /* Template sections (get in touch contact column + platform hero pitch) */
@@ -173,7 +175,7 @@
   )
   .live-leaf-wrap
   :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text) {
-  color: var(--live-section-fg-on-dark) !important;
+  color: var(--node-text, var(--live-section-fg-on-dark));
 }
 
 /* style_json hover/click must win over editor-only row lift in builder-canvas.css */
@@ -203,15 +205,21 @@
   .live-doc
   > :where(section.live-node.bld-row, main.live-node.bld-row):not([data-site-header='true']):not([data-site-footer='true']):not(
     [data-section-template]
-  ):not(:has(.live-carousel--ticker)):not(:has(.live-carousel--marquee)):not(:has(.live-carousel--logo)),
+  ):not(:has(.live-carousel--ticker)):not(:has(.live-carousel--marquee)):not(:has(.live-carousel--logo)) {
+  align-items: flex-start !important;
+  min-height: min-content;
+  overflow-x: clip;
+  overflow-y: visible;
+}
+
+.bld-builder-root .bld-canvas__live-mirror .live-doc > :is(header.live-node, [data-site-header='true']).site-header-bar,
 .bld-builder-root
   .bld-canvas__live-mirror
   .live-doc
   > :is(header.live-node, [data-site-header='true'])
-  > .live-node.bld-row:not(:has(.live-carousel--ticker)):not(:has(.live-carousel--marquee)):not(:has(.live-carousel--logo)) {
-  align-items: flex-start !important;
-  min-height: min-content;
-  overflow-x: clip;
+  > .live-node.bld-row.site-header-bar {
+  align-items: center !important;
+  overflow-x: visible;
   overflow-y: visible;
 }
 
@@ -230,16 +238,22 @@
 }
 
 .bld-builder-root .bld-canvas__live-mirror .live-doc > :where(section.live-node.bld-row, main.live-node.bld-row):not([data-site-header='true']):not([data-site-footer='true']):not([data-section-template]) > .live-node.bld-column,
-.bld-builder-root .bld-canvas__live-mirror .live-doc > :is(header.live-node, [data-site-header='true']) > .live-node.bld-row > .live-node.bld-column {
-  align-self: flex-start !important;
+.bld-builder-root
+  .bld-canvas__live-mirror
+  .live-doc
+  > :is(header.live-node, [data-site-header='true'])
+  > .live-node.bld-row.site-header-bar
+  > .live-node.bld-column {
+  align-self: center !important;
   min-height: min-content;
   height: auto;
 }
 
 .bld-builder-root .bld-canvas__live-mirror .live-doc > :is(header.live-node.bld-row, [data-site-header='true'].bld-row):has(> .live-node.bld-row) {
   display: flex !important;
-  flex-direction: row !important;
-  flex-wrap: wrap !important;
+  flex-direction: column !important;
+  flex-wrap: nowrap !important;
+  align-items: stretch !important;
   height: auto !important;
   overflow: visible;
   grid-template-columns: unset !important;
@@ -350,7 +364,7 @@
 /* Header bar: styles/shared/site-header-bar.css */
 
 .bld-builder-root .bld-canvas__live-mirror .live-doc > :is(header.live-node, [data-site-header='true']):has(> .live-node.bld-row) > .live-node.bld-row {
-  flex: 1 1 100% !important;
+  flex: 0 0 auto !important;
   width: 100% !important;
-  order: 99;
+  order: unset !important;
 }

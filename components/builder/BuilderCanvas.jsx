@@ -33,12 +33,19 @@ import {
 } from '@/lib/builderLiveParity';
 import { renderNode } from '@/lib/liveRenderer';
 import HeaderBrandLogo from '@/components/runtime/HeaderBrandLogo';
-import { nodeLooksLikeBrandLogo } from '@/lib/headerLogo';
+import {
+  brandLogoPropsPatchFromFormKey,
+  nodeLooksLikeBrandLogo,
+  normalizeBrandLogoProps,
+  parseBrandLogoWidthPx,
+} from '@/lib/headerLogo';
 import { RuntimeProvider } from '@/components/runtime/RuntimeProvider';
 import { sanitizeLiveFlowPositionCss, sanitizeLiveRootContentRowCss } from '@/lib/sanitizeLiveLayout';
 import { imageFitMode, mergeImageFigureStyleForContain } from '@/lib/imageFigureStyle';
 import { getRichTextAnimationStyle } from '@/lib/richTextAnimation';
 import { rootSemanticTag } from '@/lib/rootSemanticTag';
+import { getBuilderPortalRoot } from '@/lib/builderPortalRoot';
+import { segmentRootNodes } from '@/lib/liveHeaderStack';
 import { isRootPageRow, liveDocRootRowSpacingVars, rowHasSpacingPadding } from '@/lib/liveDocSectionSpacing';
 import {
   resolveHeaderLayoutMode,
@@ -73,6 +80,23 @@ import { appendFaqItem, patchFaqItems, resolveFaqAccordionProps } from '@/lib/fa
 import Menu from '@/components/runtime/Menu';
 import { applyBindingsToString } from '@/lib/cms/cmsBindings';
 import { isProbablyInlineHtml, sanitizeInlineLeafHtml } from '@/lib/inlineTextHtml';
+import { propsPatchForTextContent } from '@/lib/richTextNodeProps';
+import {
+  applyRichColorInRoot,
+  execRichCommandInRoot,
+  restoreRichTextSelection,
+  saveRichTextSelection,
+  selectionNonCollapsedInRoot,
+} from '@/lib/richTextExecCommands';
+import {
+  computeFloatingToolbarBesidePosition,
+  computeFloatingToolbarPosition,
+  resolveFloatingToolbarAnchorRect,
+} from '@/lib/floatingTextToolbarPosition.js';
+import {
+  FLOATING_TOOLBAR_SELECTOR,
+  isFocusInFloatingToolbar,
+} from '@/lib/inlineEditBlurGuard';
 import { isSiteContentDarkMode } from '@/lib/bodyTextNeutralization';
 import { sectionToneDataAttrForCss } from '@/lib/liveSectionContrastVars.js';
 import { applySectionToneToLeafCss, resolveSectionToneForNode } from '@/lib/sectionToneContext.js';
@@ -187,16 +211,22 @@ function WpIconAlignBottom() {
 function consumeFloatingToolbarPointerForCanvas(event) {
   const t = event.target;
   if (t && typeof t.closest === 'function') {
-    const inWpToolbar = t.closest('.bld-wp-toolbar');
-    if (inWpToolbar) {
-      const native = t.closest('select, option, textarea, input, label');
-      if (native && inWpToolbar.contains(native)) {
+    const inToolbar = t.closest('.bld-floating-inline-toolbar, .bld-floating-quick-toolbar, .bld-wp-toolbar');
+    if (inToolbar) {
+      const native = t.closest(
+        'select, option, textarea, input[type="color"], input[type="number"], input:not([type]), label, button'
+      );
+      if (native && inToolbar.contains(native)) {
         event.stopPropagation();
         return;
       }
     }
   }
   event.preventDefault();
+}
+
+function isFocusInsideFloatingToolbar() {
+  return isFocusInFloatingToolbar();
 }
 
 function getRichTextCommandRoot({ isInlineEditing, inlineEditWrapRef, nodeElementRef, nodeType }) {
@@ -210,44 +240,6 @@ function getRichTextCommandRoot({ isInlineEditing, inlineEditWrapRef, nodeElemen
   if (nodeType === 'text') return shell.querySelector('.bld-demo-text');
   if (nodeType === 'button') return shell.querySelector('.bld-demo-button');
   return null;
-}
-
-function selectionNonCollapsedInRoot(root) {
-  if (!root || typeof window === 'undefined') return false;
-  const sel = window.getSelection();
-  if (!sel || sel.rangeCount === 0) return false;
-  const range = sel.getRangeAt(0);
-  if (range.collapsed) return false;
-  return root.contains(range.commonAncestorContainer);
-}
-
-function execRichCommandInRoot(root, command, value) {
-  if (!root || typeof document === 'undefined') return null;
-  const before = root.innerHTML;
-  const hadCe = root.getAttribute('contenteditable');
-  root.setAttribute('contenteditable', 'true');
-  root.focus();
-  try {
-    const useCss = command === 'foreColor' || command === 'hiliteColor' || command === 'backColor';
-    document.execCommand('styleWithCSS', false, useCss ? 'true' : 'false');
-  } catch (_) {
-    /* ignore */
-  }
-  try {
-    if (command === 'bold') {
-      document.execCommand('bold', false);
-    } else if (command === 'foreColor') {
-      document.execCommand('foreColor', false, String(value ?? ''));
-    } else if (command === 'createLink') {
-      document.execCommand('createLink', false, String(value ?? ''));
-    }
-  } catch (_) {
-    /* ignore */
-  }
-  const after = root.innerHTML;
-  if (hadCe === null) root.removeAttribute('contenteditable');
-  else root.setAttribute('contenteditable', hadCe);
-  return { before, after };
 }
 
 function parseTypographyFontSizePx(raw, fallback = 16) {
@@ -414,6 +406,7 @@ function renderNodeContent(node, renderOpts = {}) {
     onInlineEditStart,
     onInlineEditCommit,
     onInlineEditCancel,
+    inlineEditBlurCommitGuard,
     isSavingNode,
     sectionEditLocked = false,
     isRichTextEditing,
@@ -525,6 +518,7 @@ function renderNodeContent(node, renderOpts = {}) {
           onChange={onInlineDraftChange}
           onCommit={() => onInlineEditCommit(node)}
           onCancel={onInlineEditCancel}
+          blurCommitGuard={inlineEditBlurCommitGuard}
           disabled={isSavingNode || sectionEditLocked}
           htmlMode={headingHtmlMode}
         />
@@ -572,6 +566,7 @@ function renderNodeContent(node, renderOpts = {}) {
           onChange={onInlineDraftChange}
           onCommit={() => onInlineEditCommit(node)}
           onCancel={onInlineEditCancel}
+          blurCommitGuard={inlineEditBlurCommitGuard}
           disabled={isSavingNode || sectionEditLocked}
           htmlMode={textHtmlMode}
         />
@@ -615,6 +610,7 @@ function renderNodeContent(node, renderOpts = {}) {
           onChange={onInlineDraftChange}
           onCommit={() => onInlineEditCommit(node)}
           onCancel={onInlineEditCancel}
+          blurCommitGuard={inlineEditBlurCommitGuard}
           disabled={isSavingNode || sectionEditLocked}
         />
       );
@@ -1345,10 +1341,17 @@ function NodeRenderer({
   const [interactionPreviewStyle, setInteractionPreviewStyle] = useState(null);
   const [dragAssist, setDragAssist] = useState(null);
   const [overflowLocal, setOverflowLocal] = useState(null);
+  const [imageToolbarFixedPos, setImageToolbarFixedPos] = useState(null);
+  const imageToolbarRef = useRef(null);
   const nodeElementRef = useRef(null);
   const inlineEditWrapRef = useRef(null);
   const [floatingToolbarPos, setFloatingToolbarPos] = useState(null);
-  const [quickTextToolbarPos, setQuickTextToolbarPos] = useState(null);
+  const floatingToolbarRef = useRef(null);
+  const floatingToolbarPosRef = useRef(null);
+  const floatingToolbarFreezeRef = useRef(false);
+  const floatingToolbarFreezeTimerRef = useRef(null);
+  const toolbarColorPickerOpenRef = useRef(false);
+  const wasSelectedRef = useRef(isSelected);
   const { siteTheme, themeTokens, stylePresets, animationPresets } = useBuilderTheme();
   const alignedContentTokens = useMemo(
     () => alignThemeTokensWithSiteTheme(normalizeSiteTheme(siteTheme), themeTokens),
@@ -2070,93 +2073,98 @@ function NodeRenderer({
     setInlinePanelError('');
   }, [node.id, node.props?.text, node.props?.src, node.props?.alt, node.props?.items]);
 
+  const freezeFloatingToolbar = useCallback((ms = 1200) => {
+    floatingToolbarFreezeRef.current = true;
+    if (floatingToolbarFreezeTimerRef.current) clearTimeout(floatingToolbarFreezeTimerRef.current);
+    floatingToolbarFreezeTimerRef.current = setTimeout(() => {
+      floatingToolbarFreezeRef.current = false;
+      floatingToolbarFreezeTimerRef.current = null;
+    }, ms);
+  }, []);
+
   useLayoutEffect(() => {
     if (!supportsInlineTextEdit || !isInlineEditing) {
+      floatingToolbarPosRef.current = null;
       setFloatingToolbarPos(null);
       return undefined;
     }
-    const el = inlineEditWrapRef.current;
+    let raf = 0;
     const update = () => {
-      if (!el) {
-        setFloatingToolbarPos(null);
-        return;
-      }
-      const r = el.getBoundingClientRect();
-      const margin = 10;
-      const estToolbarWidth = 320;
-      const vw = typeof window !== 'undefined' ? window.innerWidth : 1200;
-      const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
-      const centerY = r.top + r.height / 2;
-      let left = r.right + margin;
-      let transform = 'translateY(-50%)';
-      if (left + estToolbarWidth > vw - 8) {
-        left = r.left - margin;
-        transform = 'translate(-100%, -50%)';
-      }
-      left = Math.max(8, Math.min(left, vw - 8));
-      const top = Math.max(40, Math.min(centerY, vh - 40));
-      setFloatingToolbarPos({ top, left, transform });
+      if (floatingToolbarFreezeRef.current || isFocusInsideFloatingToolbar()) return;
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        if (floatingToolbarFreezeRef.current || isFocusInsideFloatingToolbar()) return;
+        const anchorRect = resolveFloatingToolbarAnchorRect({ wrapRef: inlineEditWrapRef });
+        if (!anchorRect) return;
+
+        const tb = floatingToolbarRef.current?.getBoundingClientRect?.();
+        const toolbarSize =
+          tb && Number.isFinite(tb.width) && tb.width > 0
+            ? { width: tb.width, height: tb.height || 48 }
+            : { width: 420, height: 44 };
+
+        const pos = computeFloatingToolbarPosition(anchorRect, toolbarSize, {
+          margin: 10,
+          gap: 8,
+        });
+        floatingToolbarPosRef.current = pos;
+        setFloatingToolbarPos(pos);
+      });
     };
+
     update();
     window.addEventListener('resize', update);
     window.addEventListener('scroll', update, true);
+    document.addEventListener('selectionchange', update, true);
     return () => {
+      cancelAnimationFrame(raf);
+      if (floatingToolbarFreezeTimerRef.current) {
+        clearTimeout(floatingToolbarFreezeTimerRef.current);
+        floatingToolbarFreezeTimerRef.current = null;
+      }
+      floatingToolbarFreezeRef.current = false;
       window.removeEventListener('resize', update);
       window.removeEventListener('scroll', update, true);
+      document.removeEventListener('selectionchange', update, true);
     };
-  }, [supportsInlineTextEdit, isInlineEditing, node.id, inlineDraftText]);
+  }, [supportsInlineTextEdit, isInlineEditing, isSelected, node.id, inlineDraftText]);
+
+  const showImageMediaToolbar =
+    (node.nodeType === 'image' || node.nodeType === 'menu') && isNodeActive && !sectionEditLocked;
 
   useLayoutEffect(() => {
-    const showQuick =
-      isNodeActive &&
-      !isInlineEditing &&
-      !sectionEditLocked &&
-      (node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'button');
-    if (!showQuick) {
-      setQuickTextToolbarPos(null);
+    if (!showImageMediaToolbar) {
+      setImageToolbarFixedPos(null);
       return undefined;
     }
-    const el = nodeElementRef.current;
+    let raf = 0;
     const update = () => {
-      if (!el) {
-        setQuickTextToolbarPos(null);
-        return;
-      }
-      const r = el.getBoundingClientRect();
-      const margin = 10;
-      const estToolbarWidth = 340;
-      const vw = typeof window !== 'undefined' ? window.innerWidth : 1200;
-      const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
-      const centerY = r.top + r.height / 2;
-      let left = r.right + margin;
-      let transform = 'translateY(-50%)';
-      if (left + estToolbarWidth > vw - 8) {
-        left = r.left - margin;
-        transform = 'translate(-100%, -50%)';
-      }
-      left = Math.max(8, Math.min(left, vw - 8));
-      const top = Math.max(40, Math.min(centerY, vh - 40));
-      setQuickTextToolbarPos({ top, left, transform });
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const shell = nodeElementRef.current;
+        if (!shell) return;
+        const rect = shell.getBoundingClientRect();
+        const tb = imageToolbarRef.current?.getBoundingClientRect?.();
+        const toolbarSize = {
+          width: tb && tb.width > 0 ? tb.width : 188,
+          height: tb && tb.height > 0 ? tb.height : 118,
+        };
+        const pos = computeFloatingToolbarBesidePosition(rect, toolbarSize, {
+          gap: 12,
+          preferBelow: nodeLooksLikeBrandLogo(node),
+        });
+        setImageToolbarFixedPos(pos);
+      });
     };
     update();
     window.addEventListener('resize', update);
     window.addEventListener('scroll', update, true);
     return () => {
+      cancelAnimationFrame(raf);
       window.removeEventListener('resize', update);
       window.removeEventListener('scroll', update, true);
     };
-  }, [
-    isNodeActive,
-    isInlineEditing,
-    sectionEditLocked,
-    node.nodeType,
-    node.id,
-    device,
-    deviceStyle?.typography?.textAlign,
-    deviceStyle?.typography?.fontWeight,
-    node.props?.tag,
-    node.props?.text,
-  ]);
+  }, [showImageMediaToolbar, node.id, node.nodeType, node.props?.logoWidth, deviceStyle?.size?.width]);
 
   const handleInlineEditStart = (targetNode, event) => {
     if (sectionEditLocked) return;
@@ -2201,7 +2209,7 @@ function NodeRenderer({
         payload: {
           props: {
             ...targetNode.props,
-            text: nextText,
+            ...propsPatchForTextContent(targetNode.props || {}, nextText),
           },
         },
       });
@@ -2209,6 +2217,34 @@ function NodeRenderer({
       isCommittingInlineEditRef.current = false;
     }
   };
+
+  useEffect(() => {
+    const hadSelection = wasSelectedRef.current;
+    wasSelectedRef.current = isSelected;
+    if (isSelected) return;
+    if (hadSelection && isInlineEditing) {
+      void handleInlineEditCommit(node);
+    } else {
+      setIsInlineEditing(false);
+    }
+    setFloatingToolbarPos(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- commit/clear when selection leaves this node only
+  }, [isSelected, node.id]);
+
+  useEffect(() => {
+    if (!isInlineEditing || !isSelected || sectionEditLocked) return undefined;
+    const onPointerDown = (event) => {
+      if (toolbarColorPickerOpenRef.current || isFocusInsideFloatingToolbar()) return;
+      const target = event.target;
+      if (!target || typeof target.closest !== 'function') return;
+      if (target.closest(FLOATING_TOOLBAR_SELECTOR)) return;
+      if (inlineEditWrapRef.current?.contains(target) || nodeElementRef.current?.contains(target)) return;
+      void handleInlineEditCommit(node);
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () => document.removeEventListener('pointerdown', onPointerDown, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dismiss inline edit on outside press
+  }, [isInlineEditing, isSelected, sectionEditLocked, node.id]);
 
   const handleInlinePanelSave = async (event) => {
     event.preventDefault();
@@ -2307,6 +2343,63 @@ function NodeRenderer({
     });
   };
 
+  const measureBrandLogoFillWidthPx = () => {
+    const shell = nodeElementRef.current;
+    const logoSlot = shell?.closest?.('.site-header-logo');
+    const measureEl = logoSlot || shell?.parentElement;
+    const rect = measureEl?.getBoundingClientRect?.();
+    if (rect?.width > 48) {
+      return Math.max(48, Math.min(400, Math.round(rect.width)));
+    }
+    return 220;
+  };
+
+  const commitBrandLogoWidthPx = async (nextWidth) => {
+    if (sectionEditLocked || !onUpdateNode) return;
+    if (node.nodeType !== 'image' || !nodeLooksLikeBrandLogo(node)) return;
+    const widthPx = Math.max(48, Math.min(400, Math.round(Number(nextWidth) || 160)));
+    const propsPatch = brandLogoPropsPatchFromFormKey('logoWidth', widthPx, node.props || {});
+    if (!propsPatch) return;
+    const sizeStylePatch = {
+      layout: { alignSelf: 'flex-start', maxWidth: `${widthPx}px` },
+      size: { width: `${widthPx}px`, height: 'auto' },
+    };
+    let nextStyleJson = node.style_json;
+    for (const d of ['desktop', 'tablet', 'mobile']) {
+      const next = applyDeviceStylePatch(
+        nextStyleJson,
+        d,
+        withFlexWidthOverride(node.nodeType, sizeStylePatch),
+        node.nodeType,
+        siteTheme
+      );
+      nextStyleJson = next.style_json;
+    }
+    await onUpdateNode({
+      nodeId: node.id,
+      payload: {
+        props: {
+          ...(node.props || {}),
+          ...propsPatch,
+        },
+        style_json: nextStyleJson,
+      },
+    });
+  };
+
+  const adjustBrandLogoWidth = async (delta) => {
+    if (node.nodeType !== 'image' || !nodeLooksLikeBrandLogo(node)) return;
+    const normalized = normalizeBrandLogoProps(node.props || {});
+    const current = parseBrandLogoWidthPx(normalized.width, 160);
+    const nextWidth = Math.max(48, Math.min(400, Math.round(current + delta)));
+    await commitBrandLogoWidthPx(nextWidth);
+  };
+
+  const quickBrandLogoFullWidth = async () => {
+    if (node.nodeType !== 'image' || !nodeLooksLikeBrandLogo(node)) return;
+    await commitBrandLogoWidthPx(measureBrandLogoFillWidthPx());
+  };
+
   const adjustNodeWidth = async (delta) => {
     const widthFromStyle = parseFloat(String(deviceStyle?.size?.width || '').replace('px', ''));
     const widthFromRect = Math.round(nodeElementRef.current?.getBoundingClientRect?.().width || 0);
@@ -2343,6 +2436,64 @@ function NodeRenderer({
     });
   };
 
+  const beginToolbarColorPicker = () => {
+    toolbarColorPickerOpenRef.current = true;
+    freezeFloatingToolbar(4000);
+    const root = getRichTextCommandRoot({
+      isInlineEditing,
+      inlineEditWrapRef,
+      nodeElementRef,
+      nodeType: node.nodeType,
+    });
+    if (root) saveRichTextSelection(root);
+    return root;
+  };
+
+  const endToolbarColorPicker = () => {
+    window.setTimeout(() => {
+      toolbarColorPickerOpenRef.current = false;
+    }, 200);
+  };
+
+  const inlineEditBlurCommitGuard = () => toolbarColorPickerOpenRef.current;
+
+  const persistRichHtmlFromCommand = async (command, value) => {
+    if (node.nodeType !== 'heading' && node.nodeType !== 'text') return false;
+    const root = getRichTextCommandRoot({
+      isInlineEditing,
+      inlineEditWrapRef,
+      nodeElementRef,
+      nodeType: node.nodeType,
+    });
+    if (root) restoreRichTextSelection(root);
+    if (!root || !selectionNonCollapsedInRoot(root)) return false;
+    const result = execRichCommandInRoot(root, command, value);
+    if (!result) return false;
+    const { before, after } = result;
+    if (
+      sanitizeInlineLeafHtml(before, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist }) ===
+      sanitizeInlineLeafHtml(after, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist })
+    ) {
+      return false;
+    }
+    const text = sanitizeInlineLeafHtml(after, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist });
+    if (isInlineEditing) {
+      setInlineDraftText(text);
+      return true;
+    }
+    if (!onUpdateNode) return false;
+    await onUpdateNode({
+      nodeId: node.id,
+      payload: {
+        props: {
+          ...(node.props || {}),
+          ...propsPatchForTextContent(node.props || {}, text),
+        },
+      },
+    });
+    return true;
+  };
+
   const quickToggleBold = async () => {
     if (sectionEditLocked) return;
     if (node.nodeType === 'button') {
@@ -2354,77 +2505,141 @@ function NodeRenderer({
       return;
     }
     if (node.nodeType !== 'heading' && node.nodeType !== 'text') return;
-    const root = getRichTextCommandRoot({
-      isInlineEditing,
-      inlineEditWrapRef,
-      nodeElementRef,
-      nodeType: node.nodeType,
-    });
-    if (!root || !selectionNonCollapsedInRoot(root)) return;
-    const result = execRichCommandInRoot(root, 'bold');
-    if (!result) return;
-    const { before, after } = result;
-    if (
-      sanitizeInlineLeafHtml(before, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist }) ===
-      sanitizeInlineLeafHtml(after, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist })
-    )
-      return;
-    const text = sanitizeInlineLeafHtml(after, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist });
-    if (isInlineEditing) {
-      setInlineDraftText(text);
-      return;
+    const applied = await persistRichHtmlFromCommand('bold');
+    if (!applied) {
+      const current = String(deviceStyle?.typography?.fontWeight || '400');
+      const next = current === '700' ? '400' : '700';
+      await commitStylePatch({ typography: { fontWeight: next } });
     }
-    if (!onUpdateNode) return;
-    if ((node.props?.text || '') === text) return;
-    await onUpdateNode({
-      nodeId: node.id,
-      payload: {
-        props: {
-          ...(node.props || {}),
-          text,
-        },
-      },
+  };
+
+  const quickRichFormat = (command, value) => async () => {
+    if (sectionEditLocked) return;
+    if (node.nodeType !== 'heading' && node.nodeType !== 'text') return;
+    await persistRichHtmlFromCommand(command, value);
+  };
+
+  const syncInlineEditorFromRoot = (root) => {
+    if (!root || !isInlineEditing) return;
+    const html = root.innerHTML;
+    const text = sanitizeInlineLeafHtml(html, {
+      neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist,
     });
+    setInlineDraftText(text || html);
   };
 
   const quickSetTextColor = async (color) => {
     if (sectionEditLocked) return;
+    const hex = String(color || '').trim();
+    if (!hex) return;
+
     const root = getRichTextCommandRoot({
       isInlineEditing,
       inlineEditWrapRef,
       nodeElementRef,
       nodeType: node.nodeType,
     });
-    if ((node.nodeType === 'heading' || node.nodeType === 'text') && root && selectionNonCollapsedInRoot(root)) {
-      const result = execRichCommandInRoot(root, 'foreColor', color);
-      if (
-        result &&
-        sanitizeInlineLeafHtml(result.before, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist }) !==
-          sanitizeInlineLeafHtml(result.after, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist })
-      ) {
-        const text = sanitizeInlineLeafHtml(result.after, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist });
-        if (isInlineEditing) {
-          setInlineDraftText(text);
-          return;
+
+    const applyToEditor = () => {
+      if (!root) return;
+      root.style.setProperty('color', hex);
+      root.style.setProperty('--node-text', hex);
+    };
+
+    if (node.nodeType === 'heading' || node.nodeType === 'text') {
+      if (root) {
+        const result = applyRichColorInRoot(root, 'foreColor', hex);
+        if (result) {
+          const after = sanitizeInlineLeafHtml(result.after, {
+            neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist,
+          });
+          const before = sanitizeInlineLeafHtml(result.before, {
+            neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist,
+          });
+          if (isInlineEditing) {
+            applyToEditor();
+            if (after !== before) {
+              setInlineDraftText(after);
+            } else {
+              syncInlineEditorFromRoot(root);
+            }
+          } else if (after !== before && onUpdateNode) {
+            await onUpdateNode({
+              nodeId: node.id,
+              payload: {
+                props: {
+                  ...(node.props || {}),
+                  ...propsPatchForTextContent(node.props || {}, after),
+                },
+              },
+            });
+            await commitStylePatch({
+              typography: { color: hex },
+              colors: { textColor: hex },
+            });
+            return;
+          }
+        } else if (isInlineEditing) {
+          applyToEditor();
         }
-        if (onUpdateNode) {
+      }
+    }
+
+    await commitStylePatch({
+      typography: { color: hex },
+      colors: { textColor: hex },
+    });
+  };
+
+  const quickSetHighlightColor = async (color) => {
+    if (sectionEditLocked) return;
+    const hex = String(color || '').trim();
+    if (!hex) return;
+
+    const root = getRichTextCommandRoot({
+      isInlineEditing,
+      inlineEditWrapRef,
+      nodeElementRef,
+      nodeType: node.nodeType,
+    });
+
+    if ((node.nodeType === 'heading' || node.nodeType === 'text') && root) {
+      const result = applyRichColorInRoot(root, 'hiliteColor', hex);
+      if (result) {
+        const after = sanitizeInlineLeafHtml(result.after, {
+          neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist,
+        });
+        const before = sanitizeInlineLeafHtml(result.before, {
+          neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist,
+        });
+        if (isInlineEditing) {
+          if (after !== before) {
+            setInlineDraftText(after);
+          } else {
+            syncInlineEditorFromRoot(root);
+          }
+        } else if (after !== before && onUpdateNode) {
           await onUpdateNode({
             nodeId: node.id,
             payload: {
               props: {
                 ...(node.props || {}),
-                text,
+                ...propsPatchForTextContent(node.props || {}, after),
               },
             },
           });
+          return;
         }
-        return;
       }
     }
-    await commitStylePatch({
-      typography: { color },
-      colors: { textColor: color },
-    });
+
+    const applied = await persistRichHtmlFromCommand('hiliteColor', hex);
+    if (!applied) {
+      await commitStylePatch({
+        colors: { backgroundColor: hex },
+        background: { backgroundColor: hex },
+      });
+    }
   };
 
   const quickSetLink = async () => {
@@ -2446,39 +2661,10 @@ function NodeRenderer({
       return;
     }
     if (node.nodeType !== 'heading' && node.nodeType !== 'text') return;
-    const root = getRichTextCommandRoot({
-      isInlineEditing,
-      inlineEditWrapRef,
-      nodeElementRef,
-      nodeType: node.nodeType,
-    });
-    if (!root || !selectionNonCollapsedInRoot(root)) return;
     const next =
       typeof window !== 'undefined' ? window.prompt('Set link URL', 'https://') : null;
     if (next == null || String(next).trim() === '') return;
-    const result = execRichCommandInRoot(root, 'createLink', String(next).trim());
-    if (!result) return;
-    const { before, after } = result;
-    if (
-      sanitizeInlineLeafHtml(before, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist }) ===
-      sanitizeInlineLeafHtml(after, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist })
-    )
-      return;
-    const text = sanitizeInlineLeafHtml(after, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist });
-    if (isInlineEditing) {
-      setInlineDraftText(text);
-      return;
-    }
-    if ((node.props?.text || '') === text) return;
-    await onUpdateNode({
-      nodeId: node.id,
-      payload: {
-        props: {
-          ...(node.props || {}),
-          text,
-        },
-      },
-    });
+    await persistRichHtmlFromCommand('createLink', String(next).trim());
   };
 
   const quickSetAlign = async (side) => {
@@ -2588,7 +2774,7 @@ function NodeRenderer({
   })();
 
   const inlineRichToolbarControls = supportsInlineTextEdit ? (
-    <div className="bld-wp-toolbar" role="toolbar" aria-label="Text formatting">
+    <div className="bld-wp-toolbar bld-wp-toolbar--floating" role="toolbar" aria-label="Text formatting">
       {node.nodeType === 'heading' ? (
         <>
           <div className="bld-wp-toolbar__group bld-wp-toolbar__group--compact">
@@ -2615,7 +2801,11 @@ function NodeRenderer({
       ) : null}
       {node.nodeType === 'heading' || node.nodeType === 'text' ? (
         <>
-          <FontSizeStepper value={toolbarFontSizePx} onDelta={(delta) => void quickAdjustFontSize(delta)} />
+          <FontSizeStepper
+            className="bld-font-size-stepper--compact"
+            value={toolbarFontSizePx}
+            onDelta={(delta) => void quickAdjustFontSize(delta)}
+          />
           <span className="bld-wp-toolbar__sep" aria-hidden />
         </>
       ) : null}
@@ -2631,25 +2821,37 @@ function NodeRenderer({
       >
         <WpIconBold />
       </button>
-      <label
-        className="bld-wp-toolbar__swatch"
-        title="Text color"
-        onMouseDown={(event) => {
-          if (node.nodeType === 'heading' || node.nodeType === 'text') event.preventDefault();
-        }}
-      >
-        <span
-          className="bld-wp-toolbar__swatch-dot"
-          style={{ backgroundColor: String(deviceStyle?.typography?.color || '#1e1e1e') }}
-        />
-        <input
-          type="color"
-          className="bld-wp-toolbar__color-input"
-          value={String(deviceStyle?.typography?.color || '#0f172a')}
-          onChange={(event) => quickSetTextColor(event.target.value)}
-          aria-label="Text color"
-        />
-      </label>
+      {node.nodeType === 'heading' || node.nodeType === 'text' ? (
+        <>
+          <button
+            type="button"
+            className="bld-wp-toolbar__icon-btn bld-wp-toolbar__icon-btn--text"
+            title="Italic"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={quickRichFormat('italic')}
+          >
+            <em>I</em>
+          </button>
+          <button
+            type="button"
+            className="bld-wp-toolbar__icon-btn bld-wp-toolbar__icon-btn--text"
+            title="Underline"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={quickRichFormat('underline')}
+          >
+            <u>U</u>
+          </button>
+          <button
+            type="button"
+            className="bld-wp-toolbar__icon-btn bld-wp-toolbar__icon-btn--text"
+            title="Strikethrough"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={quickRichFormat('strikeThrough')}
+          >
+            <s>S</s>
+          </button>
+        </>
+      ) : null}
       <button
         type="button"
         className="bld-wp-toolbar__icon-btn"
@@ -2662,38 +2864,41 @@ function NodeRenderer({
         <WpIconLink />
       </button>
       <span className="bld-wp-toolbar__sep" aria-hidden />
-      <div className="bld-wp-toolbar__align-group" role="group" aria-label="Alignment">
+      <div className="bld-text-align-group bld-text-align-group--wp-toolbar" role="group" aria-label="Alignment">
         {[
           { side: 'left', Icon: WpIconAlignLeft, label: 'Align left' },
           { side: 'center', Icon: WpIconAlignCenter, label: 'Align center' },
           { side: 'right', Icon: WpIconAlignRight, label: 'Align right' },
-        ].map(({ side, Icon, label }) => (
-          <button
-            key={side}
-            type="button"
-            className={`bld-wp-toolbar__icon-btn ${
-              String(deviceStyle?.typography?.textAlign || 'left') === side ? 'is-pressed' : ''
-            }`}
-            title={label}
-            aria-pressed={String(deviceStyle?.typography?.textAlign || 'left') === side}
-            onClick={() => quickSetAlign(side)}
-          >
-            <Icon />
-          </button>
-        ))}
+        ].map(({ side, Icon, label }) => {
+          const active = String(deviceStyle?.typography?.textAlign || 'left') === side;
+          return (
+            <button
+              key={side}
+              type="button"
+              className={`bld-text-align-group__btn ${active ? 'is-active' : ''}`}
+              title={label}
+              aria-pressed={active}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => quickSetAlign(side)}
+            >
+              <Icon />
+            </button>
+          );
+        })}
       </div>
       {node.nodeType === 'heading' || node.nodeType === 'text' ? (
         <>
           <span className="bld-wp-toolbar__sep" aria-hidden />
           <button
             type="button"
-            className={`bld-wp-toolbar__icon-btn bld-wp-toolbar__icon-btn--text ${textWrapIsNowrap ? 'is-pressed' : ''}`}
-            title="Single line — text does not wrap (white-space: nowrap)"
+            className={`bld-wp-toolbar__icon-btn bld-wp-toolbar__nowrap-btn ${textWrapIsNowrap ? 'is-pressed' : ''}`}
+            title={textWrapIsNowrap ? 'Allow text wrap' : 'Single line (no wrap)'}
             aria-pressed={textWrapIsNowrap}
+            aria-label={textWrapIsNowrap ? 'Allow text wrap' : 'Single line (no wrap)'}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => void quickToggleTextWrap()}
           >
-            No wrap
+            1L
           </button>
         </>
       ) : null}
@@ -3145,17 +3350,11 @@ function NodeRenderer({
       </form>
     ) : null;
 
-  const showQuickTextToolbar =
-    isNodeActive &&
-    !isInlineEditing &&
-    !sectionEditLocked &&
-    (node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'button');
-
   const showRowChrome = isNodeActive || isHoveredHere;
   const showFloatingToolbar =
     supportsDirectManipulation && !dragLocked && (isNodeActive || isHoveredHere);
   const needsShellChromeOverlay =
-    showFloatingToolbar || quickLayoutControls != null || showQuickTextToolbar;
+    (showFloatingToolbar || quickLayoutControls != null) && !showImageMediaToolbar;
   const layerBadgeSuppressed =
     (isRow && showRowChrome) ||
     ((node.nodeType === 'column' || node.nodeType === 'stack') && needsShellChromeOverlay);
@@ -3645,9 +3844,6 @@ function NodeRenderer({
                   ) : null}
                 </div>
                 {quickLayoutControls ? <div className="bld-node__chrome-layout">{quickLayoutControls}</div> : null}
-                {showQuickTextToolbar ? (
-                  <div className="bld-node__chrome-text bld-node__chrome-text--placeholder" aria-hidden />
-                ) : null}
               </div>
             ) : null}
             {miniNodeToolbar}
@@ -3703,7 +3899,23 @@ function NodeRenderer({
               </div>
             ) : null}
             {supportsInlineTextEdit && isInlineEditing ? (
-              <div ref={inlineEditWrapRef} className="bld-inline-edit-anchor">
+              <div
+                ref={inlineEditWrapRef}
+                className="bld-inline-edit-anchor"
+                style={
+                  deviceStyle?.typography?.color ||
+                  deviceStyle?.colors?.textColor ||
+                  deviceStyle?.colors?.text
+                    ? {
+                        '--node-text': String(
+                          deviceStyle.typography?.color ||
+                            deviceStyle.colors?.textColor ||
+                            deviceStyle.colors?.text
+                        ),
+                      }
+                    : undefined
+                }
+              >
                 {renderNodeContent(node, {
                   isInlineEditing,
                   inlineDraftText,
@@ -3711,6 +3923,7 @@ function NodeRenderer({
                   onInlineEditStart: handleInlineEditStart,
                   onInlineEditCommit: handleInlineEditCommit,
                   onInlineEditCancel: handleInlineEditCancel,
+                  inlineEditBlurCommitGuard,
                   isSavingNode,
                   sectionEditLocked,
                   isRichTextEditing,
@@ -3752,6 +3965,7 @@ function NodeRenderer({
                 onInlineEditStart: handleInlineEditStart,
                 onInlineEditCommit: handleInlineEditCommit,
                 onInlineEditCancel: handleInlineEditCancel,
+                inlineEditBlurCommitGuard,
                 isSavingNode,
                 sectionEditLocked,
                 isRichTextEditing,
@@ -3786,19 +4000,78 @@ function NodeRenderer({
               })
             )}
             {null}
-            {(node.nodeType === 'image' || node.nodeType === 'menu') && isNodeActive ? (
-              <div
-                className={`bld-node__media-toolbar ${node.nodeType === 'image' ? 'bld-node__media-toolbar--image' : ''}`.trim()}
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={(event) => event.stopPropagation()}
-              >
-                {node.nodeType === 'image' ? (
+            {showImageMediaToolbar &&
+            supportsDirectManipulation &&
+            canResizeNode &&
+            node.nodeType === 'image' ? (
+              <ResizeHandle
+                className="bld-transform-handle--inline-resize"
+                onMouseDown={startResizeWithMouse}
+                disabled={isSavingNode || isDragging || Boolean(draggingNodeType) || sectionEditLocked}
+              />
+            ) : null}
+            {showImageMediaToolbar &&
+            imageToolbarFixedPos &&
+            typeof document !== 'undefined'
+              ? createPortal(
                   <div
-                    className={`bld-image-toolbar bld-image-toolbar--compact${
-                      nodeLooksLikeBrandLogo(node) ? ' bld-image-toolbar--brand-logo' : ''
-                    }`.trim()}
+                    ref={imageToolbarRef}
+                    className="bld-floating-image-toolbar"
+                    data-placement={imageToolbarFixedPos.placement || undefined}
+                    style={{
+                      position: 'fixed',
+                      top: imageToolbarFixedPos.top,
+                      left: imageToolbarFixedPos.left,
+                      transform: imageToolbarFixedPos.transform || 'none',
+                      zIndex: 13000,
+                    }}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => event.stopPropagation()}
                   >
-                    <div className="bld-image-toolbar__line">
+                    {node.nodeType === 'image' ? (
+                      <div
+                        className={`bld-image-toolbar bld-image-toolbar--compact bld-image-toolbar--floating${
+                          nodeLooksLikeBrandLogo(node) ? ' bld-image-toolbar--brand-logo' : ''
+                        }`.trim()}
+                      >
+                        <div className="bld-image-toolbar__line bld-image-toolbar__line--actions">
+                          <button
+                            type="button"
+                            className="bld-image-toolbar__action-btn"
+                            title="Duplicate"
+                            aria-label="Duplicate"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              duplicateThisNode(event);
+                            }}
+                            disabled={isSavingNode || sectionEditLocked}
+                          >
+                            ⧉
+                          </button>
+                          <button
+                            type="button"
+                            className="bld-image-toolbar__action-btn bld-image-toolbar__action-btn--danger"
+                            title="Delete"
+                            aria-label="Delete"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              deleteThisNode(event);
+                            }}
+                            disabled={isDeletingNode || sectionEditLocked}
+                          >
+                            ✕
+                          </button>
+                          {nodeLooksLikeBrandLogo(node) ? (
+                            <span className="bld-image-toolbar__width-readout" aria-live="polite">
+                              {parseBrandLogoWidthPx(
+                                normalizeBrandLogoProps(node.props || {}).width,
+                                160
+                              )}
+                              px
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="bld-image-toolbar__line">
                       <span className="bld-image-toolbar__tag">Align</span>
                       <div className="bld-image-toolbar__segmented" role="group" aria-label="Image alignment">
                         {[
@@ -3831,16 +4104,26 @@ function NodeRenderer({
                         })}
                       </div>
                     </div>
-                    {!nodeLooksLikeBrandLogo(node) ? (
                     <div className="bld-image-toolbar__line bld-image-toolbar__line--size">
                       <span className="bld-image-toolbar__tag">Size</span>
                       <div className="bld-image-toolbar__size" role="group" aria-label="Image size and crop">
                         <button
                           type="button"
                           className="bld-image-toolbar__btn"
-                          title="Full width (all devices)"
-                          aria-label="Full width"
-                          onClick={quickImageFullWidth}
+                          title={
+                            nodeLooksLikeBrandLogo(node)
+                              ? 'Fill header logo area'
+                              : 'Full width (all devices)'
+                          }
+                          aria-label={
+                            nodeLooksLikeBrandLogo(node) ? 'Fill logo container' : 'Full width'
+                          }
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void (nodeLooksLikeBrandLogo(node)
+                              ? quickBrandLogoFullWidth()
+                              : quickImageFullWidth());
+                          }}
                           disabled={isSavingNode || sectionEditLocked}
                         >
                           Full
@@ -3850,7 +4133,12 @@ function NodeRenderer({
                           className="bld-image-toolbar__btn"
                           title="Decrease width"
                           aria-label="Decrease width"
-                          onClick={() => adjustImageBlockWidth(-30)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void (nodeLooksLikeBrandLogo(node)
+                              ? adjustBrandLogoWidth(-30)
+                              : adjustImageBlockWidth(-30));
+                          }}
                           disabled={isSavingNode || sectionEditLocked}
                         >
                           W−
@@ -3860,85 +4148,86 @@ function NodeRenderer({
                           className="bld-image-toolbar__btn"
                           title="Increase width"
                           aria-label="Increase width"
-                          onClick={() => adjustImageBlockWidth(30)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void (nodeLooksLikeBrandLogo(node)
+                              ? adjustBrandLogoWidth(30)
+                              : adjustImageBlockWidth(30));
+                          }}
                           disabled={isSavingNode || sectionEditLocked}
                         >
                           W+
                         </button>
-                        <span className="bld-image-toolbar__sep-v" aria-hidden />
-                        <button
-                          type="button"
-                          className="bld-image-toolbar__btn bld-image-toolbar__btn--icon"
-                          title="Decrease crop height"
-                          aria-label="Decrease crop height"
-                          onClick={() => adjustImageCropHeight(-20)}
-                          disabled={isSavingNode || sectionEditLocked}
-                        >
-                          −
-                        </button>
-                        <button
-                          type="button"
-                          className="bld-image-toolbar__btn bld-image-toolbar__btn--fit"
-                          title="Change image fit (cover / contain / fill)"
-                          aria-label="Change image fit"
-                          onClick={cycleImageFit}
-                          disabled={isSavingNode || sectionEditLocked}
-                        >
-                          {String(node.props?.imageFit || 'cover') === 'contain'
-                            ? 'Contain'
-                            : String(node.props?.imageFit || 'cover') === 'fill'
-                              ? 'Fill'
-                              : 'Cover'}
-                        </button>
-                        <button
-                          type="button"
-                          className="bld-image-toolbar__btn bld-image-toolbar__btn--icon"
-                          title="Increase crop height"
-                          aria-label="Increase crop height"
-                          onClick={() => adjustImageCropHeight(20)}
-                          disabled={isSavingNode || sectionEditLocked}
-                        >
-                          +
-                        </button>
+                        {!nodeLooksLikeBrandLogo(node) ? (
+                          <>
+                            <span className="bld-image-toolbar__sep-v" aria-hidden />
+                            <button
+                              type="button"
+                              className="bld-image-toolbar__btn bld-image-toolbar__btn--icon"
+                              title="Decrease crop height"
+                              aria-label="Decrease crop height"
+                              onClick={() => adjustImageCropHeight(-20)}
+                              disabled={isSavingNode || sectionEditLocked}
+                            >
+                              −
+                            </button>
+                            <button
+                              type="button"
+                              className="bld-image-toolbar__btn bld-image-toolbar__btn--fit"
+                              title="Change image fit (cover / contain / fill)"
+                              aria-label="Change image fit"
+                              onClick={cycleImageFit}
+                              disabled={isSavingNode || sectionEditLocked}
+                            >
+                              {String(node.props?.imageFit || 'cover') === 'contain'
+                                ? 'Contain'
+                                : String(node.props?.imageFit || 'cover') === 'fill'
+                                  ? 'Fill'
+                                  : 'Cover'}
+                            </button>
+                            <button
+                              type="button"
+                              className="bld-image-toolbar__btn bld-image-toolbar__btn--icon"
+                              title="Increase crop height"
+                              aria-label="Increase crop height"
+                              onClick={() => adjustImageCropHeight(20)}
+                              disabled={isSavingNode || sectionEditLocked}
+                            >
+                              +
+                            </button>
+                          </>
+                        ) : null}
                       </div>
                     </div>
+                      </div>
                     ) : (
-                      <p className="bld-image-toolbar__logo-hint">Logo width: use Content panel or Style → Size</p>
+                      <div className="bld-image-quick-tools">
+                        <button
+                          type="button"
+                          className="bld-image-quick-tools__btn"
+                          title="Decrease width"
+                          aria-label="Decrease width"
+                          onClick={() => adjustNodeWidth(-30)}
+                          disabled={isSavingNode || sectionEditLocked}
+                        >
+                          W−
+                        </button>
+                        <button
+                          type="button"
+                          className="bld-image-quick-tools__btn"
+                          title="Increase width"
+                          aria-label="Increase width"
+                          onClick={() => adjustNodeWidth(30)}
+                          disabled={isSavingNode || sectionEditLocked}
+                        >
+                          W+
+                        </button>
+                      </div>
                     )}
-                  </div>
-                ) : (
-                  <div className="bld-image-quick-tools">
-                    <button
-                      type="button"
-                      className="bld-image-quick-tools__btn"
-                      title="Decrease width"
-                      aria-label="Decrease width"
-                      onClick={() => adjustNodeWidth(-30)}
-                      disabled={isSavingNode || sectionEditLocked}
-                    >
-                      W−
-                    </button>
-                    <button
-                      type="button"
-                      className="bld-image-quick-tools__btn"
-                      title="Increase width"
-                      aria-label="Increase width"
-                      onClick={() => adjustNodeWidth(30)}
-                      disabled={isSavingNode || sectionEditLocked}
-                    >
-                      W+
-                    </button>
-                  </div>
-                )}
-                {supportsDirectManipulation && canResizeNode ? (
-                  <ResizeHandle
-                    className="bld-transform-handle--inline-resize"
-                    onMouseDown={startResizeWithMouse}
-                    disabled={isSavingNode || isDragging || Boolean(draggingNodeType) || sectionEditLocked}
-                  />
-                ) : null}
-              </div>
-            ) : null}
+                  </div>,
+                  getBuilderPortalRoot() || document.body
+                )
+              : null}
             {isContainer ? (
               <DropZone
                 id={`inside-${node.id}`}
@@ -4066,12 +4355,15 @@ function NodeRenderer({
           </div>
       )}
       {supportsInlineTextEdit &&
+      isSelected &&
       isInlineEditing &&
       floatingToolbarPos &&
       typeof document !== 'undefined'
         ? createPortal(
             <div
               className="bld-floating-inline-toolbar"
+              data-placement={floatingToolbarPos.placement || undefined}
+              ref={floatingToolbarRef}
               style={{
                 position: 'fixed',
                 top: floatingToolbarPos.top,
@@ -4081,41 +4373,20 @@ function NodeRenderer({
               }}
               role="toolbar"
               aria-label="Text formatting"
-              onPointerDown={consumeFloatingToolbarPointerForCanvas}
+              onPointerDown={(event) => {
+                const t = event.target;
+                if (t?.closest?.('input[type="color"], select, label.bld-wp-toolbar__swatch')) {
+                  freezeFloatingToolbar(2000);
+                }
+                consumeFloatingToolbarPointerForCanvas(event);
+              }}
+              onFocusCapture={() => freezeFloatingToolbar(2000)}
             >
               <div className="bld-floating-inline-toolbar__inner bld-floating-inline-toolbar__inner--wp">
                 {inlineRichToolbarControls}
-                <button
-                  type="button"
-                  className="bld-floating-inline-toolbar__done"
-                  onClick={() => handleInlineEditCommit(node)}
-                >
-                  Done
-                </button>
               </div>
             </div>,
-            document.body
-          )
-        : null}
-      {showQuickTextToolbar && quickTextToolbarPos && typeof document !== 'undefined'
-        ? createPortal(
-            <div
-              className="bld-floating-quick-toolbar"
-              style={{
-                position: 'fixed',
-                top: quickTextToolbarPos.top,
-                left: quickTextToolbarPos.left,
-                transform: quickTextToolbarPos.transform,
-                zIndex: 12999,
-              }}
-              role="toolbar"
-              aria-label="Quick text formatting"
-              onPointerDown={consumeFloatingToolbarPointerForCanvas}
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="bld-floating-inline-toolbar__inner bld-floating-inline-toolbar__inner--wp">{inlineRichToolbarControls}</div>
-            </div>,
-            document.body
+            getBuilderPortalRoot() || document.body
           )
         : null}
       {dragAssist?.mode === 'snap' &&
@@ -4130,7 +4401,7 @@ function NodeRenderer({
                 <div className="bld-snap-guides__line bld-snap-guides__line--h" style={{ top: dragAssist.hline }} />
               ) : null}
             </div>,
-            document.body
+            getBuilderPortalRoot() || document.body
           )
         : null}
     </>
@@ -4751,6 +5022,8 @@ export default function BuilderCanvas({
     return 'Section';
   };
 
+  const rootSegments = useMemo(() => segmentRootNodes(tree || []), [tree]);
+
   const selectedBreadcrumbTrail = useMemo(
     () => (selectedNodeId && tree?.length ? findBreadcrumbTrail(tree, selectedNodeId) : null),
     [tree, selectedNodeId]
@@ -4995,75 +5268,96 @@ export default function BuilderCanvas({
               >
                 {showGrid ? <GridOverlay containerSelector=".bld-canvas__live-mirror .live-doc" /> : null}
                 <div ref={liveDocRef} className="live-doc" data-bld-device={device}>
-                  {tree.map((node, index) => (
-                    <NodeRenderer
-                      key={node.id}
-                      node={node}
-                      cmsContext={
-                        node?.props?.meta?.cms?.repeat?.collectionSlug && cmsPreviewByCollection?.[node.props.meta.cms.repeat.collectionSlug]?.item
-                          ? {
-                              item: cmsPreviewByCollection[node.props.meta.cms.repeat.collectionSlug].item,
-                              sys: { slug: cmsPreviewByCollection[node.props.meta.cms.repeat.collectionSlug].item?.slug || '' },
-                            }
-                          : null
-                      }
-                      rowIndex={index}
-                      selectedNodeId={selectedNodeId}
-                      onSelectNode={onSelectNode}
-                      parentNodeType={null}
-                      draggingNodeType={draggingNodeType}
-                      device={device}
-                      tree={tree}
-                      previewCssByNodeId={effectivePreviewCssByNodeId}
-                      onSetPreviewCssForNode={effectiveSetPreviewCssForNode}
-                      formPreviewByNodeId={effectiveFormPreviewByNodeId}
-                      activeSpacingEdit={activeSpacingEdit}
-                      onReportOverflow={reportOverflow}
-                      rowRole={node.nodeType === 'row' ? rowRoleForIndex(index, tree.length) : null}
-                      rowSemanticTag={node.nodeType === 'row' ? rootSemanticTag(tree, index) : null}
-                      onDeleteNode={onDeleteNode}
-                      onRequestNavigator={onRequestNavigator}
-                      onInsertStarterTemplate={onInsertStarterTemplate}
-                      onInsertHeaderTemplate={onInsertHeaderTemplate}
-                      onSetContainerDirection={onSetContainerDirection}
-                      onUpdateNode={onUpdateNode}
-                      onCreateNode={onCreateNode}
-                      onQuickAddNode={onQuickAddNode}
-                      onDuplicateNode={onDuplicateNode}
-                      onReorderNode={onReorderNode}
-                      isReorderingNode={isReorderingNode}
-                      rowSiblingsCount={tree.length}
-                      isCreatingNode={isCreatingNode}
-                      isSavingNode={isSavingNode}
-                      isDeletingNode={isDeletingNode}
-                      deletingNodeId={deletingNodeId}
-                      onOpenWidgetPicker={openWidgetPickerFor}
-                      showSectionAddButtonBefore={index > 0}
-                      onOpenSectionInsert={openAddSectionAt}
-                      hoveredNodeId={hoveredNodeId}
-                      onHoverNode={onHoverNodeIntent}
-                      onSaveGlobalSection={onSaveGlobalSection}
-                      onConvertToGlobalComponent={onConvertToGlobalComponent}
-                      onDetachFromGlobalComponent={onDetachFromGlobalComponent}
-                      onEditGlobalComponent={onEditGlobalComponent}
-                      onAlignMenuRightInRow={onAlignMenuRightInRow}
-                      onUploadLogoInRow={onUploadLogoInRow}
-                      onStretchSectionFullWidth={onStretchSectionFullWidth}
-                      onStretchSectionFromSelection={onStretchSectionFromSelection}
-                      onAlignMenuRightFromSelection={onAlignMenuRightFromSelection}
-                      isFreeMode={isFreeMode}
-                      onCopyNodeId={onCopyNodeId}
-                      flashPasteNodeId={flashPasteNodeId}
-                      flashReorderNodeId={reorderFlashNodeId}
-                      onAddSectionPreviewEnter={showAddSectionPreviewAnchor}
-                      onAddSectionPreviewLeave={hideAddSectionPreviewAnchorDebounced}
-                      onFreeMoveBrush={onFreeMoveBrush}
-                      freeMoveBrushActive={canvasFreeMoveActive}
-                      cmsPreviewByCollection={cmsPreviewByCollection}
-                      builderPageId={builderPageId}
-                      builderProjectId={builderProjectId}
-                    />
-                  ))}
+                  {rootSegments.map((segment) => {
+                    const renderRootNode = (node, index) => (
+                      <NodeRenderer
+                        key={node.id}
+                        node={node}
+                        cmsContext={
+                          node?.props?.meta?.cms?.repeat?.collectionSlug &&
+                          cmsPreviewByCollection?.[node.props.meta.cms.repeat.collectionSlug]?.item
+                            ? {
+                                item: cmsPreviewByCollection[node.props.meta.cms.repeat.collectionSlug].item,
+                                sys: {
+                                  slug:
+                                    cmsPreviewByCollection[node.props.meta.cms.repeat.collectionSlug].item?.slug ||
+                                    '',
+                                },
+                              }
+                            : null
+                        }
+                        rowIndex={index}
+                        selectedNodeId={selectedNodeId}
+                        onSelectNode={onSelectNode}
+                        parentNodeType={null}
+                        draggingNodeType={draggingNodeType}
+                        device={device}
+                        tree={tree}
+                        previewCssByNodeId={effectivePreviewCssByNodeId}
+                        onSetPreviewCssForNode={effectiveSetPreviewCssForNode}
+                        formPreviewByNodeId={effectiveFormPreviewByNodeId}
+                        activeSpacingEdit={activeSpacingEdit}
+                        onReportOverflow={reportOverflow}
+                        rowRole={node.nodeType === 'row' ? rowRoleForIndex(index, tree.length) : null}
+                        rowSemanticTag={node.nodeType === 'row' ? rootSemanticTag(tree, index) : null}
+                        onDeleteNode={onDeleteNode}
+                        onRequestNavigator={onRequestNavigator}
+                        onInsertStarterTemplate={onInsertStarterTemplate}
+                        onInsertHeaderTemplate={onInsertHeaderTemplate}
+                        onSetContainerDirection={onSetContainerDirection}
+                        onUpdateNode={onUpdateNode}
+                        onCreateNode={onCreateNode}
+                        onQuickAddNode={onQuickAddNode}
+                        onDuplicateNode={onDuplicateNode}
+                        onReorderNode={onReorderNode}
+                        isReorderingNode={isReorderingNode}
+                        rowSiblingsCount={tree.length}
+                        isCreatingNode={isCreatingNode}
+                        isSavingNode={isSavingNode}
+                        isDeletingNode={isDeletingNode}
+                        deletingNodeId={deletingNodeId}
+                        onOpenWidgetPicker={openWidgetPickerFor}
+                        showSectionAddButtonBefore={index > 0}
+                        onOpenSectionInsert={openAddSectionAt}
+                        hoveredNodeId={hoveredNodeId}
+                        onHoverNode={onHoverNodeIntent}
+                        onSaveGlobalSection={onSaveGlobalSection}
+                        onConvertToGlobalComponent={onConvertToGlobalComponent}
+                        onDetachFromGlobalComponent={onDetachFromGlobalComponent}
+                        onEditGlobalComponent={onEditGlobalComponent}
+                        onAlignMenuRightInRow={onAlignMenuRightInRow}
+                        onUploadLogoInRow={onUploadLogoInRow}
+                        onStretchSectionFullWidth={onStretchSectionFullWidth}
+                        onStretchSectionFromSelection={onStretchSectionFromSelection}
+                        onAlignMenuRightFromSelection={onAlignMenuRightFromSelection}
+                        isFreeMode={isFreeMode}
+                        onCopyNodeId={onCopyNodeId}
+                        flashPasteNodeId={flashPasteNodeId}
+                        flashReorderNodeId={reorderFlashNodeId}
+                        onAddSectionPreviewEnter={showAddSectionPreviewAnchor}
+                        onAddSectionPreviewLeave={hideAddSectionPreviewAnchorDebounced}
+                        onFreeMoveBrush={onFreeMoveBrush}
+                        freeMoveBrushActive={canvasFreeMoveActive}
+                        cmsPreviewByCollection={cmsPreviewByCollection}
+                        builderPageId={builderPageId}
+                        builderProjectId={builderProjectId}
+                      />
+                    );
+                    if (segment.type === 'header-stack') {
+                      const stackKey = segment.items[0]?.node?.id ?? segment.items[0]?.index ?? 0;
+                      return (
+                        <div
+                          key={`live-header-stack-${stackKey}`}
+                          className="live-header-stack"
+                          data-live-header-stack="true"
+                        >
+                          {segment.items.map(({ node, index }) => renderRootNode(node, index))}
+                        </div>
+                      );
+                    }
+                    const { node, index } = segment.items[0];
+                    return renderRootNode(node, index);
+                  })}
                 </div>
               </div>
               </RuntimeProvider>

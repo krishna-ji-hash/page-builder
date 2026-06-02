@@ -16,6 +16,7 @@ import FeatureTabsControls from '@/components/builder/inspector/FeatureTabsContr
 import FaqAccordionControls from '@/components/builder/inspector/FaqAccordionControls';
 import AdvancedElementControls, { isAdvancedElementNodeType } from '@/components/builder/inspector/AdvancedElementControls';
 import LogoBrandControls from '@/components/builder/inspector/LogoBrandControls';
+import InlineTextFormattingPanel from '@/components/builder/inspector/InlineTextFormattingPanel';
 import { nodeIsInsideSiteHeader, nodeLooksLikeBrandLogo } from '@/lib/headerLogo';
 import { uploadProjectMediaFile } from '@/lib/media/uploadProjectMedia';
 import {
@@ -313,20 +314,37 @@ export default function ContentPanel({
         </>
       ) : null}
       {isTextLike ? (
-        <div className="bld-field">
-          <label className="bld-label">{isButton ? 'Label' : selectedNode.nodeType === 'heading' ? 'Heading' : 'Text'}</label>
-          {selectedNode.nodeType === 'text' ? (
-            <textarea
-              className="bld-input bld-textarea"
-              rows={10}
-              value={form.text || ''}
-              onChange={(e) => onChange('text', e.target.value)}
-              placeholder="Enter for new line. Style → Spacing → Padding."
+        <>
+          <div className="bld-field">
+            <label className="bld-label">{isButton ? 'Label' : selectedNode.nodeType === 'heading' ? 'Heading' : 'Text'}</label>
+            {selectedNode.nodeType === 'text' && form.inlineTextMode !== 'rich' ? (
+              <textarea
+                className="bld-input bld-textarea"
+                rows={10}
+                value={form.text || ''}
+                onChange={(e) => onChange('text', e.target.value)}
+                placeholder="Enter for new line. Style → Spacing → Padding."
+              />
+            ) : form.inlineTextMode === 'rich' && !isButton ? (
+              <textarea
+                className="bld-input bld-textarea"
+                rows={4}
+                value={form.text || ''}
+                onChange={(e) => onChange('text', e.target.value)}
+                placeholder="Plain fallback / accessibility text"
+              />
+            ) : (
+              <input className="bld-input" value={form.text || ''} onChange={(e) => onChange('text', e.target.value)} />
+            )}
+          </div>
+          {!isButton ? (
+            <InlineTextFormattingPanel
+              form={form}
+              onChange={onChange}
+              nodeType={selectedNode.nodeType}
             />
-          ) : (
-            <input className="bld-input" value={form.text || ''} onChange={(e) => onChange('text', e.target.value)} />
-          )}
-        </div>
+          ) : null}
+        </>
       ) : null}
       {isRichText ? (
         <>

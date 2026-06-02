@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { shouldDeferInlineEditBlurCommit } from '@/lib/inlineEditBlurGuard';
 
 export default function InlineEdit({
   value,
@@ -11,8 +12,20 @@ export default function InlineEdit({
   className = '',
   multiline = false,
   htmlMode = false,
+  /** When true, skip blur-to-commit (e.g. native color picker open on floating toolbar). */
+  blurCommitGuard,
 }) {
   const ref = useRef(null);
+
+  const handleBlur = (event) => {
+    const sessionOpen = typeof blurCommitGuard === 'function' ? Boolean(blurCommitGuard()) : false;
+    if (shouldDeferInlineEditBlurCommit(event, sessionOpen)) return;
+    window.setTimeout(() => {
+      const open = typeof blurCommitGuard === 'function' ? Boolean(blurCommitGuard()) : false;
+      if (shouldDeferInlineEditBlurCommit(event, open)) return;
+      onCommit();
+    }, 0);
+  };
 
   useEffect(() => {
     if (!ref.current) return;
@@ -45,7 +58,7 @@ export default function InlineEdit({
         const el = event.currentTarget;
         onChange(htmlMode ? el.innerHTML : el.innerText);
       }}
-      onBlur={onCommit}
+      onBlur={handleBlur}
       onKeyDown={(event) => {
         event.stopPropagation();
         if (event.key === 'Enter' && !event.shiftKey && !multiline && !htmlMode) {

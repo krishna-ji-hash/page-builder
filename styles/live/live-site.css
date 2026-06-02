@@ -9,6 +9,8 @@
 @import '../shared/dark-surface-copy.css';
 @import '../shared/header-behaviors.css';
 @import '../shared/header-brand-logo.css';
+@import '../shared/live-header-stack.css';
+@import '../shared/rich-text-controls.css';
 
 .live-site {
   min-height: 100vh;
@@ -413,9 +415,6 @@
   ):not([data-section-template]):not(:has(.live-carousel--ticker)):not(:has(.live-carousel--marquee)):not(
     :has(.live-carousel--logo)
   ),
-.live-doc > :is(header.live-node, [data-site-header='true']) > .live-node.bld-row:not(:has(.live-carousel--ticker)):not(
-  :has(.live-carousel--marquee)
-):not(:has(.live-carousel--logo)),
 .live-doc
   .live-node.bld-row[data-live-content-band='true']:not([data-section-template]):not(:has(.live-carousel--ticker)):not(
     :has(.live-carousel--marquee)
@@ -437,7 +436,6 @@
     [data-site-footer='true']
   ):not([data-section-template])
   > .live-node.bld-column,
-.live-doc > :is(header.live-node, [data-site-header='true']) > .live-node.bld-row > .live-node.bld-column,
 .live-doc
   .live-node.bld-row[data-live-content-band='true']:not([data-section-template])
   > .live-node.bld-column {
@@ -445,6 +443,37 @@
   min-height: min-content;
   height: auto;
   max-width: 100%;
+}
+
+/*
+ * Header nav rows only (not hero nested in header): center logo | menu | CTA vertically.
+ * Hero rows nested in a landmark header keep flex-start via data-live-content-band.
+ */
+.live-doc > :is(header.live-node, [data-site-header='true']).site-header-bar:not(:has(> .live-node.bld-row)),
+.live-doc > :is(header.live-node, [data-site-header='true']) > .live-node.bld-row.site-header-bar {
+  align-items: center !important;
+  align-content: center;
+  min-height: min-content;
+  height: auto;
+  overflow-x: visible;
+  overflow-y: visible;
+}
+
+.live-doc > :is(header.live-node, [data-site-header='true']).site-header-bar:not(:has(> .live-node.bld-row))
+  > .live-node.bld-column,
+.live-doc > :is(header.live-node, [data-site-header='true']) > .live-node.bld-row.site-header-bar > .live-node.bld-column {
+  align-self: center !important;
+  height: auto;
+  min-height: min-content;
+}
+
+/* Slim announcement row (sibling nav below or inside stacked header landmark) */
+.live-doc > :is(header.live-node, [data-site-header='true']):has(+ [data-site-header='true']),
+.live-doc > :is(header.live-node, [data-site-header='true']):has(+ header.live-node),
+.live-doc > :is(header.live-node, [data-site-header='true']) > .live-node.bld-row:not(.site-header-bar):first-child {
+  align-items: center !important;
+  justify-content: center;
+  overflow: visible;
 }
 
 /* Sticky header (per-page toggle via data attr)
@@ -484,6 +513,47 @@
   background: var(--color-background, var(--token-bg-primary));
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.08);
   transition: box-shadow var(--motion-base) var(--ease-out), background-color var(--motion-base) var(--ease-out);
+}
+
+/*
+ * Multiple root header rows (announcement bar + main nav): stack in document flow.
+ * Only the last header row in `.live-doc` stays sticky — earlier rows must not share `top: 0`.
+ */
+.live-site[data-sticky-header='true'] .live-doc > header:has(~ header),
+.live-site[data-sticky-header='true'] .live-doc > [data-site-header='true']:has(~ [data-site-header='true']) {
+  position: static !important;
+  top: auto !important;
+  z-index: auto !important;
+  box-shadow: none !important;
+}
+
+/*
+ * Two root header rows (announcement + nav): cancel saved negative margins that pull rows together.
+ * Flex `gap` on `.live-doc` still adds space between the rows.
+ */
+.live-doc > :is(header.live-node, [data-site-header='true']):has(~ :is(header.live-node, [data-site-header='true'])) {
+  margin-bottom: max(0px, var(--live-header-stack-gap, 0px)) !important;
+  position: relative !important;
+  top: auto !important;
+  transform: none !important;
+  z-index: 1;
+}
+
+.live-doc > :is(header.live-node, [data-site-header='true']) + :is(header.live-node, [data-site-header='true']) {
+  margin-top: 0 !important;
+  position: relative !important;
+  top: auto !important;
+  transform: none !important;
+  z-index: 2;
+}
+
+.live-doc :is(header.live-node, [data-site-header='true']) .site-header-logo,
+.live-doc :is(header.live-node, [data-site-header='true']) .site-header-logo .live-node,
+.live-doc :is(header.live-node, [data-site-header='true']) .site-header-logo img {
+  position: relative !important;
+  top: auto !important;
+  bottom: auto !important;
+  transform: none !important;
 }
 
 /* Keep live output visually aligned with builder canvas defaults. */
@@ -1898,10 +1968,10 @@
  */
 .live-doc > :is(header.live-node.bld-row, [data-site-header='true'].bld-row):has(> .live-node.bld-row) {
   display: flex !important;
-  flex-direction: row !important;
-  flex-wrap: wrap !important;
-  align-items: center !important;
-  justify-content: space-between !important;
+  flex-direction: column !important;
+  flex-wrap: nowrap !important;
+  align-items: stretch !important;
+  justify-content: flex-start !important;
   height: auto !important;
   min-height: min-content !important;
   overflow: visible;
@@ -1909,10 +1979,10 @@
 }
 
 .live-doc > :is(header.live-node, [data-site-header='true']):has(> .live-node.bld-row) > .live-node.bld-row {
-  flex: 1 1 100% !important;
+  flex: 0 0 auto !important;
   width: 100% !important;
   max-width: 100% !important;
-  order: 99;
+  order: unset !important;
   grid-column: unset !important;
   justify-self: stretch !important;
 }

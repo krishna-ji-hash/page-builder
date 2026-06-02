@@ -152,6 +152,7 @@ export default function RichTextEditor({
   isEditing,
   onStartEdit,
   onCommit,
+  onRuntimePersist,
   onCancel,
   disabled,
   className = '',
@@ -164,6 +165,7 @@ export default function RichTextEditor({
   const wasEditingRef = useRef(false);
   const lastCommittedRef = useRef('');
   const dockRafRef = useRef(0);
+  const runtimePersistTimerRef = useRef(null);
   const [toolbarPlacement, setToolbarPlacement] = useState(null);
 
   const sanitizeOptsPreview = { neutralizeHardcodedBodyTextColors: Boolean(neutralizeBodyColorsPreview) };
@@ -271,7 +273,31 @@ export default function RichTextEditor({
     }
   }, [isEditing]);
 
+  const scheduleRuntimePersist = useCallback(() => {
+    if (!onRuntimePersist || !editableRef.current) return;
+    if (runtimePersistTimerRef.current) clearTimeout(runtimePersistTimerRef.current);
+    runtimePersistTimerRef.current = setTimeout(() => {
+      runtimePersistTimerRef.current = null;
+      if (!editableRef.current) return;
+      const sanitized = sanitizeRichHtml(editableRef.current.innerHTML, sanitizeOptsPersist);
+      if (sanitized === lastCommittedRef.current) return;
+      lastCommittedRef.current = sanitized;
+      onRuntimePersist(sanitized);
+    }, 350);
+  }, [onRuntimePersist, sanitizeOptsPersist]);
+
+  useEffect(
+    () => () => {
+      if (runtimePersistTimerRef.current) clearTimeout(runtimePersistTimerRef.current);
+    },
+    []
+  );
+
   const handleBlur = () => {
+    if (runtimePersistTimerRef.current) {
+      clearTimeout(runtimePersistTimerRef.current);
+      runtimePersistTimerRef.current = null;
+    }
     if (!editableRef.current) return;
     const sanitized = sanitizeRichHtml(editableRef.current.innerHTML, sanitizeOptsPersist);
     if (sanitized === lastCommittedRef.current) return;
@@ -283,6 +309,7 @@ export default function RichTextEditor({
     exec('formatBlock', `<${tag}>`);
     editableRef.current?.focus();
     scheduleDockedToolbar();
+    scheduleRuntimePersist();
   };
 
   const applyFontSize = (px) => {
@@ -300,12 +327,14 @@ export default function RichTextEditor({
     });
     editableRef.current?.focus();
     scheduleDockedToolbar();
+    scheduleRuntimePersist();
   };
 
   const applyColor = (hex) => {
     exec('foreColor', hex);
     editableRef.current?.focus();
     scheduleDockedToolbar();
+    scheduleRuntimePersist();
   };
 
   const applyLetterSpacing = (px) => {
@@ -322,6 +351,7 @@ export default function RichTextEditor({
     }
     editableRef.current?.focus();
     scheduleDockedToolbar();
+    scheduleRuntimePersist();
   };
 
   const applyLink = () => {
@@ -330,6 +360,7 @@ export default function RichTextEditor({
     exec('createLink', url.trim() === '' ? false : url.trim());
     editableRef.current?.focus();
     scheduleDockedToolbar();
+    scheduleRuntimePersist();
   };
 
   const applyAlign = (side) => {
@@ -338,6 +369,7 @@ export default function RichTextEditor({
     if (side === 'right') exec('justifyRight');
     editableRef.current?.focus();
     scheduleDockedToolbar();
+    scheduleRuntimePersist();
   };
 
   const handlePaste = (event) => {
@@ -357,8 +389,14 @@ export default function RichTextEditor({
           style={style}
           contentEditable={!disabled}
           suppressContentEditableWarning
-          onInput={scheduleDockedToolbar}
-          onKeyUp={scheduleDockedToolbar}
+          onInput={() => {
+            scheduleDockedToolbar();
+            scheduleRuntimePersist();
+          }}
+          onKeyUp={() => {
+            scheduleDockedToolbar();
+            scheduleRuntimePersist();
+          }}
           onMouseUp={scheduleDockedToolbar}
           onBlur={handleBlur}
           onPaste={handlePaste}
@@ -367,9 +405,18 @@ export default function RichTextEditor({
           visible={Boolean(toolbarPlacement)}
           placement={toolbarPlacement}
           onHeading={applyHeading}
-          onBold={() => exec('bold')}
-          onItalic={() => exec('italic')}
-          onUnderline={() => exec('underline')}
+          onBold={() => {
+            exec('bold');
+            scheduleRuntimePersist();
+          }}
+          onItalic={() => {
+            exec('italic');
+            scheduleRuntimePersist();
+          }}
+          onUnderline={() => {
+            exec('underline');
+            scheduleRuntimePersist();
+          }}
           onFontSize={applyFontSize}
           onLetterSpacing={applyLetterSpacing}
           onColor={applyColor}

@@ -119,16 +119,22 @@ export default function LayoutPanel({
             <label className="bld-label" htmlFor="root-strip-layout">
               Width mode
             </label>
-            {isRootStripRow && stripRowIsHeader && typeof onPatchHeaderLayoutMode === 'function' ? (
-              <select
-                id="root-strip-layout"
-                className="bld-input"
-                value={headerLayoutMode === 'spread' ? 'full' : 'contained'}
-                onChange={(e) => onPatchHeaderLayoutMode(e.target.value === 'full' ? 'spread' : 'boxed')}
-              >
-                <option value="contained">Contained</option>
-                <option value="full">Full width (screen)</option>
-              </select>
+            {stripRowIsHeader && typeof onPatchHeaderLayoutMode === 'function' ? (
+              <>
+                <select
+                  id="root-strip-layout"
+                  className="bld-input"
+                  value={headerLayoutMode === 'spread' ? 'full' : 'contained'}
+                  onChange={(e) => onPatchHeaderLayoutMode(e.target.value === 'full' ? 'spread' : 'boxed')}
+                >
+                  <option value="contained">Contained (centered bar)</option>
+                  <option value="full">Full width (screen)</option>
+                </select>
+                <p className="bld-field-note" style={{ marginTop: 8 }}>
+                  Applies to this header row only. Announcement bar and main nav are separate rows — select each row in
+                  Layers to set its width.
+                </p>
+              </>
             ) : isRootStripRow && stripRowIsFooter ? (
               <select id="root-strip-layout" className="bld-input" value="full" disabled aria-readonly>
                 <option value="full">Full width (screen)</option>

@@ -29,10 +29,15 @@ test('applySectionToneToLeafCss remaps dark neutrals on light sections', () => {
   assert.equal(out.color, LIVE_SECTION_FG_ON_LIGHT);
 });
 
-test('applySectionToneToLeafCss forces light text on dark sections', () => {
+test('applySectionToneToLeafCss forces light text on dark sections for neutral dark colors', () => {
   const out = applySectionToneToLeafCss({ color: '#0f172a', '--node-text': '#0f172a' }, 'dark');
   assert.equal(out.color, LIVE_SECTION_FG_ON_DARK);
   assert.equal(out['--node-text'], LIVE_SECTION_FG_ON_DARK);
+});
+
+test('applySectionToneToLeafCss preserves authored brand color on dark sections', () => {
+  const out = applySectionToneToLeafCss({ color: '#2841a4' }, 'dark');
+  assert.equal(out.color, '#2841a4');
 });
 
 test('resolveSectionToneForNode forces dark on get in touch row', () => {

@@ -5,9 +5,9 @@
  */
 
 /* ── Desktop: logo | nav | actions ───────────────────────────────────────── */
-.site-header-bar.site-header-bar--desktop,
-.live-doc[data-bld-device='desktop'] > .site-header-bar,
-.bld-canvas--desktop .live-doc > .site-header-bar {
+.site-header-bar.site-header-bar--desktop:not(:has(> .live-node.bld-row)),
+.live-doc[data-bld-device='desktop'] > .site-header-bar:not(:has(> .live-node.bld-row)),
+.bld-canvas--desktop .live-doc > .site-header-bar:not(:has(> .live-node.bld-row)) {
   display: grid !important;
   grid-template-columns: auto minmax(0, 1fr) auto !important;
   grid-template-rows: auto !important;
@@ -203,8 +203,25 @@
   }
 }
 
+/* Stacked header bands (announcement row + nav row inside one header): column stack, not logo|nav|actions grid. */
+.live-doc > .site-header-bar:has(> .live-node.bld-row),
+.live-doc:not([data-bld-device]) > .site-header-bar:has(> .live-node.bld-row) {
+  display: flex !important;
+  flex-direction: column !important;
+  flex-wrap: nowrap !important;
+  align-items: stretch !important;
+  grid-template-columns: unset !important;
+  row-gap: 0;
+}
+
+.live-doc > .site-header-bar:has(> .live-node.bld-row) > .live-node.bld-row.site-header-bar,
+.live-doc:not([data-bld-device]) > .site-header-bar:has(> .live-node.bld-row) > .live-node.bld-row.site-header-bar {
+  display: grid !important;
+  width: 100% !important;
+}
+
 @media (min-width: 1025px) {
-  .live-doc:not([data-bld-device]) > .site-header-bar:not(.site-header-bar--centered) {
+  .live-doc:not([data-bld-device]) > .site-header-bar:not(.site-header-bar--centered):not(:has(> .live-node.bld-row)) {
     display: grid !important;
     grid-template-columns: auto minmax(0, 1fr) auto !important;
     align-items: center;

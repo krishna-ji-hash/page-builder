@@ -19,7 +19,10 @@ const SHARED_RENDER_MARKERS = [
   'PublishedLiveTree',
   'LiveDoc',
   'live-site.css',
-  'normalizeSiteTheme',
+  'prepareNodesForLiveRender',
+  'buildPublishedLiveRenderOptions',
+  'data-token-mode',
+  'themeTokens',
   'livePageCssVarOverridesForPage',
   'buildRenderNodesWithGlobals',
 ];

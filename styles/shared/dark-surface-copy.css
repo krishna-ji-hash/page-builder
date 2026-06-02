@@ -24,7 +24,7 @@
   .live-node.bld-column[style*='10, 10, 10']
   .live-leaf-wrap
   :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text) {
-  color: var(--live-section-fg-on-dark) !important;
+  color: var(--node-text, var(--live-section-fg-on-dark));
 }
 
 /* Feature tabs panel copy — outside .live-leaf-wrap */

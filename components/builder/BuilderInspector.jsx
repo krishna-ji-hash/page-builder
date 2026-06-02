@@ -5,6 +5,13 @@ import { useBuilderTheme } from '@/context/BuilderThemeContext';
 import { dataSourceRegistry } from '@/lib/runtime/dataSourceRegistry';
 import { normalizeResponsiveStyle, stripDeviceLayoutKeysInStyleJson } from '@/lib/styleNormalizer';
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
+import {
+  buildInlineTextPropsPatch,
+  inlineTextFormFromProps,
+  isInlineTextInspectorKey,
+  propsPatchForTextContent,
+} from '@/lib/richTextNodeProps';
+import { sanitizeInlineLeafHtml } from '@/lib/inlineTextHtml';
 import { normalizeMenuAlign, normalizeMenuVariant } from '@/lib/menuNav';
 import {
   normalizeMenuDrawerActionsLayout,
@@ -731,6 +738,21 @@ export default function BuilderInspector({
     menuMobileDrawerDensity: 'compact',
     menuMobileBreakpointPx: 1024,
     richTextHtml: '',
+    inlineTextMode: 'plain',
+    marqueeEnabled: false,
+    marqueeDirection: 'left',
+    marqueeSpeed: 'normal',
+    marqueeDuration: 18,
+    marqueePauseOnHover: true,
+    marqueeLoop: true,
+    marqueeGapPx: 0,
+    marqueeMobileEnabled: true,
+    textBlockIconEnabled: false,
+    textBlockIconName: '★',
+    textBlockIconPosition: 'before',
+    textBlockIconColor: '',
+    textBlockIconSize: 16,
+    textBlockIconSpacing: 8,
     animationPreset: 'none',
     animationDuration: 0.6,
     animationDelay: 0,
@@ -1029,6 +1051,9 @@ export default function BuilderInspector({
       menuMobileDrawerDensity: normalizeMenuDrawerDensity(selectedNode.props?.mobile?.drawerDensity, 'compact'),
       menuMobileBreakpointPx: resolveMenuMobileBreakpointPx(selectedNode.props?.mobile || {}),
       richTextHtml: selectedNode.props?.content || '',
+      ...(selectedNode.nodeType === 'heading' || selectedNode.nodeType === 'text'
+        ? inlineTextFormFromProps(selectedNode.props || {})
+        : {}),
       animationPreset: selectedNode.props?.animation?.preset || 'none',
       animationDuration: Number(selectedNode.props?.animation?.duration ?? 0.6),
       animationDelay: Number(selectedNode.props?.animation?.delay ?? 0),
@@ -1476,6 +1501,19 @@ export default function BuilderInspector({
     if (!selectedNode) return;
     if (editingDisabledBySectionLock) return;
 
+    const contentTypoKeys = new Set([
+      'fontSizePx',
+      'fontWeight',
+      'lineHeight',
+      'letterSpacingPx',
+      'textColor',
+      'alignment',
+    ]);
+    if (contentTypoKeys.has(key)) {
+      await handleStyleChange(key, value);
+      return;
+    }
+
     /** One-click image layout: updates props + merged style (width / align-self) so live + canvas match. */
     if (key === 'imageQuickPreset' && selectedNode.nodeType === 'image') {
       const preset = String(value || '');
@@ -1558,7 +1596,34 @@ export default function BuilderInspector({
       const pending = pendingCarouselFormRef.current || {};
       pendingCarouselFormRef.current = { ...pending, [key]: { value, ts: Date.now() } };
     }
+    if (key === 'text' && (selectedNode.nodeType === 'heading' || selectedNode.nodeType === 'text')) {
+      const next =
+        typeof value === 'string' && /<[a-z]/i.test(value)
+          ? sanitizeInlineLeafHtml(value)
+          : String(value ?? '');
+      await updateProps(propsPatchForTextContent(selectedNode.props || {}, next));
+      return;
+    }
     if (key === 'text') await updateProps({ text: value });
+    if (isInlineTextInspectorKey(key) && (selectedNode.nodeType === 'heading' || selectedNode.nodeType === 'text')) {
+      if (key === 'richTextHtml') {
+        const html = sanitizeInlineLeafHtml(String(value ?? ''));
+        const built = buildInlineTextPropsPatch(selectedNode.props || {}, 'richTextHtml', html);
+        if (built?.patch) {
+          await updateProps(built.patch);
+          setForm((prev) => ({ ...prev, richTextHtml: html, inlineTextMode: 'rich' }));
+        }
+        return;
+      }
+      const built = buildInlineTextPropsPatch(selectedNode.props || {}, key, value);
+      if (built?.patch) {
+        await updateProps(built.patch);
+        if (key === 'inlineTextMode') {
+          setForm((prev) => ({ ...prev, inlineTextMode: value === 'rich' ? 'rich' : 'plain' }));
+        }
+      }
+      return;
+    }
     if (key === 'href') {
       if (isBrandLogoInspectorNode(selectedNode, pageTree)) {
         const patch = brandLogoPropsPatchFromFormKey('logoLink', value, selectedNode.props || {});

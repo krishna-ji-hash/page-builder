@@ -1,0 +1,74 @@
+/**
+ * Consecutive root header rows (announcement + nav) render inside `.live-header-stack`
+ * so bands stack vertically without sticky/fixed overlap.
+ */
+
+.live-header-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100vw;
+  max-width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  position: relative;
+  z-index: 5000;
+  box-sizing: border-box;
+  gap: 0;
+}
+
+.live-doc > .live-header-stack {
+  margin-bottom: 0;
+}
+
+.live-header-stack > :is(header.live-node, [data-site-header='true']) {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  flex: 0 0 auto;
+  position: relative !important;
+  top: auto !important;
+  transform: none !important;
+  box-shadow: none;
+}
+
+.live-site[data-sticky-header='true'] .live-header-stack > :is(header.live-node, [data-site-header='true']):last-child {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 2 !important;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.08);
+}
+
+/* Nav band: vertical center (overrides content-band flex-start leak). */
+.live-header-stack > .site-header-bar,
+.live-header-stack > :is(header, [data-site-header='true']).site-header-bar,
+.live-header-stack > :is(header, [data-site-header='true']) > .live-node.bld-row.site-header-bar {
+  align-items: center !important;
+  align-content: center;
+  min-height: min-content;
+}
+
+.live-header-stack > .site-header-bar > .live-node.bld-column,
+.live-header-stack > :is(header, [data-site-header='true']).site-header-bar > .live-node.bld-column,
+.live-header-stack > :is(header, [data-site-header='true']) > .live-node.bld-row.site-header-bar > .live-node.bld-column {
+  align-self: center !important;
+  height: auto;
+}
+
+/* Announcement / ticker band above nav */
+.live-header-stack > :is(header, [data-site-header='true']):first-child:not(:only-child),
+.live-header-stack > :is(header, [data-site-header='true']) > .live-node.bld-row:first-child:not(.site-header-bar) {
+  align-items: center !important;
+  justify-content: center;
+  overflow: visible;
+  z-index: 1;
+}
+
+.live-header-stack .site-header-logo,
+.live-header-stack .site-header-logo img {
+  position: relative !important;
+  top: auto !important;
+  transform: none !important;
+  margin-top: 0 !important;
+}

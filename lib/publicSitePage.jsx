@@ -4,12 +4,12 @@ import '@/styles/shared/button.css';
 import { getPublishedPageForPublic } from '@/services/site/publishedPageService';
 import PublishedLiveTree from '@/components/live/PublishedLiveTree';
 import { getPageVarsBucket, livePageCssVarOverridesForPage, resolveBodyLayout } from '@/lib/livePageCssVars';
-import { normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesignTheme';
+import { siteThemeToCssVariableStyle } from '@/lib/siteDesignTheme';
+import { themeTokensToCssVariableStyle } from '@/lib/themeTokens';
 import {
-  alignThemeTokensWithSiteTheme,
-  normalizeThemeTokens,
-  themeTokensToCssVariableStyle,
-} from '@/lib/themeTokens';
+  buildPublishedLiveRenderOptions,
+  prepareNodesForLiveRender,
+} from '@/lib/prepareLivePageRender';
 import { buildRenderNodesWithGlobals } from '@/lib/globalSectionMerge';
 import { isPublicSlug } from '@/lib/routeParams';
 import { publicPagePathForSeo } from '@/lib/publicSiteUrls';
@@ -92,19 +92,18 @@ export default async function PublicSitePageView({ projectSlug, pageSlug, search
   const globalFooter = frozenGlobals.footer
     ? cloneGlobalNode(frozenGlobals.footer, 'global-footer')
     : null;
-  const renderNodes = buildRenderNodesWithGlobals(
+  const mergedNodes = buildRenderNodesWithGlobals(
     page.snapshot_json,
     globalHeader,
     globalFooter,
     cloneGlobalNode
   );
-  const currentPath = publicPagePathForSeo(projectSlug, pageSlug);
-  const siteTheme = normalizeSiteTheme(page.projectConfig?.siteTheme);
-  const siteCssVars = siteThemeToCssVariableStyle(siteTheme);
-  const themeTokens = alignThemeTokensWithSiteTheme(
-    siteTheme,
-    normalizeThemeTokens(page.projectConfig?.themeTokens)
+  const { nodes: renderNodes, siteTheme, themeTokens } = prepareNodesForLiveRender(
+    mergedNodes,
+    page.projectConfig
   );
+  const currentPath = publicPagePathForSeo(projectSlug, pageSlug);
+  const siteCssVars = siteThemeToCssVariableStyle(siteTheme);
   const tokenVars = themeTokensToCssVariableStyle(themeTokens);
   const pageVars = getPageVarsBucket(siteTheme, pageSlug);
   const stickyHeader = Boolean(pageVars?.stickyHeader);
@@ -126,6 +125,7 @@ export default async function PublicSitePageView({ projectSlug, pageSlug, search
     <div
       className="live-site"
       data-site-preset={siteTheme.presetId || 'light'}
+      data-token-mode={themeTokens.mode === 'dark' ? 'dark' : 'light'}
       data-project-slug={projectSlug}
       data-page-slug={pageSlug}
       data-route-kind="published"
@@ -143,17 +143,15 @@ export default async function PublicSitePageView({ projectSlug, pageSlug, search
       <LiveDoc>
         <PublishedLiveTree
           nodes={renderNodes}
-          options={{
+          options={buildPublishedLiveRenderOptions(page.projectConfig, {
             currentPath,
             projectPages,
-            siteTheme,
             pageSlug,
             pageId: page.id,
             projectId: page.projectId,
             projectSlug,
-            animationPresets: page.projectConfig?.animationPresets,
-            stylePresets: page.projectConfig?.stylePresets,
-          }}
+            builderTree: renderNodes,
+          })}
         />
       </LiveDoc>
     </div>

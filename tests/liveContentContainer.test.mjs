@@ -40,4 +40,8 @@ test('header rows do not use section width modes', () => {
   const ctx = { isLiveDocRootRow: true, isHeaderRow: true, isFooterRow: false };
   assert.equal(resolveSectionWidthMode({ rootStripLayout: 'full' }, ctx), '');
   assert.equal(resolveRootStripLayout({}, ctx), 'full');
+  assert.equal(resolveRootStripLayout({ rootStripLayout: 'boxed' }, ctx), 'boxed');
+  assert.deepEqual(rowSectionStripDataAttrs(true, { rootStripLayout: 'boxed' }, ctx), {
+    'data-live-root-strip': 'boxed',
+  });
 });
