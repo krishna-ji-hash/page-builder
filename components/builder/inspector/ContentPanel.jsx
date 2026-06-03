@@ -17,6 +17,7 @@ import FaqAccordionControls from '@/components/builder/inspector/FaqAccordionCon
 import AdvancedElementControls, { isAdvancedElementNodeType } from '@/components/builder/inspector/AdvancedElementControls';
 import LogoBrandControls from '@/components/builder/inspector/LogoBrandControls';
 import InlineTextFormattingPanel from '@/components/builder/inspector/InlineTextFormattingPanel';
+import SplitHeroImageSizeControls from '@/components/builder/inspector/SplitHeroImageSizeControls';
 import { nodeIsInsideSiteHeader, nodeLooksLikeBrandLogo } from '@/lib/headerLogo';
 import { uploadProjectMediaFile } from '@/lib/media/uploadProjectMedia';
 import {
@@ -35,6 +36,10 @@ export default function ContentPanel({
   projectId,
   pageId,
   pageTree = null,
+  sectionStripLayoutRow = null,
+  onPatchStripRowPaddingY = null,
+  nestedFeatureTabsNode = null,
+  onSelectFeatureTabs = null,
 }) {
   const [mediaOpen, setMediaOpen] = useState(false);
   const [mediaAllowedKinds, setMediaAllowedKinds] = useState(null);
@@ -236,6 +241,12 @@ export default function ContentPanel({
     [pageTree, selectedNode?.id]
   );
 
+  const featureTabsEditNode = useMemo(() => {
+    if (!selectedNode) return null;
+    if (selectedNode.nodeType === 'tabs') return selectedNode;
+    return nestedFeatureTabsNode || null;
+  }, [selectedNode, nestedFeatureTabsNode]);
+
   if (!selectedNode) {
     return (
       <div className="bld-panel">
@@ -254,12 +265,13 @@ export default function ContentPanel({
   const isForm = selectedNode.nodeType === 'form';
   const isRichText = selectedNode.nodeType === 'rich_text';
   const isCarousel = selectedNode.nodeType === 'carousel';
-  const isTabs = selectedNode.nodeType === 'tabs';
+  const isTabs = Boolean(featureTabsEditNode);
   const isAccordion = selectedNode.nodeType === 'accordion';
   const isDivider = selectedNode.nodeType === 'divider';
   const isAdvancedElement = isAdvancedElementNodeType(selectedNode.nodeType);
   const carouselVariantKey =
-    isCarousel && ['image', 'hero', 'card', 'logo', 'ticker', 'marquee'].includes(form.carouselVariant)
+    isCarousel &&
+    ['image', 'hero', 'splitHero', 'card', 'logo', 'ticker', 'marquee'].includes(form.carouselVariant)
       ? form.carouselVariant
       : 'image';
   const isLogoSlider = isCarousel && form.carouselVariant === 'logo';
@@ -274,7 +286,7 @@ export default function ContentPanel({
       ? selectedNode.props.notifications
       : {};
   return (
-    <div className="bld-panel">
+    <div className="bld-panel" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
       <div className="bld-panel__head">Content</div>
       <CmsBindingsPanel selectedNode={selectedNode} projectId={projectId} onChange={onChange} />
       {isDivider ? (
@@ -796,9 +808,11 @@ export default function ContentPanel({
           <div className="bld-field">
             <label className="bld-label">Slider type</label>
             <select
+              id="carousel-variant"
               className="bld-input"
               value={carouselVariantKey}
               onChange={(e) => onChange('carouselVariant', e.target.value)}
+              onMouseDown={(e) => e.stopPropagation()}
             >
               <option value="image">Image slider</option>
               <option value="hero">Hero slider</option>
@@ -1135,6 +1149,279 @@ export default function ContentPanel({
             </div>
           </div>
 
+          {isSplitHeroSlider ? (
+            <>
+              <div className="bld-field">
+                <label className="bld-label" htmlFor="split-hero-visual-frame">
+                  Right image frame
+                </label>
+                <select
+                  id="split-hero-visual-frame"
+                  className="bld-input"
+                  value={form.splitHeroVisualFrame === 'card' ? 'card' : 'none'}
+                  onChange={(e) => onChange('splitHeroVisualFrame', e.target.value)}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <option value="none">None — on section background (default)</option>
+                  <option value="card">Card — rounded panel behind image</option>
+                </select>
+              </div>
+              <div className="bld-field">
+                <label className="bld-label" htmlFor="split-hero-visual-shadow">
+                  Mockup shadow
+                </label>
+                <select
+                  id="split-hero-visual-shadow"
+                  className="bld-input"
+                  value={
+                    form.splitHeroVisualShadow === 'light' || form.splitHeroVisualShadow === 'medium'
+                      ? form.splitHeroVisualShadow
+                      : 'none'
+                  }
+                  onChange={(e) => onChange('splitHeroVisualShadow', e.target.value)}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <option value="none">None — no drop shadow (default)</option>
+                  <option value="light">Light — soft shadow</option>
+                  <option value="medium">Medium — stronger shadow</option>
+                </select>
+                <p className="bld-field-note">
+                  Builder shadow only. Agar image file ke andar shadow baked hai, to transparent PNG upload karein ya design se shadow hata kar export karein.
+                </p>
+              </div>
+              <div className="bld-field">
+                <label className="bld-label" htmlFor="split-hero-visual-border">
+                  Panel border
+                </label>
+                <select
+                  id="split-hero-visual-border"
+                  className="bld-input"
+                  value={form.splitHeroVisualBorder === 'none' ? 'none' : 'show'}
+                  onChange={(e) => onChange('splitHeroVisualBorder', e.target.value)}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <option value="none">No border</option>
+                  <option value="show">Show border (works with Card frame)</option>
+                </select>
+              </div>
+              <div className="bld-field-grid">
+                <div className="bld-field">
+                  <label className="bld-label" htmlFor="split-hero-panel-bg">
+                    Panel background
+                  </label>
+                  <input
+                    id="split-hero-panel-bg"
+                    type="color"
+                    className="bld-input"
+                    value={
+                      /^#[0-9a-f]{6}$/i.test(String(form.splitHeroVisualBgColor || ''))
+                        ? form.splitHeroVisualBgColor
+                        : '#ffffff'
+                    }
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      const cur = String(form.splitHeroVisualBgColor || '').trim();
+                      if (v !== cur && (cur !== '' || v.toLowerCase() !== '#ffffff')) {
+                        onChange('splitHeroVisualBgColor', v);
+                      }
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  />
+                  <button
+                    type="button"
+                    className="bld-chip"
+                    style={{ marginTop: 6 }}
+                    onClick={() => {
+                      if (String(form.splitHeroVisualBgColor || '').trim()) onChange('splitHeroVisualBgColor', '');
+                    }}
+                  >
+                    Reset background
+                  </button>
+                </div>
+                <div className="bld-field">
+                  <label className="bld-label" htmlFor="split-hero-panel-border-color">
+                    Border color
+                  </label>
+                  <input
+                    id="split-hero-panel-border-color"
+                    type="color"
+                    className="bld-input"
+                    value={
+                      /^#[0-9a-f]{6}$/i.test(String(form.splitHeroVisualBorderColor || ''))
+                        ? form.splitHeroVisualBorderColor
+                        : '#e2e8f0'
+                    }
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      const cur = String(form.splitHeroVisualBorderColor || '').trim();
+                      if (v !== cur && (cur !== '' || v.toLowerCase() !== '#e2e8f0')) {
+                        onChange('splitHeroVisualBorderColor', v);
+                      }
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  />
+                  <button
+                    type="button"
+                    className="bld-chip"
+                    style={{ marginTop: 6 }}
+                    onClick={() => {
+                      if (String(form.splitHeroVisualBorderColor || '').trim()) {
+                        onChange('splitHeroVisualBorderColor', '');
+                      }
+                    }}
+                  >
+                    Reset border color
+                  </button>
+                </div>
+              </div>
+              <p className="bld-field-note">
+                <strong>Border hatana:</strong> Right image frame → None, ya Panel border → No border.{' '}
+                <strong>Color:</strong> Panel background / Border color (Card frame par best). Poora hero blue — left tree se <strong>section row</strong> → Style → Background.
+              </p>
+              <div className="bld-field">
+                <span className="bld-label">Hero body style</span>
+                <p className="bld-field-note" style={{ marginTop: 0 }}>
+                  Headline (title) font/size/color: <strong>Style</strong> tab → Typography.
+                </p>
+                <div className="bld-field-grid">
+                  <InspectorNumField
+                    id="split-hero-body-font-size"
+                    label="Body font size (px)"
+                    min={12}
+                    max={48}
+                    value={form.splitHeroBodyFontSizePx ?? 17}
+                    onChange={(n) => onChange('splitHeroBodyFontSizePx', String(n ?? 17))}
+                  />
+                  <div className="bld-field">
+                    <label className="bld-label" htmlFor="split-hero-body-color">
+                      Body text color
+                    </label>
+                    <input
+                      id="split-hero-body-color"
+                      type="color"
+                      className="bld-input"
+                      value={
+                        /^#[0-9a-f]{6}$/i.test(String(form.splitHeroBodyColor || ''))
+                          ? form.splitHeroBodyColor
+                          : '#94a3b8'
+                      }
+                      onChange={(e) => onChange('splitHeroBodyColor', e.target.value)}
+                      onMouseDown={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bld-field">
+                <span className="bld-label">Hero button (CTA)</span>
+                <p className="bld-field-note" style={{ marginTop: 0 }}>
+                  Button text: canvas par click ya <strong>Slides</strong> → Button text / CTA label.
+                </p>
+                <div className="bld-field-grid">
+                  <div className="bld-field">
+                    <label className="bld-label" htmlFor="split-hero-cta-bg">
+                      Button background
+                    </label>
+                    <input
+                      id="split-hero-cta-bg"
+                      type="color"
+                      className="bld-input"
+                      value={
+                        /^#[0-9a-f]{6}$/i.test(String(form.splitHeroCtaBackgroundColor || ''))
+                          ? form.splitHeroCtaBackgroundColor
+                          : '#ffffff'
+                      }
+                      onChange={(e) => onChange('splitHeroCtaBackgroundColor', e.target.value)}
+                      onMouseDown={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                  <div className="bld-field">
+                    <label className="bld-label" htmlFor="split-hero-cta-text">
+                      Button text color
+                    </label>
+                    <input
+                      id="split-hero-cta-text"
+                      type="color"
+                      className="bld-input"
+                      value={
+                        /^#[0-9a-f]{6}$/i.test(String(form.splitHeroCtaTextColor || ''))
+                          ? form.splitHeroCtaTextColor
+                          : '#0f172a'
+                      }
+                      onChange={(e) => onChange('splitHeroCtaTextColor', e.target.value)}
+                      onMouseDown={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                  <div className="bld-field">
+                    <label className="bld-label" htmlFor="split-hero-cta-border">
+                      Button border color
+                    </label>
+                    <input
+                      id="split-hero-cta-border"
+                      type="color"
+                      className="bld-input"
+                      value={
+                        /^#[0-9a-f]{6}$/i.test(String(form.splitHeroCtaBorderColor || ''))
+                          ? form.splitHeroCtaBorderColor
+                          : '#2563eb'
+                      }
+                      onChange={(e) => onChange('splitHeroCtaBorderColor', e.target.value)}
+                      onMouseDown={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                  <InspectorNumField
+                    id="split-hero-cta-border-w"
+                    label="Border width (px)"
+                    min={0}
+                    max={8}
+                    value={form.splitHeroCtaBorderWidthPx ?? 0}
+                    onChange={(n) => onChange('splitHeroCtaBorderWidthPx', String(n ?? 0))}
+                  />
+                  <InspectorNumField
+                    id="split-hero-cta-font-size"
+                    label="Button font size (px)"
+                    min={10}
+                    max={32}
+                    value={form.splitHeroCtaFontSizePx ?? 14}
+                    onChange={(n) => onChange('splitHeroCtaFontSizePx', String(n ?? 14))}
+                  />
+                  <InspectorNumField
+                    id="split-hero-cta-radius"
+                    label="Corner radius (px)"
+                    min={0}
+                    max={48}
+                    value={form.splitHeroCtaBorderRadiusPx ?? 12}
+                    onChange={(n) => onChange('splitHeroCtaBorderRadiusPx', String(n ?? 12))}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+                  <button
+                    type="button"
+                    className="bld-chip"
+                    onClick={() => onChange('splitHeroCtaStylePreset', 'outline')}
+                  >
+                    White + blue outline
+                  </button>
+                  <button
+                    type="button"
+                    className="bld-chip"
+                    onClick={() => onChange('splitHeroCtaStylePreset', 'primary')}
+                  >
+                    Blue fill (default)
+                  </button>
+                </div>
+              </div>
+              <SplitHeroImageSizeControls
+                selectedNode={selectedNode}
+                form={form}
+                slides={carouselSlides}
+                onChange={onChange}
+                sectionRow={sectionStripLayoutRow}
+                onPatchSectionPaddingY={onPatchStripRowPaddingY}
+              />
+            </>
+          ) : null}
+
           <div className="bld-field">
             <label className="bld-label">{isTickerOrMarquee ? 'Scroll duration (seconds)' : 'Image fit'}</label>
             {isTickerOrMarquee ? (
@@ -1154,7 +1441,13 @@ export default function ContentPanel({
                 Contain
               </p>
             ) : (
-              <select className="bld-input" value={form.carouselImageFit || 'cover'} onChange={(e) => onChange('carouselImageFit', e.target.value)}>
+              <select
+                id="carousel-image-fit"
+                className="bld-input"
+                value={form.carouselImageFit === 'contain' ? 'contain' : 'cover'}
+                onChange={(e) => onChange('carouselImageFit', e.target.value)}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
                 <option value="cover">Cover</option>
                 <option value="contain">Contain</option>
               </select>
@@ -1367,10 +1660,12 @@ export default function ContentPanel({
       ) : null}
       {isTabs ? (
         <FeatureTabsControls
-          selectedNode={selectedNode}
+          selectedNode={featureTabsEditNode}
           form={form}
           onChange={onChange}
           jsonErrors={jsonErrors}
+          editingViaParent={selectedNode?.nodeType !== 'tabs'}
+          onFocusFeatureTabs={onSelectFeatureTabs}
         />
       ) : null}
       {isAccordion ? (

@@ -36,6 +36,9 @@ export default function StylePanel({
   }
 
   const isFeatureTabs = selectedNode?.nodeType === 'tabs';
+  const isSplitHeroCarousel =
+    selectedNode?.nodeType === 'carousel' &&
+    String(selectedNode?.props?.variant || '').toLowerCase() === 'splithero';
   const caps = capabilities || {};
   const { stylePresets } = useBuilderTheme();
   const presets = useMemo(() => normalizeStylePresets(stylePresets).presets || [], [stylePresets]);
@@ -98,6 +101,13 @@ export default function StylePanel({
             </button>
           </div>
         </InspectorSection>
+      ) : null}
+
+      {isSplitHeroCarousel ? (
+        <p className="bld-field-note" style={{ margin: '0 0 12px' }}>
+          <strong>Typography</strong> styles the hero <strong>headline (title)</strong>. Body text size/color:{' '}
+          <strong>Content</strong> tab → Hero body style.
+        </p>
       ) : null}
 
       {caps.supportsTypography !== false ? (

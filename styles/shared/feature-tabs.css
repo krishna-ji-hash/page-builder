@@ -2,13 +2,16 @@
 
 .live-feature-tabs {
   width: 100%;
-  max-width: 100%;
+  max-width: min(100%, calc(var(--ft-block-max-width-pct, 100) * 1%));
+  margin-left: auto;
+  margin-right: auto;
   min-width: 0;
   box-sizing: border-box;
 }
 
 .live-feature-tabs__nav-wrap {
   width: 100%;
+  background: var(--ft-bar-bg, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--token-shadow-tint) 12%, transparent);
   margin-bottom: 36px;
   overflow-x: auto;
@@ -96,14 +99,20 @@
 }
 
 .live-feature-tabs__tab.is-active {
-  color: var(--live-section-fg, var(--color-text));
+  color: var(--ft-tab-active-color, var(--live-section-fg, var(--color-text)));
   font-weight: 800;
-  border-bottom-color: var(--color-primary, var(--token-color-primary, #2563eb));
+  border-bottom-color: var(--ft-tab-active-underline, var(--color-primary, var(--token-color-primary, #2563eb)));
 }
 
 .live-feature-tabs__panel {
   width: 100%;
   min-width: 0;
+  background: var(--ft-panel-bg, transparent);
+  border-width: var(--ft-panel-border-width, 0);
+  border-style: solid;
+  border-color: var(--ft-panel-border-color, transparent);
+  border-radius: var(--ft-panel-radius, 0);
+  box-sizing: border-box;
   padding-bottom: 8px;
   animation: live-feature-tabs-fade 0.22s var(--ease-out, ease);
 }

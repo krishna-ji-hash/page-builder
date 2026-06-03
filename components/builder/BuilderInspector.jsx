@@ -21,7 +21,18 @@ import {
 } from '@/lib/menuMobile';
 import { normalizeMenuItems } from '@/lib/menuItems';
 import { mergeDeviceStyleWithTypeDefaults, mergeMenuDeviceStyle } from '@/lib/nodeLayoutDefaults';
-import { normalizeFeatureTabs, patchFeatureTabs } from '@/lib/featureTabsDefaults';
+import {
+  addBulletToActiveTab,
+  newFeatureTabFromList,
+  normalizeFeatureTabs,
+  patchFeatureTabs,
+} from '@/lib/featureTabsDefaults';
+import {
+  featureTabsChromeInspectorFields,
+  featureTabsInspectorFormFromProps,
+  isFeatureTabsChromeKey,
+  patchFeatureTabsChromeFromKey,
+} from '@/lib/featureTabsChrome';
 import {
   advancedElementFormFromProps,
   advancedElementPatchFromFormKey,
@@ -48,8 +59,27 @@ import {
   headerBehaviorMetaPatch,
   normalizeHeaderBehavior,
 } from '@/lib/headerBehavior';
+import {
+  headerRevealBarInspectorFormFields,
+  isHeaderRevealBarStyleKey,
+  patchHeaderRevealBarFromFormKey,
+} from '@/lib/headerRevealBarStyle';
 import { isFooterRowNode, isHeaderRowNode, isLayoutLockedRow } from '@/lib/rowLayoutMeta';
 import { stripNaNFromStyleJson } from '@/lib/inspectorNumeric';
+import {
+  INSPECTOR_FORM_SKIP_OPTIMISTIC_KEYS,
+  recordPendingInspectorForm,
+  splitHeroFormFieldsFromProps,
+} from '@/lib/splitHeroInspectorForm';
+import {
+  isSplitHeroCarouselNode,
+  isSplitHeroCopyStyleKey,
+  patchSplitHeroCopyTypoFromStyleKey,
+  normalizeSplitHeroCopyTypo,
+  splitHeroCopyTypoFromProps,
+  splitHeroCtaOutlinePreset,
+  splitHeroTypoInspectorFormFields,
+} from '@/lib/splitHeroCopyTypography';
 import { getDeviceStyle, styleToCss } from '@/lib/styleToCss';
 import InspectorTabs from './inspector/InspectorTabs';
 import LineToolsPanel from './inspector/LineToolsPanel';
@@ -424,16 +454,20 @@ export default function BuilderInspector({
   siteThemeRef.current = siteTheme;
   onUpdateNodeRef.current = onUpdateNode;
 
-  useEffect(() => {
-    if (selectedNode?.nodeType === 'tabs' || selectedNode?.nodeType === 'accordion') {
-      setActiveTab('content');
-    }
-  }, [selectedNode?.id, selectedNode?.nodeType, setActiveTab]);
-
   const nestedFeatureTabsNode = useMemo(() => {
     if (!selectedNode || selectedNode.nodeType === 'tabs') return null;
     return findDescendantNodeByType(selectedNode, 'tabs');
   }, [selectedNode]);
+
+  useEffect(() => {
+    if (
+      selectedNode?.nodeType === 'tabs' ||
+      selectedNode?.nodeType === 'accordion' ||
+      nestedFeatureTabsNode
+    ) {
+      setActiveTab('content');
+    }
+  }, [selectedNode?.id, selectedNode?.nodeType, nestedFeatureTabsNode?.id, setActiveTab]);
 
   const nestedFaqAccordionNode = useMemo(() => {
     if (!selectedNode || selectedNode.nodeType === 'accordion') return null;
@@ -447,6 +481,34 @@ export default function BuilderInspector({
     if (selectedNode.id == null) return null;
     return findAncestorRowNode(pageTree, selectedNode.id);
   }, [selectedNode, pageTree]);
+
+  const patchStripRowHeightPx = useCallback(
+    async (raw) => {
+      if (!sectionStripLayoutRow?.id || sectionStripLayoutRow.nodeType !== 'row') return;
+      if (isLinkedGlobalPlaceholder(sectionStripLayoutRow)) return;
+      if (editingDisabledBySectionLock) return;
+      if (!onUpdateNode) return;
+      const n = raw === '' || raw == null ? 0 : Math.max(0, Math.min(9999, Number(raw) || 0));
+      const patch = { size: { height: n > 0 ? `${n}px` : 'auto' } };
+      const style_json = mergeStyleForDevice(sectionStripLayoutRow, device, patch, siteTheme);
+      await onUpdateNode({ nodeId: sectionStripLayoutRow.id, payload: { style_json } });
+    },
+    [sectionStripLayoutRow, onUpdateNode, device, siteTheme, editingDisabledBySectionLock]
+  );
+
+  const patchStripRowPaddingY = useCallback(
+    async (raw) => {
+      if (!sectionStripLayoutRow?.id || sectionStripLayoutRow.nodeType !== 'row') return;
+      if (isLinkedGlobalPlaceholder(sectionStripLayoutRow)) return;
+      if (editingDisabledBySectionLock) return;
+      if (!onUpdateNode) return;
+      const py = Math.max(0, Math.min(200, Math.round(Number(raw) || 0)));
+      const patch = { spacing: { padding: `${py}px 24px` } };
+      const style_json = mergeStyleForDevice(sectionStripLayoutRow, device, patch, siteTheme);
+      await onUpdateNode({ nodeId: sectionStripLayoutRow.id, payload: { style_json } });
+    },
+    [sectionStripLayoutRow, onUpdateNode, device, siteTheme, editingDisabledBySectionLock]
+  );
 
   const patchRootStripLayout = useCallback(
     async (strip) => {
@@ -572,6 +634,46 @@ export default function BuilderInspector({
     [sectionStripLayoutRow, editingDisabledBySectionLock, onUpdateNode]
   );
 
+  const patchHeaderRevealBarField = useCallback(
+    async (key, value) => {
+      if (!sectionStripLayoutRow || sectionStripLayoutRow.nodeType !== 'row') return;
+      if (!isHeaderRowNode(sectionStripLayoutRow)) return;
+      if (isLinkedGlobalPlaceholder(sectionStripLayoutRow)) return;
+      if (editingDisabledBySectionLock) return;
+      if (!onUpdateNode) return;
+      const prevMeta =
+        sectionStripLayoutRow.props?.meta &&
+        typeof sectionStripLayoutRow.props.meta === 'object' &&
+        !Array.isArray(sectionStripLayoutRow.props.meta)
+          ? sectionStripLayoutRow.props.meta
+          : {};
+      const prevHb = normalizeHeaderBehavior(prevMeta.headerBehavior);
+      const nextRevealBar = patchHeaderRevealBarFromFormKey(key, value, prevHb);
+      if (!nextRevealBar) return;
+      const nextHb = { ...prevHb, revealBar: nextRevealBar };
+      const nextMeta = { ...prevMeta, headerBehavior: nextHb };
+      pendingStyleFormRef.current = {
+        ...pendingStyleFormRef.current,
+        [key]: { value, ts: Date.now() },
+      };
+      setForm((prev) => ({
+        ...prev,
+        [key]: value,
+        ...headerRevealBarInspectorFormFields(nextHb),
+      }));
+      await onUpdateNode({
+        nodeId: sectionStripLayoutRow.id,
+        payload: {
+          props: {
+            ...(sectionStripLayoutRow.props || {}),
+            meta: nextMeta,
+          },
+        },
+      });
+    },
+    [sectionStripLayoutRow, editingDisabledBySectionLock, onUpdateNode]
+  );
+
   const patchHeaderLayoutMode = useCallback(
     async (mode) => {
       if (!sectionStripLayoutRow || sectionStripLayoutRow.nodeType !== 'row') return;
@@ -609,6 +711,11 @@ export default function BuilderInspector({
   // Same issue for other carousel fields (number inputs + other selects/toggles).
   // Parent often provides a new `selectedNode` object before async save completes, so we keep a short-lived draft.
   const pendingCarouselFormRef = useRef({});
+  /** Layout/size numeric fields — avoids useEffect form sync fighting InspectorNumInput (infinite setState loop). */
+  const pendingStyleFormRef = useRef({});
+  const styleChangeInFlightRef = useRef(0);
+  /** Blocks useEffect form sync while async content saves are in flight (prevents update loops). */
+  const contentChangeInFlightRef = useRef(0);
   const [jsonErrors, setJsonErrors] = useState({
     tableColumnsJson: '',
     formFieldsJson: '',
@@ -762,10 +869,25 @@ export default function BuilderInspector({
     featureTabsImageFit: 'cover',
     featureTabsImageHeightPx: '360',
     featureTabsTabAlign: 'center',
+    featureTabsBarBg: '',
+    featureTabsActiveTabColor: '',
+    featureTabsActiveTabUnderline: '',
+    featureTabsPanelBg: '',
+    featureTabsPanelBorderColor: '',
+    featureTabsPanelBorderWidthPx: 0,
+    featureTabsPanelRadiusPx: 0,
+    featureTabsBlockMaxWidthPct: 100,
     faqAccordionJson: '[]',
     headerBehaviorType: 'normal',
     headerBehaviorVariant: 'default',
     headerRevealAfter: 120,
+    headerRevealBarMaxWidthPct: 100,
+    headerRevealBarOffsetTopPx: 0,
+    headerRevealBarBackgroundColor: '',
+    headerRevealBarBorderColor: '',
+    headerRevealBarBorderWidthPx: 0,
+    headerRevealBarBorderRadiusPx: 0,
+    headerRevealBarShadow: 'none',
     carouselVariant: 'image',
     carouselAutoplay: false,
     carouselLoop: true,
@@ -777,6 +899,22 @@ export default function BuilderInspector({
     carouselPerView: '1',
     carouselPauseOnHover: true,
     carouselImageFit: 'cover',
+    splitHeroVisualFrame: 'none',
+    splitHeroVisualShadow: 'none',
+    splitHeroVisualBorder: 'show',
+    splitHeroVisualBgColor: '',
+    splitHeroVisualBorderColor: '',
+    splitHeroVisualWidthPct: '40',
+    splitHeroVisualMinHeightPx: '0',
+    splitHeroVisualOffsetXPx: '0',
+    splitHeroVisualOffsetYPx: '0',
+    splitHeroNavOffsetXPx: '0',
+    splitHeroNavOffsetYPx: '0',
+    splitHeroImageMaxHeightPx: '300',
+    splitHeroImageScalePct: '100',
+    splitHeroSectionMinHeightPx: '0',
+    splitHeroSectionMaxHeightPx: '',
+    sectionHeightPx: '560',
     carouselImageObjectPosition: 'center',
     carouselTickerDurationSec: '32',
     carouselScrollDirection: 'right',
@@ -861,6 +999,10 @@ export default function BuilderInspector({
         inferredContainerWidthMode = 'full';
       }
     }
+    const tabsEditNode =
+      selectedNode.nodeType === 'tabs' ? selectedNode : findDescendantNodeByType(selectedNode, 'tabs');
+    const tabsEditProps = tabsEditNode?.props;
+
     const nodeCarouselVariant = String(selectedNode.props?.variant || selectedNode.props?.settings?.variant || 'image');
     const pendingVariant = pendingCarouselVariantRef.current;
     const shouldUsePendingVariant =
@@ -869,13 +1011,20 @@ export default function BuilderInspector({
       pendingVariant.value !== nodeCarouselVariant &&
       Date.now() - pendingVariant.ts < 1500;
 
-    const pending = pendingCarouselFormRef.current || {};
-    const pickPending = (fieldKey, nodeValue) => {
-      const p = pending[fieldKey];
-      if (!p) return nodeValue;
-      if (Date.now() - p.ts >= 1500) return nodeValue;
-      // Always prefer the draft if it differs (including '' for number inputs while typing).
+    if (styleChangeInFlightRef.current > 0 || contentChangeInFlightRef.current > 0) return;
+
+    const pickPendingFromRef = (ref, fieldKey, nodeValue, ttlMs = 1500) => {
+      const p = ref?.[fieldKey];
+      if (!p) return null;
+      if (Date.now() - p.ts >= ttlMs) return null;
       return p.value !== nodeValue ? p.value : nodeValue;
+    };
+    const pickPending = (fieldKey, nodeValue) => {
+      const styleDraft = pickPendingFromRef(pendingStyleFormRef.current, fieldKey, nodeValue, 2000);
+      if (styleDraft != null) return styleDraft;
+      const carouselDraft = pickPendingFromRef(pendingCarouselFormRef.current, fieldKey, nodeValue, 1500);
+      if (carouselDraft != null) return carouselDraft;
+      return nodeValue;
     };
 
     setForm({
@@ -978,12 +1127,15 @@ export default function BuilderInspector({
       layoutDirection:
         style?.layout?.flexDirection || (selectedNode?.nodeType === 'row' ? 'row' : 'column'),
       layoutFlexWrap: String(style?.layout?.flexWrap || 'nowrap'),
-      layoutGapScale: (() => {
-        const gs = style?.layout?.gapScale;
-        if (typeof gs === 'string' && GAP_SCALE_IDS.includes(gs)) return gs;
-        return inferGapScaleFromPx(style?.layout?.gap, siteTheme) || '';
-      })(),
-      layoutGapPx: parsePxValue(style?.layout?.gap, 0),
+      layoutGapScale: pickPending(
+        'layoutGapScale',
+        (() => {
+          const gs = style?.layout?.gapScale;
+          if (typeof gs === 'string' && GAP_SCALE_IDS.includes(gs)) return gs;
+          return inferGapScaleFromPx(style?.layout?.gap, siteTheme) || '';
+        })()
+      ),
+      layoutGapPx: pickPending('layoutGapPx', parsePxValue(style?.layout?.gap, 0)),
       layoutAlign: style?.layout?.alignItems || 'stretch',
       layoutJustify: style?.layout?.justifyContent || 'flex-start',
       layoutAlignContent: style?.layout?.alignContent || 'stretch',
@@ -993,12 +1145,12 @@ export default function BuilderInspector({
           : String(style?.size?.width || '').endsWith('px')
             ? 'px'
             : 'auto',
-      widthPx: parsePxValue(style?.size?.width, 320),
-      heightPx: parsePxValue(style?.size?.height, 0),
+      widthPx: pickPending('widthPx', parsePxValue(style?.size?.width, 320)),
+      heightPx: pickPending('heightPx', parsePxValue(style?.size?.height, 0)),
       containerWidthMode: inferredContainerWidthMode,
-      containerWidthPx: parsedMaxWidthPx || 1280,
+      containerWidthPx: pickPending('containerWidthPx', parsedMaxWidthPx || 1280),
       sectionWidthMode: inferredSectionWidthMode,
-      rowWidthPercent,
+      rowWidthPercent: pickPending('rowWidthPercent', rowWidthPercent),
       actionType: selectedNode.actionsJson?.onClick?.type || 'none',
       actionJson: JSON.stringify(selectedNode.actionsJson || {}, null, 2),
       menuDirection: selectedNode.props?.orientation === 'column' ? 'column' : 'row',
@@ -1058,15 +1210,9 @@ export default function BuilderInspector({
       animationDuration: Number(selectedNode.props?.animation?.duration ?? 0.6),
       animationDelay: Number(selectedNode.props?.animation?.delay ?? 0),
       carouselSlidesJson: JSON.stringify(Array.isArray(selectedNode.props?.slides) ? selectedNode.props.slides : [], null, 2),
-      featureTabsJson: JSON.stringify(
-        Array.isArray(selectedNode.props?.tabs) ? selectedNode.props.tabs : [],
-        null,
-        2
-      ),
-      featureTabsActiveId: String(selectedNode.props?.activeTabId || ''),
-      featureTabsImageFit: String(selectedNode.props?.imageFit || 'cover'),
-      featureTabsImageHeightPx: String(Number(selectedNode.props?.imageHeightPx) || 360),
-      featureTabsTabAlign: String(selectedNode.props?.tabAlign || 'center'),
+      ...(tabsEditProps
+        ? featureTabsInspectorFormFromProps(tabsEditProps, pickPending)
+        : featureTabsInspectorFormFromProps({}, pickPending)),
       faqAccordionJson: JSON.stringify(
         Array.isArray(selectedNode.props?.items) ? selectedNode.props.items : [],
         null,
@@ -1079,6 +1225,7 @@ export default function BuilderInspector({
               headerBehaviorType: hb.type,
               headerBehaviorVariant: hb.variant,
               headerRevealAfter: hb.revealAfter,
+              ...headerRevealBarInspectorFormFields(hb, pickPending),
             };
           })()
         : {}),
@@ -1126,6 +1273,30 @@ export default function BuilderInspector({
         'carouselImageFit',
         String(selectedNode.props?.imageFit || selectedNode.props?.settings?.imageFit || 'cover')
       ),
+      splitHeroVisualFrame: pickPending(
+        'splitHeroVisualFrame',
+        String(selectedNode.props?.splitHeroVisualFrame || 'none').toLowerCase() === 'card' ? 'card' : 'none'
+      ),
+      splitHeroVisualShadow: pickPending('splitHeroVisualShadow', (() => {
+        const s = String(selectedNode.props?.splitHeroVisualShadow || 'none').toLowerCase().trim();
+        return s === 'light' || s === 'medium' ? s : 'none';
+      })()),
+      splitHeroVisualBorder: pickPending('splitHeroVisualBorder', (() => {
+        const b = String(selectedNode.props?.splitHeroVisualBorder || 'show').toLowerCase().trim();
+        return b === 'none' ? 'none' : 'show';
+      })()),
+      splitHeroVisualBgColor: pickPending(
+        'splitHeroVisualBgColor',
+        String(selectedNode.props?.splitHeroVisualBgColor || '')
+      ),
+      splitHeroVisualBorderColor: pickPending(
+        'splitHeroVisualBorderColor',
+        String(selectedNode.props?.splitHeroVisualBorderColor || '')
+      ),
+      ...splitHeroFormFieldsFromProps(selectedNode.props, pickPending),
+      ...(isSplitHeroCarouselNode(selectedNode)
+        ? splitHeroTypoInspectorFormFields(selectedNode.props, pickPending)
+        : {}),
       carouselImageObjectPosition: pickPending(
         'carouselImageObjectPosition',
         String(
@@ -1191,7 +1362,22 @@ export default function BuilderInspector({
       menuItemsJson: '',
       carouselSlidesJson: '',
     });
-  }, [selectedNode, device, siteTheme]);
+  }, [selectedNode, nestedFeatureTabsNode, device, siteTheme]);
+
+  const featureTabsTarget =
+    selectedNode?.nodeType === 'tabs' ? selectedNode : nestedFeatureTabsNode;
+
+  const updateFeatureTabsProps = async (changes) => {
+    if (!featureTabsTarget?.id || !onUpdateNode) return;
+    if (isLinkedGlobalPlaceholder(featureTabsTarget)) return;
+    if (editingDisabledBySectionLock) return;
+    await onUpdateNode({
+      nodeId: featureTabsTarget.id,
+      payload: {
+        props: mergeNodePropsJsonPatch(featureTabsTarget.props || {}, changes),
+      },
+    });
+  };
 
   const updateNode = async (id, changes) => {
     if (!onUpdateNode) return;
@@ -1386,6 +1572,9 @@ export default function BuilderInspector({
       imageWidthPx: clampN(iw, 0, 2400),
       imageHeightPx: clampN(ih, 0, 2400),
       imageObjectPosition,
+      badge: typeof s.badge === 'string' ? s.badge : '',
+      buttonText: typeof s.buttonText === 'string' ? s.buttonText : '',
+      buttonUrl: typeof s.buttonUrl === 'string' ? s.buttonUrl : '',
       card: {
         title: typeof card.title === 'string' ? card.title : '',
         body: typeof card.body === 'string' ? card.body : '',
@@ -1501,6 +1690,15 @@ export default function BuilderInspector({
     if (!selectedNode) return;
     if (editingDisabledBySectionLock) return;
 
+    contentChangeInFlightRef.current += 1;
+    try {
+      await handleContentChangeInner(key, value);
+    } finally {
+      contentChangeInFlightRef.current = Math.max(0, contentChangeInFlightRef.current - 1);
+    }
+  };
+
+  const handleContentChangeInner = async (key, value) => {
     const contentTypoKeys = new Set([
       'fontSizePx',
       'fontWeight',
@@ -1509,6 +1707,44 @@ export default function BuilderInspector({
       'textColor',
       'alignment',
     ]);
+    if (key === 'splitHeroCtaStylePreset' && isSplitHeroCarouselNode(selectedNode)) {
+      const preset = String(value || '').toLowerCase();
+      const prev = splitHeroCopyTypoFromProps(selectedNode.props);
+      const nextTypo = normalizeSplitHeroCopyTypo(
+        preset === 'outline'
+          ? { ...prev, ...splitHeroCtaOutlinePreset() }
+          : {
+              ...prev,
+              ctaBackgroundColor: '',
+              ctaTextColor: '',
+              ctaBorderColor: '',
+              ctaBorderWidthPx: 0,
+              ctaFontSizePx: 0,
+              ctaBorderRadiusPx: 0,
+            }
+      );
+      await updateProps({ splitHeroCopyTypo: nextTypo });
+      setForm((prev) => ({
+        ...prev,
+        ...splitHeroTypoInspectorFormFields({ splitHeroCopyTypo: nextTypo }),
+      }));
+      return;
+    }
+
+    if (isSplitHeroCarouselNode(selectedNode) && isSplitHeroCopyStyleKey(key)) {
+      await handleStyleChange(key, value);
+      return;
+    }
+
+    if (
+      sectionStripLayoutRow &&
+      isHeaderRowNode(sectionStripLayoutRow) &&
+      isHeaderRevealBarStyleKey(key)
+    ) {
+      await patchHeaderRevealBarField(key, value);
+      return;
+    }
+
     if (contentTypoKeys.has(key)) {
       await handleStyleChange(key, value);
       return;
@@ -1584,18 +1820,10 @@ export default function BuilderInspector({
       }
     }
 
-    if (key !== 'carouselEnsureSlide0Image') {
+    if (!INSPECTOR_FORM_SKIP_OPTIMISTIC_KEYS.has(key)) {
       setForm((prev) => ({ ...prev, [key]: value }));
     }
-    if (
-      selectedNode.nodeType === 'carousel' &&
-      typeof key === 'string' &&
-      key.startsWith('carousel') &&
-      key !== 'carouselEnsureSlide0Image'
-    ) {
-      const pending = pendingCarouselFormRef.current || {};
-      pendingCarouselFormRef.current = { ...pending, [key]: { value, ts: Date.now() } };
-    }
+    recordPendingInspectorForm(pendingCarouselFormRef, key, value);
     if (key === 'text' && (selectedNode.nodeType === 'heading' || selectedNode.nodeType === 'text')) {
       const next =
         typeof value === 'string' && /<[a-z]/i.test(value)
@@ -1808,51 +2036,102 @@ export default function BuilderInspector({
         setJsonErrors((prev) => ({ ...prev, carouselSlidesJson: 'Invalid JSON format.' }));
       }
     }
-    if (key === 'featureTabsJson' && selectedNode.nodeType === 'tabs') {
-      try {
-        const parsed = JSON.parse(value || '[]');
-        if (!Array.isArray(parsed)) {
-          setJsonErrors((prev) => ({ ...prev, featureTabsJson: 'Tabs JSON must be an array.' }));
-          return;
+    if (featureTabsTarget) {
+      const ftProps = featureTabsTarget.props || {};
+      if (key === 'featureTabsJson') {
+        try {
+          const parsed = JSON.parse(value || '[]');
+          if (!Array.isArray(parsed)) {
+            setJsonErrors((prev) => ({ ...prev, featureTabsJson: 'Tabs JSON must be an array.' }));
+            return;
+          }
+          const normalized = normalizeFeatureTabs(parsed);
+          setJsonErrors((prev) => ({ ...prev, featureTabsJson: '' }));
+          await updateFeatureTabsProps({ tabs: normalized });
+        } catch {
+          setJsonErrors((prev) => ({ ...prev, featureTabsJson: 'Invalid JSON format.' }));
         }
-        const normalized = normalizeFeatureTabs(parsed);
-        setJsonErrors((prev) => ({ ...prev, featureTabsJson: '' }));
-        await updateProps({ tabs: normalized });
-      } catch {
-        setJsonErrors((prev) => ({ ...prev, featureTabsJson: 'Invalid JSON format.' }));
+        return;
       }
-    }
-    if (key === 'featureTabsActiveId' && selectedNode.nodeType === 'tabs') {
-      const id = String(value || '').trim();
-      await updateProps({ activeTabId: id });
-      return;
-    }
-    if (selectedNode.nodeType === 'tabs') {
+      if (key === 'featureTabsActiveId') {
+        const id = String(value || '').trim();
+        await updateFeatureTabsProps({ activeTabId: id });
+        return;
+      }
+      if (key === 'featureTabsAddTab') {
+        const current = normalizeFeatureTabs(ftProps.tabs);
+        const tab = newFeatureTabFromList(current);
+        const next = [...current, tab];
+        await updateFeatureTabsProps({ tabs: next, activeTabId: tab.id });
+        setForm((prevForm) => ({
+          ...prevForm,
+          featureTabsJson: JSON.stringify(next, null, 2),
+          featureTabsActiveId: tab.id,
+        }));
+        return;
+      }
+      if (key === 'featureTabsRemoveActiveTab') {
+        const activeId = String(value || ftProps.activeTabId || '').trim();
+        const current = normalizeFeatureTabs(ftProps.tabs);
+        if (current.length <= 1) return;
+        const next = current.filter((t) => t.id !== activeId);
+        const newActive = String(next[0]?.id || '');
+        await updateFeatureTabsProps({ tabs: next, activeTabId: newActive });
+        setForm((prevForm) => ({
+          ...prevForm,
+          featureTabsJson: JSON.stringify(next, null, 2),
+          featureTabsActiveId: newActive,
+        }));
+        return;
+      }
+      if (key === 'featureTabsAddBullet') {
+        const activeId = String(
+          value || form.featureTabsActiveId || ftProps.activeTabId || ''
+        ).trim();
+        const current = normalizeFeatureTabs(ftProps.tabs);
+        const next = addBulletToActiveTab(current, activeId);
+        await updateFeatureTabsProps({ tabs: next });
+        setForm((prevForm) => ({ ...prevForm, featureTabsJson: JSON.stringify(next, null, 2) }));
+        return;
+      }
+      if (key === 'featureTabsChromeReset') {
+        await updateFeatureTabsProps({ chrome: {} });
+        setForm((prevForm) => ({
+          ...prevForm,
+          ...featureTabsChromeInspectorFields({}, () => ''),
+        }));
+        return;
+      }
+      if (isFeatureTabsChromeKey(key) && key !== 'featureTabsChromeReset') {
+        const chrome = patchFeatureTabsChromeFromKey(key, value, ftProps.chrome);
+        if (chrome) await updateFeatureTabsProps({ chrome });
+        return;
+      }
       if (key === 'featureTabsTabAlign') {
         const raw = String(value || 'center').trim().toLowerCase();
         const tabAlign = raw === 'left' || raw === 'stretch' ? raw : 'center';
-        await updateProps({ tabAlign });
+        await updateFeatureTabsProps({ tabAlign });
         return;
       }
       if (key === 'featureTabsImageFit') {
         const fit = String(value || 'cover').trim().toLowerCase();
         const imageFit = fit === 'contain' || fit === 'fill' ? fit : 'cover';
-        await updateProps({ imageFit });
+        await updateFeatureTabsProps({ imageFit });
         return;
       }
       if (key === 'featureTabsImageHeightPx') {
         const n = Math.max(120, Math.min(800, Math.floor(Number(value) || 360)));
-        await updateProps({ imageHeightPx: n });
+        await updateFeatureTabsProps({ imageHeightPx: n });
         return;
       }
       if (key === 'featureTabsPatch') {
         const payload = value && typeof value === 'object' ? value : null;
         const idx = Number(payload?.index);
         const patch = payload?.patch && typeof payload.patch === 'object' ? payload.patch : null;
-        const current = Array.isArray(selectedNode.props?.tabs) ? selectedNode.props.tabs : [];
+        const current = Array.isArray(ftProps.tabs) ? ftProps.tabs : [];
         if (!Number.isInteger(idx) || idx < 0 || idx >= current.length || !patch) return;
         const next = patchFeatureTabs(current, idx, patch);
-        await updateProps({ tabs: next });
+        await updateFeatureTabsProps({ tabs: next });
         setForm((prevForm) => ({ ...prevForm, featureTabsJson: JSON.stringify(next, null, 2) }));
         return;
       }
@@ -2007,6 +2286,110 @@ export default function BuilderInspector({
         await updateCarouselMirrored({ imageFit: fit }, { imageFit: fit });
         return;
       }
+      if (key === 'splitHeroVisualFrame') {
+        const frame = String(value || 'card').toLowerCase() === 'none' ? 'none' : 'card';
+        await updateProps({ splitHeroVisualFrame: frame });
+        return;
+      }
+      if (key === 'splitHeroVisualShadow') {
+        const raw = String(value || 'none').toLowerCase().trim();
+        const shadow = raw === 'light' || raw === 'medium' ? raw : 'none';
+        await updateProps({ splitHeroVisualShadow: shadow });
+        return;
+      }
+      if (key === 'splitHeroVisualBorder') {
+        const border = String(value || 'show').toLowerCase().trim() === 'none' ? 'none' : 'show';
+        await updateProps({ splitHeroVisualBorder: border });
+        return;
+      }
+      if (key === 'splitHeroVisualBgColor') {
+        const raw = String(value ?? '').trim();
+        const next = raw === '' || /^#[0-9a-f]{3,8}$/i.test(raw) ? raw : '';
+        const cur = String(selectedNode.props?.splitHeroVisualBgColor ?? '').trim();
+        if (next === cur) return;
+        await updateProps({ splitHeroVisualBgColor: next });
+        return;
+      }
+      if (key === 'splitHeroVisualBorderColor') {
+        const raw = String(value ?? '').trim();
+        const next = raw === '' || /^#[0-9a-f]{3,8}$/i.test(raw) ? raw : '';
+        const cur = String(selectedNode.props?.splitHeroVisualBorderColor ?? '').trim();
+        if (next === cur) return;
+        await updateProps({ splitHeroVisualBorderColor: next });
+        return;
+      }
+      if (key === 'sectionHeightPx' && selectedNode.nodeType === 'carousel') {
+        const n = Math.max(200, Math.min(1200, Number(value) || 560));
+        await updateProps({ sectionHeightPx: n });
+        return;
+      }
+      if (key === 'splitHeroSectionMinHeightPx' && selectedNode.nodeType === 'carousel') {
+        const n = Math.max(0, Math.min(9999, Number(value) || 0));
+        await updateProps({ splitHeroSectionMinHeightPx: n });
+        return;
+      }
+      if (key === 'splitHeroSectionMaxHeightPx' && selectedNode.nodeType === 'carousel') {
+        const raw = String(value ?? '').trim();
+        const next = raw === '' ? '' : Math.max(0, Math.min(9999, Number(value) || 0));
+        await updateProps({ splitHeroSectionMaxHeightPx: next });
+        return;
+      }
+      if (key === 'splitHeroVisualWidthPct' && selectedNode.nodeType === 'carousel') {
+        const n = Math.max(28, Math.min(72, Math.round(Number(value) || 48)));
+        await updateProps({ splitHeroVisualWidthPct: n });
+        return;
+      }
+      if (key === 'splitHeroVisualMinHeightPx' && selectedNode.nodeType === 'carousel') {
+        const n = Math.max(0, Math.min(1200, Math.round(Number(value) || 0)));
+        await updateProps({ splitHeroVisualMinHeightPx: n });
+        return;
+      }
+      if (key === 'splitHeroVisualOffsetXPx' && selectedNode.nodeType === 'carousel') {
+        const n = Math.max(-480, Math.min(480, Math.round(Number(value) || 0)));
+        await updateProps({ splitHeroVisualOffsetXPx: n });
+        return;
+      }
+      if (key === 'splitHeroVisualOffsetYPx' && selectedNode.nodeType === 'carousel') {
+        const n = Math.max(-480, Math.min(480, Math.round(Number(value) || 0)));
+        await updateProps({ splitHeroVisualOffsetYPx: n });
+        return;
+      }
+      if (key === 'splitHeroNavOffsetXPx' && selectedNode.nodeType === 'carousel') {
+        const n = Math.max(-480, Math.min(480, Math.round(Number(value) || 0)));
+        await updateProps({ splitHeroNavOffsetXPx: n });
+        return;
+      }
+      if (key === 'splitHeroNavOffsetYPx' && selectedNode.nodeType === 'carousel') {
+        const n = Math.max(-480, Math.min(480, Math.round(Number(value) || 0)));
+        await updateProps({ splitHeroNavOffsetYPx: n });
+        return;
+      }
+      if (key === 'splitHeroImageMaxHeightPx' && selectedNode.nodeType === 'carousel') {
+        const n = Math.max(0, Math.min(1200, Math.round(Number(value) || 0)));
+        await updateProps({ splitHeroImageMaxHeightPx: n });
+        return;
+      }
+      if (key === 'splitHeroImageScalePct' && selectedNode.nodeType === 'carousel') {
+        const n = Math.max(100, Math.min(140, Math.round(Number(value) || 100)));
+        await updateProps({ splitHeroImageScalePct: n });
+        return;
+      }
+      if (key === 'splitHeroVisualLayoutPatch' && selectedNode.nodeType === 'carousel') {
+        const patch = value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+        if (!patch) return;
+        await updateProps(patch);
+        const formPatch = {};
+        for (const [k, v] of Object.entries(patch)) {
+          if (typeof k === 'string' && (k.startsWith('splitHero') || k === 'sectionHeightPx')) {
+            formPatch[k] = v;
+            recordPendingInspectorForm(pendingCarouselFormRef, k, v);
+          }
+        }
+        if (Object.keys(formPatch).length) {
+          setForm((prev) => ({ ...prev, ...formPatch }));
+        }
+        return;
+      }
       if (key === 'carouselImageObjectPosition') {
         const raw = String(value || 'center').toLowerCase().trim();
         const allowed = new Set(['center', 'top', 'bottom', 'left', 'right']);
@@ -2142,10 +2525,13 @@ export default function BuilderInspector({
         const patch = payload?.patch && typeof payload.patch === 'object' ? payload.patch : null;
         const current = Array.isArray(selectedNode.props?.slides) ? selectedNode.props.slides : [];
         if (!Number.isInteger(idx) || idx < 0 || idx >= current.length || !patch) return;
-        const next = current.map((s, i) => (i === idx ? { ...(s || {}), ...(patch || {}) } : s));
-        const normalized = next.map((s, i) => normalizeCarouselSlide(s, i));
-        await updateProps({ slides: normalized });
-        setForm((prevForm) => ({ ...prevForm, carouselSlidesJson: JSON.stringify(normalized, null, 2) }));
+        const prevNorm = normalizeCarouselSlide(current[idx], idx);
+        const merged = { ...(current[idx] || {}), ...(patch || {}) };
+        const nextNorm = normalizeCarouselSlide(merged, idx);
+        if (JSON.stringify(prevNorm) === JSON.stringify(nextNorm)) return;
+        const next = current.map((s, i) => (i === idx ? nextNorm : normalizeCarouselSlide(s, i)));
+        await updateProps({ slides: next });
+        setForm((prevForm) => ({ ...prevForm, carouselSlidesJson: JSON.stringify(next, null, 2) }));
         return;
       }
     }
@@ -2442,126 +2828,185 @@ export default function BuilderInspector({
   };
 
   const handleStyleChange = async (key, value) => {
+    if (!selectedNode) return;
     if (isLayoutLockedRow(selectedNode) && LOCKED_LAYOUT_FORM_KEYS.has(key)) return;
     if (editingDisabledBySectionLock) return;
 
-    const prevForm = form != null && typeof form === 'object' ? form : {};
-    let nextForm = { ...prevForm, [key]: value };
+    if (isSplitHeroCarouselNode(selectedNode) && isSplitHeroCopyStyleKey(key)) {
+      const patch = patchSplitHeroCopyTypoFromStyleKey(key, value, selectedNode.props);
+      if (!patch) return;
+      const recordStylePending = (fieldKey, fieldValue) => {
+        pendingStyleFormRef.current = {
+          ...pendingStyleFormRef.current,
+          [fieldKey]: { value: fieldValue, ts: Date.now() },
+        };
+      };
+      recordStylePending(key, value);
+      styleChangeInFlightRef.current += 1;
+      setForm((prev) => ({ ...prev, [key]: value }));
+      try {
+        const cur = String(
+          JSON.stringify(selectedNode.props?.splitHeroCopyTypo || {})
+        );
+        const next = String(JSON.stringify(patch.splitHeroCopyTypo || {}));
+        if (cur !== next) await updateProps(patch);
+      } finally {
+        styleChangeInFlightRef.current = Math.max(0, styleChangeInFlightRef.current - 1);
+      }
+      return;
+    }
+
+    if (
+      sectionStripLayoutRow &&
+      isHeaderRowNode(sectionStripLayoutRow) &&
+      isHeaderRevealBarStyleKey(key)
+    ) {
+      await patchHeaderRevealBarField(key, value);
+      return;
+    }
+
+    const recordStylePending = (fieldKey, fieldValue) => {
+      pendingStyleFormRef.current = {
+        ...pendingStyleFormRef.current,
+        [fieldKey]: { value: fieldValue, ts: Date.now() },
+      };
+    };
+
+    recordStylePending(key, value);
     if (key === 'layoutGapScale' && GAP_SCALE_IDS.includes(String(value))) {
-      nextForm = { ...nextForm, layoutGapPx: themeSpacingPx(siteTheme, value) };
+      recordStylePending('layoutGapPx', themeSpacingPx(siteTheme, value));
     }
     if (key === 'layoutGapPx') {
-      nextForm = { ...nextForm, layoutGapScale: '' };
+      recordStylePending('layoutGapScale', '');
     }
-    setForm(nextForm);
 
-    const built = buildInspectorStylePatch(key, nextForm, {
-      selectedNode,
-      siteTheme,
-      pageTree,
-      device,
-    });
-    if (!built?.patch || Object.keys(built.patch).length === 0) return;
+    const buildNextForm = (prevForm) => {
+      const prev = prevForm != null && typeof prevForm === 'object' ? prevForm : {};
+      let nextForm = { ...prev, [key]: value };
+      if (key === 'layoutGapScale' && GAP_SCALE_IDS.includes(String(value))) {
+        nextForm = { ...nextForm, layoutGapPx: themeSpacingPx(siteTheme, value) };
+      }
+      if (key === 'layoutGapPx') {
+        nextForm = { ...nextForm, layoutGapScale: '' };
+      }
+      return nextForm;
+    };
 
-    const isFlexLayoutContainer =
-      selectedNode?.nodeType === 'row' ||
-      selectedNode?.nodeType === 'column' ||
-      selectedNode?.nodeType === 'stack';
-    const gapScaleSel = String(nextForm.layoutGapScale || '').trim();
-    const useGapScale = GAP_SCALE_IDS.includes(gapScaleSel);
-    let baseJsonOverride = built.baseJsonOverride;
-    if (isFlexLayoutContainer && !useGapScale && (key === 'layoutGapPx' || key === 'layoutGapScale')) {
-      baseJsonOverride = stripDeviceLayoutKeysInStyleJson(
-        selectedNode.style_json,
+    const nextFormSnapshot = buildNextForm(form);
+    styleChangeInFlightRef.current += 1;
+    setForm(() => nextFormSnapshot);
+
+    try {
+      const built = buildInspectorStylePatch(key, nextFormSnapshot, {
+        selectedNode,
+        siteTheme,
+        pageTree,
         device,
-        ['gapScale'],
-        selectedNode.nodeType,
-        siteTheme
-      );
-    }
+      });
+      if (!built?.patch || Object.keys(built.patch).length === 0) return;
 
-    previewStylePatch(built.patch);
-    const style_json = mergeStyleForDevice(selectedNode, device, built.patch, siteTheme, baseJsonOverride);
-    const nodePayload = { style_json };
-    if (built.propsMetaPatch) {
-      const prevMeta =
-        selectedNode.props?.meta &&
-        typeof selectedNode.props.meta === 'object' &&
-        !Array.isArray(selectedNode.props.meta)
-          ? selectedNode.props.meta
-          : {};
-      nodePayload.props = {
-        ...selectedNode.props,
-        meta: { ...prevMeta, ...built.propsMetaPatch },
-      };
-    }
-    await updateNode(selectedNode.id, nodePayload);
+      const isFlexLayoutContainer =
+        selectedNode?.nodeType === 'row' ||
+        selectedNode?.nodeType === 'column' ||
+        selectedNode?.nodeType === 'stack';
+      const gapScaleSel = String(nextFormSnapshot.layoutGapScale || '').trim();
+      const useGapScale = GAP_SCALE_IDS.includes(gapScaleSel);
+      let baseJsonOverride = built.baseJsonOverride;
+      if (isFlexLayoutContainer && !useGapScale && (key === 'layoutGapPx' || key === 'layoutGapScale')) {
+        baseJsonOverride = stripDeviceLayoutKeysInStyleJson(
+          selectedNode.style_json,
+          device,
+          ['gapScale'],
+          selectedNode.nodeType,
+          siteTheme
+        );
+      }
 
-    const isRow = selectedNode?.nodeType === 'row';
-    const isRootLandmarkRow =
-      isRow &&
-      Array.isArray(pageTree) &&
-      pageTree.length > 0 &&
-      isRootPageRow(pageTree, selectedNode) &&
-      (isHeaderRowNode(selectedNode) || isFooterRowNode(selectedNode));
-    const rawMode = isRow ? String(nextForm.containerWidthMode || 'full') : 'full';
-    const containerMode = rawMode === 'custom' ? 'boxed' : rawMode;
-    const containerPx = Math.max(320, Math.min(2400, parsePxFromPatch(nextForm.containerWidthPx, 1200)));
+      previewStylePatch(built.patch);
+      const style_json = mergeStyleForDevice(selectedNode, device, built.patch, siteTheme, baseJsonOverride);
+      const nodePayload = { style_json };
+      if (built.propsMetaPatch) {
+        const prevMeta =
+          selectedNode.props?.meta &&
+          typeof selectedNode.props.meta === 'object' &&
+          !Array.isArray(selectedNode.props.meta)
+            ? selectedNode.props.meta
+            : {};
+        nodePayload.props = {
+          ...selectedNode.props,
+          meta: { ...prevMeta, ...built.propsMetaPatch },
+        };
+      }
+      await updateNode(selectedNode.id, nodePayload);
 
-    if (onUpdateNode && built.needsRowMeta) {
-      const prevMeta =
-        selectedNode.props?.meta &&
-        typeof selectedNode.props.meta === 'object' &&
-        !Array.isArray(selectedNode.props.meta)
-          ? selectedNode.props.meta
-          : {};
-      if (isRootLandmarkRow) {
-        const contentMode = containerMode === 'boxed' ? 'boxed' : 'full';
-        const contentMetaKey = isHeaderRowNode(selectedNode) ? 'headerContentWidth' : 'footerContentWidth';
-        const maxMetaKey = isHeaderRowNode(selectedNode) ? 'headerContentMaxWidthPx' : 'footerContentMaxWidthPx';
-        await onUpdateNode({
-          nodeId: selectedNode.id,
-          payload: {
-            props: {
-              ...selectedNode.props,
-              meta: {
-                ...prevMeta,
-                rootStripLayout: 'full',
-                [contentMetaKey]: contentMode,
-                [maxMetaKey]: containerPx,
-              },
-            },
-          },
-        });
-      } else if (
+      const isRow = selectedNode?.nodeType === 'row';
+      const isRootLandmarkRow =
         isRow &&
         Array.isArray(pageTree) &&
         pageTree.length > 0 &&
         isRootPageRow(pageTree, selectedNode) &&
-        !isHeaderRowNode(selectedNode) &&
-        !isFooterRowNode(selectedNode)
-      ) {
-        const sectionWidthMode =
-          key === 'sectionWidthMode' && String(nextForm.sectionWidthMode || '').trim()
-            ? String(nextForm.sectionWidthMode).trim()
-            : containerMode === 'boxed'
-              ? 'boxed'
-              : 'fullWidthContentBoxed';
-        await onUpdateNode({
-          nodeId: selectedNode.id,
-          payload: {
-            props: {
-              ...selectedNode.props,
-              meta: {
-                ...prevMeta,
-                rootStripLayout: containerMode === 'boxed' ? 'boxed' : 'full',
-                sectionWidthMode,
-                sectionContentMaxWidthPx: containerPx,
+        (isHeaderRowNode(selectedNode) || isFooterRowNode(selectedNode));
+      const rawMode = isRow ? String(nextFormSnapshot.containerWidthMode || 'full') : 'full';
+      const containerMode = rawMode === 'custom' ? 'boxed' : rawMode;
+      const containerPx = Math.max(320, Math.min(2400, parsePxFromPatch(nextFormSnapshot.containerWidthPx, 1200)));
+
+      if (onUpdateNode && built.needsRowMeta) {
+        const prevMeta =
+          selectedNode.props?.meta &&
+          typeof selectedNode.props.meta === 'object' &&
+          !Array.isArray(selectedNode.props.meta)
+            ? selectedNode.props.meta
+            : {};
+        if (isRootLandmarkRow) {
+          const contentMode = containerMode === 'boxed' ? 'boxed' : 'full';
+          const contentMetaKey = isHeaderRowNode(selectedNode) ? 'headerContentWidth' : 'footerContentWidth';
+          const maxMetaKey = isHeaderRowNode(selectedNode) ? 'headerContentMaxWidthPx' : 'footerContentMaxWidthPx';
+          await onUpdateNode({
+            nodeId: selectedNode.id,
+            payload: {
+              props: {
+                ...selectedNode.props,
+                meta: {
+                  ...prevMeta,
+                  rootStripLayout: 'full',
+                  [contentMetaKey]: contentMode,
+                  [maxMetaKey]: containerPx,
+                },
               },
             },
-          },
-        });
+          });
+        } else if (
+          isRow &&
+          Array.isArray(pageTree) &&
+          pageTree.length > 0 &&
+          isRootPageRow(pageTree, selectedNode) &&
+          !isHeaderRowNode(selectedNode) &&
+          !isFooterRowNode(selectedNode)
+        ) {
+          const sectionWidthMode =
+            key === 'sectionWidthMode' && String(nextFormSnapshot.sectionWidthMode || '').trim()
+              ? String(nextFormSnapshot.sectionWidthMode).trim()
+              : containerMode === 'boxed'
+                ? 'boxed'
+                : 'fullWidthContentBoxed';
+          await onUpdateNode({
+            nodeId: selectedNode.id,
+            payload: {
+              props: {
+                ...selectedNode.props,
+                meta: {
+                  ...prevMeta,
+                  rootStripLayout: containerMode === 'boxed' ? 'boxed' : 'full',
+                  sectionWidthMode,
+                  sectionContentMaxWidthPx: containerPx,
+                },
+              },
+            },
+          });
+        }
       }
+    } finally {
+      styleChangeInFlightRef.current = Math.max(0, styleChangeInFlightRef.current - 1);
     }
   };
 
@@ -2868,6 +3313,8 @@ export default function BuilderInspector({
         ) : null}
       </div>
       <div
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
         style={
           freezeInspectorPanels
             ? { opacity: 0.5, pointerEvents: 'none', userSelect: 'none' }
@@ -2884,6 +3331,14 @@ export default function BuilderInspector({
           projectId={projectId}
           pageId={pageId}
           pageTree={pageTree}
+          sectionStripLayoutRow={sectionStripLayoutRow}
+          onPatchStripRowPaddingY={patchStripRowPaddingY}
+          nestedFeatureTabsNode={nestedFeatureTabsNode}
+          onSelectFeatureTabs={
+            nestedFeatureTabsNode && typeof onSelectNode === 'function'
+              ? () => onSelectNode(nestedFeatureTabsNode.id)
+              : undefined
+          }
         />
       ) : null}
       {activeTab === 'layout' ? (
@@ -2905,6 +3360,8 @@ export default function BuilderInspector({
           onPatchHeaderLayoutMode={patchHeaderLayoutMode}
           onPatchHeaderBehavior={patchHeaderBehavior}
           onPatchSectionLayout={patchSectionLayout}
+          onPatchStripRowHeightPx={patchStripRowHeightPx}
+          disabled={editingDisabledBySectionLock}
         />
       ) : null}
       {activeTab === 'layout' ? (

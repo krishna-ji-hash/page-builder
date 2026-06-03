@@ -14,4 +14,6 @@ test('buildSplitHeroCarouselSectionRow produces split hero carousel section', ()
   assert.equal(carousel?.props?.slides?.[0]?.badge, 'New • Premium templates');
   assert.equal(carousel?.props?.showArrows, true);
   assert.equal(carousel?.props?.showDots, true);
+  assert.equal(carousel?.props?.splitHeroVisualFrame, 'none');
+  assert.equal(carousel?.props?.imageFit, 'contain');
 });

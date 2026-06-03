@@ -1,29 +1,16 @@
-'use client';
-
-import { useEffect, useRef } from 'react';
-import { bindInteractionObservers } from '@/lib/interactionScrollRuntime';
-import { bindHeaderBehaviorScroll } from '@/lib/headerBehaviorScroll';
+import LiveDocEffects from '@/components/live/LiveDocEffects';
 
 /**
- * Published / preview document root. suppressHydrationWarning avoids dev-only noise when
- * hot-reloaded client bundles briefly diverge from the server render during hydration.
+ * Published / preview document root. Server shell only — scroll observers run in LiveDocEffects
+ * so PublishedLiveTree (RSC) is not wrapped by a client boundary (fixes ticker hydration mismatch).
  */
 export default function LiveDoc({ children }) {
-  const ref = useRef(null);
-
-  useEffect(() => {
-    if (!ref.current) return undefined;
-    const unbindIx = bindInteractionObservers(ref.current);
-    const unbindHeader = bindHeaderBehaviorScroll(ref.current);
-    return () => {
-      unbindIx?.();
-      unbindHeader?.();
-    };
-  }, []);
-
   return (
-    <div ref={ref} className="live-doc" suppressHydrationWarning>
-      {children}
-    </div>
+    <>
+      <div className="live-doc" suppressHydrationWarning>
+        {children}
+      </div>
+      <LiveDocEffects />
+    </>
   );
 }

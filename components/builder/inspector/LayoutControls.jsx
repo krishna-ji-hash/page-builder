@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useBuilderTheme } from '@/context/BuilderThemeContext';
 import { buildFlexLayoutPresets } from '@/lib/flexLayoutPresets';
 import { GAP_SCALE_IDS } from '@/lib/layoutGapUtils';
@@ -44,10 +44,12 @@ function LayoutFieldLabel({ children, resetKeys, onResetLayoutKeys, disabled }) 
   );
 }
 
-function RowContentWidthControls({ form, onUpdate, isHeaderLandmark = false }) {
+function RowContentWidthControls({ form, onUpdate, isHeaderLandmark = false, disabled = false }) {
   const mode = form.containerWidthMode === 'boxed' || form.containerWidthMode === 'custom' ? 'boxed' : 'full';
   const pct = Math.min(100, Math.max(10, Number(form.rowWidthPercent) || 100));
   const maxPx = Math.min(2400, Math.max(320, Number(form.containerWidthPx) || 1200));
+  const widthRangeDragRef = useRef(false);
+  const widthPctDragRef = useRef(false);
 
   return (
     <div className="bld-field bld-field--row-content-width">
@@ -57,7 +59,7 @@ function RowContentWidthControls({ form, onUpdate, isHeaderLandmark = false }) {
           ? 'Logo, menu, and buttons stay in a centered column; the header background still spans the full screen.'
           : 'Section (row) width on the page — boxed vs full-width headers.'}
       </p>
-      <select className="bld-input" value={mode} onChange={(e) => onUpdate('containerWidthMode', e.target.value)}>
+      <select className="bld-input" value={mode} disabled={disabled} onChange={(e) => onUpdate('containerWidthMode', e.target.value)}>
         <option value="full">Full width</option>
         <option value="boxed">Boxed (max-width + centered)</option>
       </select>
@@ -69,6 +71,7 @@ function RowContentWidthControls({ form, onUpdate, isHeaderLandmark = false }) {
               min={320}
               max={2400}
               step={10}
+              disabled={disabled}
               value={maxPx}
               onChange={(n) => onUpdate('containerWidthPx', n == null ? '' : String(n))}
             />
@@ -78,8 +81,24 @@ function RowContentWidthControls({ form, onUpdate, isHeaderLandmark = false }) {
               min={480}
               max={1920}
               step={10}
+              disabled={disabled}
               value={maxPx}
-              onChange={(e) => onUpdate('containerWidthPx', e.target.value)}
+              onMouseDown={() => {
+                widthRangeDragRef.current = true;
+              }}
+              onMouseUp={() => {
+                widthRangeDragRef.current = false;
+              }}
+              onTouchStart={() => {
+                widthRangeDragRef.current = true;
+              }}
+              onTouchEnd={() => {
+                widthRangeDragRef.current = false;
+              }}
+              onChange={(e) => {
+                if (!widthRangeDragRef.current) return;
+                onUpdate('containerWidthPx', e.target.value);
+              }}
               aria-label="Max width"
             />
           </div>
@@ -93,8 +112,24 @@ function RowContentWidthControls({ form, onUpdate, isHeaderLandmark = false }) {
             min={10}
             max={100}
             step={1}
+            disabled={disabled}
             value={pct}
-            onChange={(e) => onUpdate('rowWidthPercent', e.target.value)}
+            onMouseDown={() => {
+              widthPctDragRef.current = true;
+            }}
+            onMouseUp={() => {
+              widthPctDragRef.current = false;
+            }}
+            onTouchStart={() => {
+              widthPctDragRef.current = true;
+            }}
+            onTouchEnd={() => {
+              widthPctDragRef.current = false;
+            }}
+            onChange={(e) => {
+              if (!widthPctDragRef.current) return;
+              onUpdate('rowWidthPercent', e.target.value);
+            }}
             aria-label="Section width percent"
           />
           <p className="bld-field-note">Under 100% the section is narrowed and centered (max-width %).</p>
@@ -113,6 +148,7 @@ export default function LayoutControls({
   onApplyFlexPreset,
   onResetLayoutKeys,
   onRowLayoutLockedChange,
+  disabled = false,
 }) {
   const { siteTheme } = useBuilderTheme();
   const flexPresets = useMemo(() => buildFlexLayoutPresets(siteTheme), [siteTheme]);
@@ -132,7 +168,7 @@ export default function LayoutControls({
     selectedNode?.nodeType === 'stack' || selectedNode?.nodeType === 'column' || selectedNode?.nodeType === 'row';
 
   const layoutLocked = isLayoutLockedRow(selectedNode);
-  const flexDisabled = layoutLocked;
+  const flexDisabled = layoutLocked || disabled;
   const effectiveLayoutDirection =
     (form.layoutDirection && String(form.layoutDirection).trim()) || (isRow ? 'row' : 'column');
 
@@ -148,6 +184,7 @@ export default function LayoutControls({
           form={form}
           onUpdate={onUpdate}
           isHeaderLandmark={isHeaderRowNode(selectedNode)}
+          disabled={flexDisabled}
         />
       ) : null}
       {!isFlexContainer ? (

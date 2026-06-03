@@ -54,6 +54,7 @@ import {
 import {
   headerBehaviorCssClasses,
   headerBehaviorDataAttrs,
+  headerBehaviorRenderExtras,
   resolveHeaderBehaviorFromMeta,
 } from '@/lib/headerBehavior.js';
 import {
@@ -1300,6 +1301,10 @@ function NodeRenderer({
   });
   const rowHeaderBehavior =
     node.nodeType === 'row' ? resolveHeaderBehaviorFromMeta(node.props?.meta || {}) : null;
+  const rowHeaderRevealExtras =
+    node.nodeType === 'row' && rowHeaderBehavior
+      ? headerBehaviorRenderExtras(rowHeaderBehavior)
+      : { style: {}, attrs: {} };
   const headerBehaviorClass =
     rowHeaderBehavior ? headerBehaviorCssClasses(rowHeaderBehavior) : '';
   const classNames = [
@@ -1628,6 +1633,12 @@ function NodeRenderer({
   const inlineStyle = sanitizeInlineMarginCss(
     interactionPreviewStyle || externalPreview || nodeCssLiveLayout || undefined
   );
+  const rowInlineStyle =
+    node.nodeType === 'row' &&
+    rowHeaderRevealExtras.style &&
+    Object.keys(rowHeaderRevealExtras.style).length
+      ? sanitizeInlineMarginCss({ ...inlineStyle, ...rowHeaderRevealExtras.style })
+      : inlineStyle;
   const leafInteractionShell =
     !shellCarriesLeafLayout && node.nodeType !== 'image'
       ? resolveLeafInteractionShell({ deviceStyle, previewCss: externalPreview, animationPresets })
@@ -3550,13 +3561,14 @@ function NodeRenderer({
                   node.props?.meta?.headerLayout || resolveHeaderLayoutMode(node.props?.meta || {})
                 ),
                 ...(rowHeaderBehavior ? headerBehaviorDataAttrs(rowHeaderBehavior) : {}),
+                ...rowHeaderRevealExtras.attrs,
               }
             : {})}
           {...(rowSemanticTag === 'footer' || node.props?.meta?.isFooter || node.props?.meta?.role === 'footer'
             ? { 'data-site-footer': 'true' }
             : {})}
           className={`${classNames} ${interactionPresentationClass(deviceStyle, animationPresets)} bld-node ${isSelected ? 'bld-selected' : ''}`.trim()}
-          style={inlineStyle}
+          style={rowInlineStyle}
           onClick={handleSelect}
           onClickCapture={handleSelectCapture}
           onMouseDown={maybeStartDirectMove}

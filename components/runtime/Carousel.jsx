@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import FeatureTabCanvasField from '@/components/builder/canvas/FeatureTabCanvasField';
 import { liveCarouselSlideImageAttrs } from '@/lib/liveCarouselImageAttrs';
 import { resolveTickerScrollClasses } from '@/lib/carouselTickerShared';
+import { splitHeroCopyTypoFromProps, splitHeroCopyTypoToCssVars } from '@/lib/splitHeroCopyTypography';
 
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
@@ -160,6 +161,33 @@ function slideImageStyle(slide, imageFit, globalObjectPositionCss) {
   return base;
 }
 
+function splitHeroVisualBoxStyle(slide) {
+  const w = Math.max(0, Math.round(Number(slide?.imageWidthPx) || 0));
+  const h = Math.max(0, Math.round(Number(slide?.imageHeightPx) || 0));
+  if (w <= 0 && h <= 0) return undefined;
+  return {
+    position: 'relative',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: h > 0 ? `${h}px` : w > 0 ? 'min-content' : undefined,
+    height: h > 0 ? `${h}px` : 'auto',
+    width: '100%',
+  };
+}
+
+/** Visual-only nudge: transform on shell (animation runs on .live-carousel__split-visual-media child). */
+function splitHeroVisualShellStyle(slide, offsetX, offsetY) {
+  const box = splitHeroVisualBoxStyle(slide) || {};
+  const ox = Math.round(Number(offsetX) || 0);
+  const oy = Math.round(Number(offsetY) || 0);
+  const out = { ...box };
+  if (ox !== 0 || oy !== 0) {
+    out.transform = `translate(${ox}px, ${oy}px)`;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 function normOverlayKey(s) {
   return String(s || '')
     .trim()
@@ -283,6 +311,17 @@ export default function Carousel({
   const isTickerOrMarquee = isTickerVariant || isMarqueeVariant;
   const isLogoVariant = variantKey === 'logo';
   const isSplitHeroVariant = variantKey === 'splithero';
+  const splitHeroVisualFrameRaw = String(restProps?.splitHeroVisualFrame ?? 'none')
+    .toLowerCase()
+    .trim();
+  const splitHeroVisualCard = isSplitHeroVariant && splitHeroVisualFrameRaw === 'card';
+  const splitHeroShadowRaw = String(restProps?.splitHeroVisualShadow ?? 'none').toLowerCase().trim();
+  const splitHeroShadowClass =
+    isSplitHeroVariant && (splitHeroShadowRaw === 'light' || splitHeroShadowRaw === 'medium')
+      ? `live-carousel--split-shadow-${splitHeroShadowRaw}`
+      : 'live-carousel--split-shadow-none';
+  const splitHeroBorderNone =
+    isSplitHeroVariant && String(restProps?.splitHeroVisualBorder ?? 'show').toLowerCase().trim() === 'none';
   const imageFitRaw = restProps?.imageFit ?? settings?.imageFit ?? 'cover';
   const imageFitBase = String(imageFitRaw || 'cover').toLowerCase() === 'contain' ? 'contain' : 'cover';
   const imageFit = isLogoVariant ? 'contain' : imageFitBase;
@@ -564,12 +603,51 @@ export default function Carousel({
       .toLowerCase()
       .trim();
     const isFade = transitionEffectRaw === 'fade';
+    const visualWidthPct = clamp(
+      Math.round(Number(restProps?.splitHeroVisualWidthPct) || 48),
+      28,
+      72
+    );
+    const visualMinH = Math.round(Number(restProps?.splitHeroVisualMinHeightPx) || 0);
+    const visualOffsetX = clamp(Math.round(Number(restProps?.splitHeroVisualOffsetXPx) || 0), -480, 480);
+    const visualOffsetY = clamp(Math.round(Number(restProps?.splitHeroVisualOffsetYPx) || 0), -480, 480);
+    const navOffsetX = clamp(Math.round(Number(restProps?.splitHeroNavOffsetXPx) || 0), -480, 480);
+    const navOffsetY = clamp(Math.round(Number(restProps?.splitHeroNavOffsetYPx) || 0), -480, 480);
+    const imageMaxH = Math.round(Number(restProps?.splitHeroImageMaxHeightPx) ?? 300);
+    const imageScalePct = clamp(Math.round(Number(restProps?.splitHeroImageScalePct) || 100), 100, 140);
+    const sectionMinH = Math.round(Number(restProps?.splitHeroSectionMinHeightPx) || 0);
+    const sectionMaxH = Math.round(Number(restProps?.splitHeroSectionMaxHeightPx) || 0);
     const splitVars = {
       '--carousel-gap': `${cfg.gapPx}px`,
       '--carousel-per-view': '1',
       '--carousel-speed': `${cfg.speedMs}ms`,
       '--carousel-easing': transitionEasingCss,
       '--carousel-image-fit': imageFit,
+      '--split-hero-grid-columns': `minmax(0, ${100 - visualWidthPct}fr) minmax(0, ${visualWidthPct}fr)`,
+    };
+    if (visualMinH > 0) splitVars['--split-hero-visual-min-height'] = `${visualMinH}px`;
+    splitVars['--split-hero-visual-offset-x'] = `${visualOffsetX}px`;
+    splitVars['--split-hero-visual-offset-y'] = `${visualOffsetY}px`;
+    splitVars['--split-hero-nav-offset-x'] = `${navOffsetX}px`;
+    splitVars['--split-hero-nav-offset-y'] = `${navOffsetY}px`;
+    if (imageMaxH > 0) splitVars['--split-hero-image-max-height'] = `${imageMaxH}px`;
+    if (imageScalePct > 100) splitVars['--split-hero-image-scale'] = String(imageScalePct / 100);
+    Object.assign(splitVars, splitHeroCopyTypoToCssVars(splitHeroCopyTypoFromProps(restProps)));
+    const bleedPad = Math.max(0, visualOffsetY, navOffsetY);
+    if (bleedPad > 0) splitVars['--split-hero-pad-bottom'] = `${bleedPad + 32}px`;
+    if (sectionMinH > 0) splitVars['--split-hero-section-min-height'] = `${sectionMinH}px`;
+    if (sectionMaxH > 0) splitVars['--split-hero-section-max-height'] = `${sectionMaxH}px`;
+    const visualBg = String(restProps?.splitHeroVisualBgColor || '').trim();
+    const visualBorderColor = String(restProps?.splitHeroVisualBorderColor || '').trim();
+    const hasCustomVisualBg = /^#[0-9a-f]{3,8}$/i.test(visualBg);
+    if (hasCustomVisualBg) splitVars['--split-hero-visual-bg'] = visualBg;
+    if (/^#[0-9a-f]{3,8}$/i.test(visualBorderColor)) {
+      splitVars['--split-hero-visual-border-color'] = visualBorderColor;
+    }
+    const splitVisualDataAttrs =
+      !splitHeroVisualCard && hasCustomVisualBg ? { 'data-split-hero-custom-bg': 'true' } : {};
+    const splitPanelGridStyle = {
+      gridTemplateColumns: `minmax(0, ${100 - visualWidthPct}fr) minmax(0, ${visualWidthPct}fr)`,
     };
     const handleSplitHeroImageFile = (slideId, event) => {
       const file = event.target.files?.[0];
@@ -577,6 +655,54 @@ export default function Carousel({
       if (!file || !slideId) return;
       onSlideImageFile?.(slideId, file);
     };
+    const splitNav =
+      (cfg.arrows && safeSlides.length > 1) || (cfg.dots && pages > 1) ? (
+        <div className="live-carousel__split-nav" role="group" aria-label="Carousel navigation">
+          {cfg.arrows && safeSlides.length > 1 ? (
+            <button
+              type="button"
+              className="live-carousel__split-arrow"
+              onClick={(event) => {
+                event.stopPropagation();
+                prev();
+              }}
+              aria-label="Previous slide"
+            >
+              ‹
+            </button>
+          ) : null}
+          {cfg.dots && pages > 1 ? (
+            <div className="live-carousel__split-dots" aria-label="Slides">
+              {Array.from({ length: pages }).map((_, i) => (
+                <button
+                  key={String(i)}
+                  type="button"
+                  className={`live-carousel__split-dot ${i === activeDotIndex ? 'is-active' : ''}`.trim()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setIndex(i);
+                  }}
+                  aria-label={`Go to slide ${i + 1}`}
+                  aria-pressed={i === activeDotIndex}
+                />
+              ))}
+            </div>
+          ) : null}
+          {cfg.arrows && safeSlides.length > 1 ? (
+            <button
+              type="button"
+              className="live-carousel__split-arrow"
+              onClick={(event) => {
+                event.stopPropagation();
+                next();
+              }}
+              aria-label="Next slide"
+            >
+              ›
+            </button>
+          ) : null}
+        </div>
+      ) : null;
     const renderSplitPanel = (slide, slideIndex) => {
       const badge = splitHeroBadgeLabel(slide);
       const title = splitHeroTitle(slide);
@@ -587,8 +713,10 @@ export default function Carousel({
         slideIndex,
         isFirstVisible: slideIndex === activeDotIndex,
       });
+      const customImgSize =
+        Math.round(Number(slide?.imageWidthPx) || 0) > 0 || Math.round(Number(slide?.imageHeightPx) || 0) > 0;
       return (
-        <div className="live-carousel__split-panel-inner">
+        <div className="live-carousel__split-panel-inner" style={splitPanelGridStyle}>
           <div
             className={`live-carousel__split-copy${canvasEditSplitHero ? ' live-carousel__split-copy--editable' : ''}`}
             onPointerDown={canvasEditSplitHero ? stopSplitHeroCanvasBubble : undefined}
@@ -657,106 +785,87 @@ export default function Carousel({
                 </a>
               )
             ) : null}
+            {splitNav}
           </div>
           <div
-            className={`live-carousel__split-visual${canvasEditSplitHero ? ' live-carousel__split-visual--editable' : ''}`}
+            className={`live-carousel__split-visual${canvasEditSplitHero ? ' live-carousel__split-visual--editable' : ''}${customImgSize ? ' live-carousel__split-visual--custom-size' : ''}`}
+            style={splitHeroVisualShellStyle(slide, visualOffsetX, visualOffsetY)}
+            {...splitVisualDataAttrs}
             onPointerDown={canvasEditSplitHero ? stopSplitHeroCanvasBubble : undefined}
           >
-            {slide.imageSrc ? (
-              <img
-                className="live-carousel__split-img"
-                src={slide.imageSrc}
-                alt={slide.imageAlt || ''}
-                style={slideImageStyle(slide, imageFit, imageObjectPosition)}
-                {...imgAttrs}
-              />
-            ) : (
-              <div className="live-carousel__split-img-placeholder" aria-hidden="true">
-                Image
-              </div>
-            )}
-            {canvasEditSplitHero ? (
-              <>
-                <input
-                  ref={splitHeroImageInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="live-carousel__split-image-input"
-                  aria-hidden
-                  tabIndex={-1}
-                  onChange={(event) => handleSplitHeroImageFile(slideId, event)}
+            <div className="live-carousel__split-visual-media">
+              {slide.imageSrc ? (
+                <img
+                  className={`live-carousel__split-img${customImgSize ? ' live-carousel__split-img--custom-size' : ''}`.trim()}
+                  src={slide.imageSrc}
+                  alt={slide.imageAlt || ''}
+                  style={slideImageStyle(slide, imageFit, imageObjectPosition)}
+                  {...imgAttrs}
                 />
-                <button
-                  type="button"
-                  className="live-carousel__split-image-btn"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    splitHeroImageInputRef.current?.click();
-                  }}
+              ) : (
+                <div
+                  className={`live-carousel__split-img-placeholder${canvasEditSplitHero ? ' live-carousel__split-img-placeholder--editable' : ''}`}
+                  aria-hidden={!canvasEditSplitHero}
+                  role={canvasEditSplitHero ? 'button' : undefined}
+                  tabIndex={canvasEditSplitHero ? 0 : undefined}
+                  onClick={
+                    canvasEditSplitHero
+                      ? (event) => {
+                          event.stopPropagation();
+                          splitHeroImageInputRef.current?.click();
+                        }
+                      : undefined
+                  }
+                  onKeyDown={
+                    canvasEditSplitHero
+                      ? (event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            splitHeroImageInputRef.current?.click();
+                          }
+                        }
+                      : undefined
+                  }
                 >
-                  Change image
-                </button>
-              </>
-            ) : null}
+                  {canvasEditSplitHero ? 'Click here to upload image' : 'Image'}
+                </div>
+              )}
+              {canvasEditSplitHero ? (
+                <>
+                  <input
+                    ref={splitHeroImageInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="live-carousel__split-image-input"
+                    aria-hidden
+                    tabIndex={-1}
+                    onChange={(event) => handleSplitHeroImageFile(slideId, event)}
+                  />
+                  <button
+                    type="button"
+                    className="live-carousel__split-image-btn"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      splitHeroImageInputRef.current?.click();
+                    }}
+                  >
+                    Change image
+                  </button>
+                </>
+              ) : null}
+            </div>
           </div>
         </div>
       );
     };
-    const splitNav =
-      (cfg.arrows && safeSlides.length > 1) || (cfg.dots && pages > 1) ? (
-        <div className="live-carousel__split-nav" role="group" aria-label="Carousel navigation">
-          {cfg.arrows && safeSlides.length > 1 ? (
-            <button
-              type="button"
-              className="live-carousel__split-arrow"
-              onClick={(event) => {
-                event.stopPropagation();
-                prev();
-              }}
-              aria-label="Previous slide"
-            >
-              ‹
-            </button>
-          ) : null}
-          {cfg.dots && pages > 1 ? (
-            <div className="live-carousel__split-dots" aria-label="Slides">
-              {Array.from({ length: pages }).map((_, i) => (
-                <button
-                  key={String(i)}
-                  type="button"
-                  className={`live-carousel__split-dot ${i === activeDotIndex ? 'is-active' : ''}`.trim()}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setIndex(i);
-                  }}
-                  aria-label={`Go to slide ${i + 1}`}
-                  aria-pressed={i === activeDotIndex}
-                />
-              ))}
-            </div>
-          ) : null}
-          {cfg.arrows && safeSlides.length > 1 ? (
-            <button
-              type="button"
-              className="live-carousel__split-arrow"
-              onClick={(event) => {
-                event.stopPropagation();
-                next();
-              }}
-              aria-label="Next slide"
-            >
-              ›
-            </button>
-          ) : null}
-        </div>
-      ) : null;
 
     const activeSlide = safeSlides[activeDotIndex] ?? safeSlides[0];
 
     return (
       <section
         style={{ ...(style || {}), ...splitVars }}
-        className={`live-carousel live-carousel--splitHero ${isFade ? 'is-fade' : 'is-slide'} ${isPaused ? 'is-paused' : ''} ${canvasEditSplitHero ? 'live-carousel--builder' : ''}`.trim()}
+        className={`live-carousel live-carousel--splitHero ${isFade ? 'is-fade' : 'is-slide'} ${isPaused ? 'is-paused' : ''} ${splitHeroVisualCard ? 'live-carousel--split-visual-card' : ''} ${splitHeroBorderNone ? 'live-carousel--split-visual-border-none' : ''} ${splitHeroShadowClass} ${canvasEditSplitHero ? 'live-carousel--builder' : ''}`.trim()}
         aria-label="Split hero carousel"
         aria-roledescription="carousel"
         tabIndex={0}
@@ -766,7 +875,7 @@ export default function Carousel({
       >
         {canvasEditSplitHero ? (
           <p className="live-carousel__split-builder-hint" aria-hidden>
-            Click text to edit · use dots to switch slides · hover image for Change image
+            Click text to edit · Change image button to replace · Content → Right side size
           </p>
         ) : null}
         <div className="live-carousel__split-viewport live-carousel__viewport">
@@ -778,7 +887,6 @@ export default function Carousel({
             {renderSplitPanel(activeSlide, activeDotIndex)}
           </article>
         </div>
-        {splitNav}
       </section>
     );
   }

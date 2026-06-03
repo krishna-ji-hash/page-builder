@@ -56,9 +56,11 @@ test('liveRenderer is the shared leaf pipeline', () => {
   assert.match(read('components/builder/BuilderCanvas.jsx'), /liveRenderer|builderLiveParity/);
 });
 
-test('interaction scroll observers bind in LiveDoc and builder canvas mirror', () => {
+test('interaction scroll observers bind in LiveDocEffects and builder canvas mirror', () => {
   const observerCleanup = /const unbindIx = bindInteractionObservers\([^)]+\)[\s\S]*return \(\) => \{[\s\S]*unbindIx\?\.\(\)/;
-  assert.match(read('components/live/LiveDoc.jsx'), observerCleanup);
+  assert.match(read('components/live/LiveDocEffects.jsx'), observerCleanup);
+  assert.match(read('components/live/LiveDoc.jsx'), /LiveDocEffects/);
+  assert.doesNotMatch(read('components/live/LiveDoc.jsx'), /^'use client'/m);
   const canvas = read('components/builder/BuilderCanvas.jsx');
   assert.match(canvas, /bindInteractionObservers/);
   assert.match(canvas, observerCleanup);

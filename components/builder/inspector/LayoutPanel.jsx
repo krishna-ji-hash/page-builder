@@ -14,6 +14,16 @@ import { resolveHeaderLayoutMode } from '@/lib/headerLayoutMode';
 import { resolveRootStripLayout, resolveSectionWidthMode } from '@/lib/livePageCssVars';
 import { SECTION_WIDTH_MODES } from '@/lib/liveContentContainer';
 import { sectionRowHasLayoutControls } from '@/lib/sectionLayout';
+import { InspectorNumField, inspectorNumStringChange } from '@/components/builder/inspector/InspectorNumeric';
+
+function rowShellHeightPxFromStyle(styleJson) {
+  const sj = styleJson && typeof styleJson === 'object' ? styleJson : {};
+  const desktop = sj.desktop && typeof sj.desktop === 'object' ? sj.desktop : sj;
+  const size = desktop.size && typeof desktop.size === 'object' ? desktop.size : {};
+  const h = size.height ?? desktop.height ?? '';
+  const m = String(h).match(/^([\d.]+)\s*px$/i);
+  return m ? Math.round(Number(m[1])) : '';
+}
 
 export default function LayoutPanel({
   selectedNode,
@@ -33,6 +43,8 @@ export default function LayoutPanel({
   onPatchHeaderLayoutMode = null,
   onPatchHeaderBehavior = null,
   onPatchSectionLayout = null,
+  onPatchStripRowHeightPx = null,
+  disabled = false,
 }) {
   if (!selectedNode) {
     return (
@@ -83,6 +95,9 @@ export default function LayoutPanel({
   const showSectionLayout =
     stripRow && sectionRowHasLayoutControls(stripRow.props?.meta) && typeof onPatchSectionLayout === 'function';
   const layoutHint = `Layout applies to ${deviceLabel} only — other breakpoints keep their own overrides.`;
+  const isSplitHeroCarousel =
+    selectedNode?.nodeType === 'carousel' && selectedNode?.props?.variant === 'splitHero';
+  const splitHeroParentRow = isSplitHeroCarousel ? stripRow : null;
 
   return (
     <InspectorPanel title="Layout">
@@ -105,6 +120,80 @@ export default function LayoutPanel({
       {isForm && typeof onContentChange === 'function' ? (
         <InspectorSection title="Form spacing" keywords="form fields gap">
           <FormSpacingControls selectedNode={selectedNode} onChange={onContentChange} />
+        </InspectorSection>
+      ) : null}
+
+      {isSplitHeroCarousel ? (
+        <InspectorSection title="Split hero section" defaultOpen keywords="height row shell">
+          <p className="bld-field-note" style={{ marginTop: 0, marginBottom: 8 }}>
+            <strong>Section height</strong> is the <strong>parent section row</strong> in the tree (the block with the blue outline), not this carousel node.
+          </p>
+          <ol className="bld-field-note" style={{ marginTop: 0, marginBottom: 8, paddingLeft: 18, margin: '0 0 8px' }}>
+            <li>Select the <strong>section row</strong> in the left tree (above the carousel).</li>
+            <li>Open <strong>Layout → Size</strong> and set <strong>HEIGHT (PX)</strong> — that controls overall block height.</li>
+            <li>Or use <strong>Row shell height</strong> below when the parent row is detected.</li>
+            <li>Reduce <strong>vertical padding</strong> on that row if the block still looks too tall.</li>
+          </ol>
+          <InspectorNumField
+            id="split-hero-template-height"
+            label="Template default height (px)"
+            min={200}
+            max={1200}
+            value={selectedNode.props?.sectionHeightPx ?? 560}
+            disabled={disabled || typeof onContentChange !== 'function'}
+            onChange={
+              typeof onContentChange === 'function'
+                ? inspectorNumStringChange(onContentChange, 'sectionHeightPx')
+                : undefined
+            }
+          />
+          <p className="bld-field-note">Used when inserting new Split Hero sections from the library.</p>
+          {splitHeroParentRow ? (
+            <InspectorNumField
+              id="split-hero-row-shell-height"
+              label="Row shell height (px)"
+              min={0}
+              max={9999}
+              value={rowShellHeightPxFromStyle(splitHeroParentRow.style_json)}
+              placeholder="auto"
+              disabled={disabled || typeof onPatchStripRowHeightPx !== 'function'}
+              onChange={onPatchStripRowHeightPx}
+            />
+          ) : (
+            <p className="bld-field-note" style={{ marginTop: 8, color: 'var(--bld-danger, #f87171)' }}>
+              No section row found above this carousel in the tree. Wrap the carousel in a section row, then set height on that row.
+            </p>
+          )}
+          <p className="bld-field-note">Row shell height updates the parent row (blue outline). 0 = auto.</p>
+          <InspectorNumField
+            id="split-hero-section-min-height"
+            label="Section min height (px)"
+            min={0}
+            max={9999}
+            value={selectedNode.props?.splitHeroSectionMinHeightPx ?? 0}
+            placeholder="0 = live CSS 420px floor"
+            disabled={disabled || typeof onContentChange !== 'function'}
+            onChange={
+              typeof onContentChange === 'function'
+                ? inspectorNumStringChange(onContentChange, 'splitHeroSectionMinHeightPx')
+                : undefined
+            }
+          />
+          <InspectorNumField
+            id="split-hero-section-max-height"
+            label="Section max height (px)"
+            min={0}
+            max={9999}
+            value={selectedNode.props?.splitHeroSectionMaxHeightPx ?? ''}
+            placeholder="optional cap"
+            disabled={disabled || typeof onContentChange !== 'function'}
+            onChange={
+              typeof onContentChange === 'function'
+                ? inspectorNumStringChange(onContentChange, 'splitHeroSectionMaxHeightPx')
+                : undefined
+            }
+          />
+          <p className="bld-field-note">Min/max apply to the carousel shell on the live site (e.g. 520 overrides the 420px CSS minimum).</p>
         </InspectorSection>
       ) : null}
 
@@ -240,6 +329,123 @@ export default function LayoutPanel({
                 />
               </div>
             ) : null}
+            {form.headerBehaviorType === 'revealOnScroll' ||
+            form.headerBehaviorType === 'mainReveal' ? (
+              <div className="bld-field">
+                <span className="bld-label">Reveal bar style (scroll ke baad)</span>
+                <p className="bld-field-note" style={{ marginTop: 0 }}>
+                  Top par transparent rehta hai; scroll par ye bar solid dikhegi.
+                </p>
+                <div className="bld-field-grid">
+                  <InspectorNumField
+                    id="header-reveal-bar-width"
+                    label="Bar width (% viewport)"
+                    min={40}
+                    max={100}
+                    value={form.headerRevealBarMaxWidthPct ?? 100}
+                    onChange={(n) => onChange('headerRevealBarMaxWidthPct', String(n ?? 100))}
+                  />
+                  <InspectorNumField
+                    id="header-reveal-bar-offset"
+                    label="Top offset (px)"
+                    min={0}
+                    max={48}
+                    value={form.headerRevealBarOffsetTopPx ?? 0}
+                    onChange={(n) => onChange('headerRevealBarOffsetTopPx', String(n ?? 0))}
+                  />
+                  <div className="bld-field">
+                    <label className="bld-label" htmlFor="header-reveal-bar-bg">
+                      Background color
+                    </label>
+                    <input
+                      id="header-reveal-bar-bg"
+                      type="color"
+                      className="bld-input"
+                      value={
+                        /^#[0-9a-f]{6}$/i.test(String(form.headerRevealBarBackgroundColor || ''))
+                          ? form.headerRevealBarBackgroundColor
+                          : '#ffffff'
+                      }
+                      onChange={(e) => onChange('headerRevealBarBackgroundColor', e.target.value)}
+                      onMouseDown={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                  <div className="bld-field">
+                    <label className="bld-label" htmlFor="header-reveal-bar-border">
+                      Border color
+                    </label>
+                    <input
+                      id="header-reveal-bar-border"
+                      type="color"
+                      className="bld-input"
+                      value={
+                        /^#[0-9a-f]{6}$/i.test(String(form.headerRevealBarBorderColor || ''))
+                          ? form.headerRevealBarBorderColor
+                          : '#e2e8f0'
+                      }
+                      onChange={(e) => onChange('headerRevealBarBorderColor', e.target.value)}
+                      onMouseDown={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                  <InspectorNumField
+                    id="header-reveal-bar-border-w"
+                    label="Border width (px)"
+                    min={0}
+                    max={8}
+                    value={form.headerRevealBarBorderWidthPx ?? 0}
+                    onChange={(n) => onChange('headerRevealBarBorderWidthPx', String(n ?? 0))}
+                  />
+                  <InspectorNumField
+                    id="header-reveal-bar-radius"
+                    label="Corner radius (px)"
+                    min={0}
+                    max={48}
+                    value={form.headerRevealBarBorderRadiusPx ?? 0}
+                    onChange={(n) => onChange('headerRevealBarBorderRadiusPx', String(n ?? 0))}
+                  />
+                  <div className="bld-field">
+                    <label className="bld-label" htmlFor="header-reveal-bar-shadow">
+                      Shadow
+                    </label>
+                    <select
+                      id="header-reveal-bar-shadow"
+                      className="bld-input"
+                      value={form.headerRevealBarShadow || 'none'}
+                      onChange={(e) => onChange('headerRevealBarShadow', e.target.value)}
+                    >
+                      <option value="none">None</option>
+                      <option value="light">Light</option>
+                      <option value="medium">Medium</option>
+                    </select>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+                  <button
+                    type="button"
+                    className="bld-chip"
+                    onClick={() => {
+                      onChange('headerRevealBarMaxWidthPct', '100');
+                      onChange('headerRevealBarBorderRadiusPx', '0');
+                      onChange('headerRevealBarBorderWidthPx', '0');
+                    }}
+                  >
+                    Full width flat
+                  </button>
+                  <button
+                    type="button"
+                    className="bld-chip"
+                    onClick={() => {
+                      onChange('headerRevealBarMaxWidthPct', '92');
+                      onChange('headerRevealBarBorderRadiusPx', '16');
+                      onChange('headerRevealBarBorderWidthPx', '1');
+                      onChange('headerRevealBarShadow', 'light');
+                    }}
+                  >
+                    Floating pill
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </>
         ) : null}
         <LayoutControls
@@ -251,11 +457,12 @@ export default function LayoutPanel({
           onApplyFlexPreset={onApplyFlexPreset}
           onResetLayoutKeys={onResetLayoutKeys}
           onRowLayoutLockedChange={onRowLayoutLockedChange}
+          disabled={disabled}
         />
       </InspectorSection>
 
       <InspectorSection title="Display & position" keywords="display overflow z-index position order flex grow">
-        <ProLayoutFields form={form} onUpdate={onChange} onResetLayoutKeys={onResetLayoutKeys} />
+        <ProLayoutFields form={form} onUpdate={onChange} onResetLayoutKeys={onResetLayoutKeys} disabled={disabled} />
       </InspectorSection>
 
       <InspectorSection title="Size" defaultOpen keywords="width height min max">
@@ -264,6 +471,7 @@ export default function LayoutPanel({
           onUpdate={onChange}
           onResetLayoutKeys={onResetLayoutKeys}
           selectedNode={selectedNode}
+          disabled={disabled}
         />
         {stripRow ? (
           <InspectorTipChips

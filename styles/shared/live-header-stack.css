@@ -17,6 +17,16 @@
   gap: 0;
 }
 
+/* Overlay behaviors: pin to viewport without 100vw bleed (scrollbar gutter gap on the right). */
+.live-header-stack:has(> [data-header-behavior-type='mainReveal']),
+.live-header-stack:has(> [data-header-behavior-type='revealOnScroll']),
+.live-header-stack:has(> [data-header-behavior-type='fixed']) {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
 .live-doc > .live-header-stack {
   margin-bottom: 0;
 }
@@ -31,6 +41,28 @@
   top: auto !important;
   transform: none !important;
   box-shadow: none;
+}
+
+/* Overlay header behaviors keep fixed/reveal positioning (avoid double header height on scroll). */
+.live-header-stack > :is(header.live-node, [data-site-header='true'])[data-header-behavior-type='mainReveal'],
+.live-header-stack > :is(header.live-node, [data-site-header='true'])[data-header-behavior-type='revealOnScroll'],
+.live-header-stack > :is(header.live-node, [data-site-header='true'])[data-header-behavior-type='fixed'] {
+  position: fixed !important;
+  top: 0;
+  left: 0;
+  right: 0;
+  width: 100% !important;
+  z-index: 5000 !important;
+}
+
+.live-header-stack > .live-header-behavior--role-reveal:not(.is-header-reveal-visible) {
+  pointer-events: none;
+  visibility: hidden;
+  max-height: 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  padding-block: 0 !important;
+  margin: 0 !important;
 }
 
 .live-site[data-sticky-header='true'] .live-header-stack > :is(header.live-node, [data-site-header='true']):last-child {

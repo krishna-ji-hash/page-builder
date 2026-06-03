@@ -6,6 +6,7 @@ import {
   tickerFallbackLabel,
   tickerSlideImgStyle,
 } from '@/lib/carouselTickerShared';
+import { liveCarouselSlideImageAttrs } from '@/lib/liveCarouselImageAttrs';
 
 /**
  * Server-rendered logo ticker / marquee (CSS animation only).
@@ -33,6 +34,7 @@ export default function CarouselTickerStatic({
 
   return (
     <section
+      suppressHydrationWarning
       style={{
         ...(style || {}),
         '--carousel-gap': `${gapPx}px`,
@@ -63,7 +65,7 @@ export default function CarouselTickerStatic({
         {!isMarqueeVariant ? (
           <div className="live-carousel__ticker-row">
             <div className={`live-carousel__ticker-track ${row2TrackClass}`.trim()}>
-              {tickerDupSlides.map(({ slide, key }) => (
+              {tickerDupSlides.map(({ slide, key }, slideIndex) => (
                 <div key={`${key}-b`} className="live-carousel__ticker-card">
                   {slide.imageSrc ? (
                     <img
@@ -71,6 +73,10 @@ export default function CarouselTickerStatic({
                       src={slide.imageSrc}
                       alt={slide.imageAlt || ''}
                       style={tickerSlideImgStyle(slide)}
+                      {...liveCarouselSlideImageAttrs(slide, {
+                        slideIndex,
+                        isFirstVisible: slideIndex === 0,
+                      })}
                     />
                   ) : (
                     <span className="live-carousel__ticker-fallback">{tickerFallbackLabel(slide) || '\u00a0'}</span>

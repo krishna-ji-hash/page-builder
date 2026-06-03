@@ -13,6 +13,9 @@
   left: 0;
   right: 0;
   width: 100%;
+  max-width: none;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
   z-index: 5000 !important;
 }
 
@@ -42,6 +45,17 @@
 .live-header-behavior--role-main.is-header-main-hidden {
   opacity: 0;
   pointer-events: none;
+  max-height: 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  margin: 0 !important;
+  padding-block: 0 !important;
+  border: none !important;
+}
+
+.live-header-behavior--role-main.is-header-main-hidden > .live-node.bld-row {
+  min-height: 0 !important;
+  padding-block: 0 !important;
 }
 
 /* Single-row main + reveal: transparent at top, solid/variant bar after scroll */
@@ -51,6 +65,9 @@
   left: 0;
   right: 0;
   width: 100%;
+  max-width: none;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
   z-index: 5000 !important;
   transition:
     transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
@@ -64,7 +81,38 @@
 }
 
 .live-header-behavior--mainReveal:not([data-header-behavior-role]).is-header-reveal-visible {
-  background: var(--color-surface, var(--token-bg-surface)) !important;
+  background: var(--header-reveal-bar-bg, var(--color-surface, var(--token-bg-surface))) !important;
+  box-shadow: var(--header-reveal-bar-shadow, none);
+  border-width: var(--header-reveal-bar-border-width, 0);
+  border-style: solid;
+  border-color: var(--header-reveal-bar-border-color, transparent);
+  border-radius: var(--header-reveal-bar-radius, 0);
+  top: var(--header-reveal-bar-offset-top, 0);
+}
+
+.live-header-behavior--mainReveal.is-header-reveal-visible[data-header-reveal-bar-contained='true']:not(
+    [data-header-behavior-role]
+  ) {
+  width: min(100%, calc(var(--header-reveal-bar-width-pct, 100) * 1vw / 100)) !important;
+  left: 50% !important;
+  right: auto !important;
+  transform: translateX(-50%);
+}
+
+.live-header-behavior--revealOnScroll.is-header-reveal-visible {
+  background: var(--header-reveal-bar-bg, var(--color-surface, var(--token-bg-surface))) !important;
+  box-shadow: var(--header-reveal-bar-shadow, none);
+  border-width: var(--header-reveal-bar-border-width, 0);
+  border-style: solid;
+  border-color: var(--header-reveal-bar-border-color, transparent);
+  border-radius: var(--header-reveal-bar-radius, 0);
+  top: var(--header-reveal-bar-offset-top, 0);
+}
+
+.live-header-behavior--revealOnScroll.is-header-reveal-visible[data-header-reveal-bar-contained='true'] {
+  width: min(100%, calc(var(--header-reveal-bar-width-pct, 100) * 1vw / 100)) !important;
+  left: calc((100% - min(100%, calc(var(--header-reveal-bar-width-pct, 100) * 1vw / 100))) / 2) !important;
+  right: auto !important;
 }
 
 .live-header-behavior--mainReveal.live-header-behavior--variant-glass.is-header-reveal-visible:not([data-header-behavior-role]) {
@@ -164,7 +212,59 @@
   padding: var(--live-header-compact-pad, 8px 20px) !important;
 }
 
-/* Fixed / reveal headers remove themselves from document flow — reserve space on next sibling */
+/*
+ * Overlay headers (fixed / reveal / mainReveal) sit on top of the hero — no layout slot.
+ * Theme “Sticky header” must not force position:sticky on these (see live-site.css).
+ * Never combine with 100vw negative margins (breaks fixed positioning → right-edge gap).
+ */
+.live-doc > :is(header.live-node, [data-site-header='true']).live-header-behavior--fixed,
+.live-doc > :is(header.live-node, [data-site-header='true']).live-header-behavior--revealOnScroll,
+.live-doc
+  > :is(header.live-node, [data-site-header='true']).live-header-behavior--mainReveal:not(
+    [data-header-behavior-role]
+  ),
+.live-header-stack > :is(header.live-node, [data-site-header='true'])[data-header-behavior-type='fixed'],
+.live-header-stack > :is(header.live-node, [data-site-header='true'])[data-header-behavior-type='revealOnScroll'],
+.live-header-stack
+  > :is(header.live-node, [data-site-header='true'])[data-header-behavior-type='mainReveal']:not(
+    [data-header-behavior-role]
+  ) {
+  width: 100% !important;
+  max-width: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+}
+
+.live-header-stack:has(> [data-header-behavior-type='mainReveal']:only-of-type),
+.live-header-stack:has(> [data-header-behavior-type='revealOnScroll']:only-of-type),
+.live-header-stack:has(> [data-header-behavior-type='fixed']:only-of-type) {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+}
+
+.live-site[data-sticky-header='true'] .live-doc > .live-header-behavior--fixed,
+.live-site[data-sticky-header='true'] .live-doc > .live-header-behavior--revealOnScroll,
+.live-site[data-sticky-header='true'] .live-doc > .live-header-behavior--mainReveal:not([data-header-behavior-role]),
+.live-site[data-sticky-header='true'] .live-header-stack > .live-header-behavior--fixed,
+.live-site[data-sticky-header='true'] .live-header-stack > .live-header-behavior--revealOnScroll,
+.live-site[data-sticky-header='true'] .live-header-stack > .live-header-behavior--mainReveal:not([data-header-behavior-role]) {
+  position: fixed !important;
+  top: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  z-index: 5000 !important;
+  box-shadow: none;
+}
+
+/* Anchor jumps only — not layout padding */
 .live-doc > .live-header-behavior--fixed + *,
 .live-doc > .live-header-behavior--revealOnScroll.is-header-reveal-visible + *,
 .live-doc > .live-header-behavior--role-reveal.is-header-reveal-visible + * {
