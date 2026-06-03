@@ -13,10 +13,13 @@ import MenuTreeEditor from '@/components/builder/inspector/MenuTreeEditor';
 import CmsBindingsPanel from '@/components/builder/inspector/CmsBindingsPanel';
 import InspectorTipChips from '@/components/builder/inspector/InspectorTipChips';
 import FeatureTabsControls from '@/components/builder/inspector/FeatureTabsControls';
+import SectionHeadingControls from '@/components/builder/inspector/SectionHeadingControls';
+import ColumnHeadingControls from '@/components/builder/inspector/ColumnHeadingControls';
 import FaqAccordionControls from '@/components/builder/inspector/FaqAccordionControls';
 import AdvancedElementControls, { isAdvancedElementNodeType } from '@/components/builder/inspector/AdvancedElementControls';
 import LogoBrandControls from '@/components/builder/inspector/LogoBrandControls';
 import InlineTextFormattingPanel from '@/components/builder/inspector/InlineTextFormattingPanel';
+import TextEffectsControls from '@/components/builder/inspector/TextEffectsControls';
 import SplitHeroImageSizeControls from '@/components/builder/inspector/SplitHeroImageSizeControls';
 import { nodeIsInsideSiteHeader, nodeLooksLikeBrandLogo } from '@/lib/headerLogo';
 import { uploadProjectMediaFile } from '@/lib/media/uploadProjectMedia';
@@ -256,7 +259,12 @@ export default function ContentPanel({
   }
 
   const isButton = selectedNode.nodeType === 'button';
-  const isTextLike = selectedNode.nodeType === 'heading' || selectedNode.nodeType === 'text' || isButton;
+  const isParagraph = selectedNode.nodeType === 'paragraph';
+  const isTextLike =
+    selectedNode.nodeType === 'heading' || selectedNode.nodeType === 'text' || isParagraph || isButton;
+  const isSectionRow = selectedNode.nodeType === 'row';
+  const isColumnOrStack =
+    selectedNode.nodeType === 'column' || selectedNode.nodeType === 'stack';
   const isImage = selectedNode.nodeType === 'image';
   const isBrandLogo =
     isImage && nodeLooksLikeBrandLogo(selectedNode, { tree: pageTree, inSiteHeader });
@@ -289,6 +297,8 @@ export default function ContentPanel({
     <div className="bld-panel" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
       <div className="bld-panel__head">Content</div>
       <CmsBindingsPanel selectedNode={selectedNode} projectId={projectId} onChange={onChange} />
+      {isSectionRow ? <SectionHeadingControls form={form} onChange={onChange} /> : null}
+      {isColumnOrStack ? <ColumnHeadingControls form={form} onChange={onChange} /> : null}
       {isDivider ? (
         <>
           <div className="bld-field">
@@ -328,8 +338,10 @@ export default function ContentPanel({
       {isTextLike ? (
         <>
           <div className="bld-field">
-            <label className="bld-label">{isButton ? 'Label' : selectedNode.nodeType === 'heading' ? 'Heading' : 'Text'}</label>
-            {selectedNode.nodeType === 'text' && form.inlineTextMode !== 'rich' ? (
+            <label className="bld-label">
+              {isButton ? 'Label' : selectedNode.nodeType === 'heading' ? 'Heading' : isParagraph ? 'Paragraph' : 'Text'}
+            </label>
+            {(selectedNode.nodeType === 'text' || isParagraph) && form.inlineTextMode !== 'rich' ? (
               <textarea
                 className="bld-input bld-textarea"
                 rows={10}
@@ -369,9 +381,10 @@ export default function ContentPanel({
               onChange={(e) => onChange('richTextHtml', e.target.value)}
             />
           </div>
+          <TextEffectsControls form={form} onChange={onChange} />
           <InspectorTipChips
             style={{ marginBottom: 12 }}
-            chips={['Double-click canvas', 'Enter new paragraph', 'Multiple <p> tags', 'Padding: Style Spacing']}
+            chips={['Double-click canvas', 'Icon + marquee work with block HTML', 'Padding: Style Spacing']}
           />
         </>
       ) : null}
@@ -1666,6 +1679,7 @@ export default function ContentPanel({
           jsonErrors={jsonErrors}
           editingViaParent={selectedNode?.nodeType !== 'tabs'}
           onFocusFeatureTabs={onSelectFeatureTabs}
+          chromeSection="content"
         />
       ) : null}
       {isAccordion ? (

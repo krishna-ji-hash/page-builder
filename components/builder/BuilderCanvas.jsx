@@ -81,7 +81,11 @@ import { appendFaqItem, patchFaqItems, resolveFaqAccordionProps } from '@/lib/fa
 import Menu from '@/components/runtime/Menu';
 import { applyBindingsToString } from '@/lib/cms/cmsBindings';
 import { isProbablyInlineHtml, sanitizeInlineLeafHtml } from '@/lib/inlineTextHtml';
-import { propsPatchForTextContent } from '@/lib/richTextNodeProps';
+import {
+  normalizeInlineTextProps,
+  propsPatchForTextContent,
+  resolveInlineTextHtml,
+} from '@/lib/richTextNodeProps';
 import {
   applyRichColorInRoot,
   execRichCommandInRoot,
@@ -230,6 +234,23 @@ function isFocusInsideFloatingToolbar() {
   return isFocusInFloatingToolbar();
 }
 
+const LIVE_MIRROR_HEADING_ROOT_SELECTOR = [
+  '.bld-demo-heading',
+  '.bld-rich-text',
+  '.bld-rich-content',
+  '.bld-rich-heading',
+  '.bld-section-title',
+  '.bld-column-title',
+].join(', ');
+
+const LIVE_MIRROR_TEXT_ROOT_SELECTOR = [
+  '.bld-demo-paragraph',
+  '.bld-demo-text',
+  '.bld-paragraph',
+  '.bld-rich-text',
+  '.bld-rich-content',
+].join(', ');
+
 function getRichTextCommandRoot({ isInlineEditing, inlineEditWrapRef, nodeElementRef, nodeType }) {
   if (isInlineEditing && inlineEditWrapRef?.current) {
     const ed = inlineEditWrapRef.current.querySelector('[contenteditable="true"], [contenteditable=""]');
@@ -237,8 +258,12 @@ function getRichTextCommandRoot({ isInlineEditing, inlineEditWrapRef, nodeElemen
   }
   const shell = nodeElementRef?.current;
   if (!shell) return null;
-  if (nodeType === 'heading') return shell.querySelector('.bld-demo-heading');
-  if (nodeType === 'text') return shell.querySelector('.bld-demo-text');
+  if (nodeType === 'heading') {
+    return shell.querySelector(LIVE_MIRROR_HEADING_ROOT_SELECTOR);
+  }
+  if (nodeType === 'text' || nodeType === 'paragraph') {
+    return shell.querySelector(LIVE_MIRROR_TEXT_ROOT_SELECTOR);
+  }
   if (nodeType === 'button') return shell.querySelector('.bld-demo-button');
   return null;
 }
@@ -509,8 +534,12 @@ function renderNodeContent(node, renderOpts = {}) {
     const anim = getRichTextAnimationStyle(node.props?.animation || {});
     const HeadingTag = normalizeHeadingTag(node.props?.tag);
     const rawText = node.props?.text || '';
+    const headingNorm = normalizeInlineTextProps(node.props || {});
     const headingHtmlMode =
-      isInlineEditing && (isProbablyInlineHtml(inlineDraftText) || isProbablyInlineHtml(rawText));
+      isInlineEditing &&
+      (headingNorm.richText.enabled ||
+        isProbablyInlineHtml(inlineDraftText) ||
+        isProbablyInlineHtml(rawText));
     if (isInlineEditing) {
       return (
         <InlineEdit
@@ -553,15 +582,21 @@ function renderNodeContent(node, renderOpts = {}) {
     const liveHeading = renderViaLive();
     if (liveHeading) return liveHeading;
   }
-  if (node.nodeType === 'text') {
+  if (node.nodeType === 'text' || node.nodeType === 'paragraph') {
+    const isParagraph = node.nodeType === 'paragraph';
+    const demoTextClass = isParagraph ? 'bld-demo-paragraph' : 'bld-demo-text';
     const anim = getRichTextAnimationStyle(node.props?.animation || {});
     const rawText = node.props?.text || '';
+    const textNorm = normalizeInlineTextProps(node.props || {});
     const textHtmlMode =
-      isInlineEditing && (isProbablyInlineHtml(inlineDraftText) || isProbablyInlineHtml(rawText));
+      isInlineEditing &&
+      (textNorm.richText.enabled ||
+        isProbablyInlineHtml(inlineDraftText) ||
+        isProbablyInlineHtml(rawText));
     if (isInlineEditing) {
       return (
         <InlineEdit
-          className="bld-inline-text-editor bld-inline-text-editor--text"
+          className={`bld-inline-text-editor bld-inline-text-editor--text${isParagraph ? ' bld-inline-text-editor--paragraph' : ''}`}
           multiline
           value={inlineDraftText}
           onChange={onInlineDraftChange}
@@ -574,14 +609,14 @@ function renderNodeContent(node, renderOpts = {}) {
       );
     }
     if (cmsBindingContext) {
-      const defaultLabel = 'Text block content';
+      const defaultLabel = isParagraph ? 'Add your paragraph text here.' : 'Text block content';
       if (isProbablyInlineHtml(rawText)) {
         const safe = sanitizeInlineLeafHtml(rawText, {
           neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPreview,
         });
         return (
           <p
-            className={`bld-demo-text ${anim.className || ''}`.trim()}
+            className={`${demoTextClass} ${anim.className || ''}`.trim()}
             style={{ ...(widgetCss || {}), ...(anim.style || {}) }}
             onDoubleClick={(event) => onInlineEditStart(node, event)}
             dangerouslySetInnerHTML={{ __html: safe || defaultLabel }}
@@ -590,7 +625,7 @@ function renderNodeContent(node, renderOpts = {}) {
       }
       return (
         <p
-          className={`bld-demo-text ${anim.className || ''}`.trim()}
+          className={`${demoTextClass} ${anim.className || ''}`.trim()}
           style={{ ...(widgetCss || {}), ...(anim.style || {}) }}
           onDoubleClick={(event) => onInlineEditStart(node, event)}
         >
@@ -1053,7 +1088,10 @@ function NodeRenderer({
   const isNodeActive = isSelected;
   const canResizeNode = isFreeMode ? true : !isContainer;
   const supportsInlineTextEdit =
-    node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'button';
+    node.nodeType === 'heading' ||
+    node.nodeType === 'text' ||
+    node.nodeType === 'paragraph' ||
+    node.nodeType === 'button';
 
   const repeatCfg =
     node?.props?.meta?.cms?.repeat && typeof node.props.meta.cms.repeat === 'object' && !Array.isArray(node.props.meta.cms.repeat)
@@ -1520,7 +1558,12 @@ function NodeRenderer({
   ) {
     nodeCss = ensureHeaderActionsVisibleCss(nodeCss);
   }
-  if (node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'rich_text') {
+  if (
+    node.nodeType === 'heading' ||
+    node.nodeType === 'text' ||
+    node.nodeType === 'paragraph' ||
+    node.nodeType === 'rich_text'
+  ) {
     nodeCss = neutralizeLeafTextCssObject(nodeCss || {}, {
       darkContentMode,
       sectionTone: ancestorSectionTone,
@@ -2177,6 +2220,11 @@ function NodeRenderer({
     };
   }, [showImageMediaToolbar, node.id, node.nodeType, node.props?.logoWidth, deviceStyle?.size?.width]);
 
+  const inlineEditDraftFromProps = (targetProps) => {
+    const norm = normalizeInlineTextProps(targetProps || {});
+    return resolveInlineTextHtml(norm) || norm.text || '';
+  };
+
   const handleInlineEditStart = (targetNode, event) => {
     if (sectionEditLocked) return;
     if (!supportsInlineTextEdit || targetNode.id !== node.id) return;
@@ -2184,13 +2232,13 @@ function NodeRenderer({
     event.stopPropagation();
     onSelectNode(node.id);
     setIsInlineEditing(true);
-    setInlineDraftText(targetNode.props?.text || '');
+    setInlineDraftText(inlineEditDraftFromProps(targetNode.props));
   };
 
   const handleInlineEditCancel = () => {
     setIsInlineEditing(false);
     isCommittingInlineEditRef.current = false;
-    setInlineDraftText(node.props?.text || '');
+    setInlineDraftText(inlineEditDraftFromProps(node.props));
   };
 
   const handleInlineEditCommit = async (targetNode) => {
@@ -2200,7 +2248,9 @@ function NodeRenderer({
     isCommittingInlineEditRef.current = true;
     let nextText = inlineDraftText;
     if (
-      (targetNode.nodeType === 'heading' || targetNode.nodeType === 'text') &&
+      (targetNode.nodeType === 'heading' ||
+        targetNode.nodeType === 'text' ||
+        targetNode.nodeType === 'paragraph') &&
       isProbablyInlineHtml(nextText)
     ) {
       nextText = sanitizeInlineLeafHtml(nextText, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist });
@@ -2210,7 +2260,8 @@ function NodeRenderer({
       isCommittingInlineEditRef.current = false;
       return;
     }
-    if ((targetNode.props?.text || '') === nextText) {
+    const prevDraft = inlineEditDraftFromProps(targetNode.props);
+    if (prevDraft === nextText) {
       isCommittingInlineEditRef.current = false;
       return;
     }
@@ -2265,7 +2316,12 @@ function NodeRenderer({
     if (!onUpdateNode) return;
 
     const nextProps = { ...node.props };
-    if (node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'button') {
+    if (
+      node.nodeType === 'heading' ||
+      node.nodeType === 'text' ||
+      node.nodeType === 'paragraph' ||
+      node.nodeType === 'button'
+    ) {
       nextProps.text = inlinePanelText;
     } else if (node.nodeType === 'image') {
       nextProps.src = inlinePanelImageSrc;
@@ -2469,7 +2525,9 @@ function NodeRenderer({
   const inlineEditBlurCommitGuard = () => toolbarColorPickerOpenRef.current;
 
   const persistRichHtmlFromCommand = async (command, value) => {
-    if (node.nodeType !== 'heading' && node.nodeType !== 'text') return false;
+    if (node.nodeType !== 'heading' && node.nodeType !== 'text' && node.nodeType !== 'paragraph') {
+      return false;
+    }
     const root = getRichTextCommandRoot({
       isInlineEditing,
       inlineEditWrapRef,
@@ -2515,7 +2573,7 @@ function NodeRenderer({
       });
       return;
     }
-    if (node.nodeType !== 'heading' && node.nodeType !== 'text') return;
+    if (node.nodeType !== 'heading' && node.nodeType !== 'text' && node.nodeType !== 'paragraph') return;
     const applied = await persistRichHtmlFromCommand('bold');
     if (!applied) {
       const current = String(deviceStyle?.typography?.fontWeight || '400');
@@ -2526,8 +2584,44 @@ function NodeRenderer({
 
   const quickRichFormat = (command, value) => async () => {
     if (sectionEditLocked) return;
-    if (node.nodeType !== 'heading' && node.nodeType !== 'text') return;
+    if (node.nodeType !== 'heading' && node.nodeType !== 'text' && node.nodeType !== 'paragraph') return;
     await persistRichHtmlFromCommand(command, value);
+  };
+
+  const quickClearFormatting = async () => {
+    if (sectionEditLocked) return;
+    if (node.nodeType !== 'heading' && node.nodeType !== 'text' && node.nodeType !== 'paragraph') return;
+    const root = getRichTextCommandRoot({
+      isInlineEditing,
+      inlineEditWrapRef,
+      nodeElementRef,
+      nodeType: node.nodeType,
+    });
+    if (!root) return;
+    restoreRichTextSelection(root);
+    if (selectionNonCollapsedInRoot(root)) {
+      execRichCommandInRoot(root, 'removeFormat');
+      execRichCommandInRoot(root, 'unlink');
+    } else {
+      root.textContent = root.textContent || '';
+    }
+    const after = sanitizeInlineLeafHtml(root.innerHTML, {
+      neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist,
+    });
+    if (isInlineEditing) {
+      setInlineDraftText(after);
+      return;
+    }
+    if (!onUpdateNode) return;
+    await onUpdateNode({
+      nodeId: node.id,
+      payload: {
+        props: {
+          ...(node.props || {}),
+          ...propsPatchForTextContent(node.props || {}, after),
+        },
+      },
+    });
   };
 
   const syncInlineEditorFromRoot = (root) => {
@@ -2557,7 +2651,7 @@ function NodeRenderer({
       root.style.setProperty('--node-text', hex);
     };
 
-    if (node.nodeType === 'heading' || node.nodeType === 'text') {
+    if (node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'paragraph') {
       if (root) {
         const result = applyRichColorInRoot(root, 'foreColor', hex);
         if (result) {
@@ -2614,7 +2708,7 @@ function NodeRenderer({
       nodeType: node.nodeType,
     });
 
-    if ((node.nodeType === 'heading' || node.nodeType === 'text') && root) {
+    if ((node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'paragraph') && root) {
       const result = applyRichColorInRoot(root, 'hiliteColor', hex);
       if (result) {
         const after = sanitizeInlineLeafHtml(result.after, {
@@ -2671,7 +2765,7 @@ function NodeRenderer({
       });
       return;
     }
-    if (node.nodeType !== 'heading' && node.nodeType !== 'text') return;
+    if (node.nodeType !== 'heading' && node.nodeType !== 'text' && node.nodeType !== 'paragraph') return;
     const next =
       typeof window !== 'undefined' ? window.prompt('Set link URL', 'https://') : null;
     if (next == null || String(next).trim() === '') return;
@@ -2710,13 +2804,14 @@ function NodeRenderer({
       return;
     }
     if (!onUpdateNode) return;
-    if ((node.props?.text || '') === text) return;
+    const prev = inlineEditDraftFromProps(node.props);
+    if (prev === text) return;
     await onUpdateNode({
       nodeId: node.id,
       payload: {
         props: {
           ...(node.props || {}),
-          text,
+          ...propsPatchForTextContent(node.props || {}, text),
         },
       },
     });
@@ -2724,7 +2819,7 @@ function NodeRenderer({
 
   const quickAdjustFontSize = async (delta) => {
     if (sectionEditLocked) return;
-    if (node.nodeType !== 'heading' && node.nodeType !== 'text') return;
+    if (node.nodeType !== 'heading' && node.nodeType !== 'text' && node.nodeType !== 'paragraph') return;
     const step = Number(delta) || 0;
     if (!step) return;
 
@@ -2770,7 +2865,7 @@ function NodeRenderer({
   const toolbarFontSizePx = readToolbarFontSizePx();
 
   const quickToggleTextWrap = async () => {
-    if (node.nodeType !== 'heading' && node.nodeType !== 'text') return;
+    if (node.nodeType !== 'heading' && node.nodeType !== 'text' && node.nodeType !== 'paragraph') return;
     const defaultWs = node.nodeType === 'text' ? 'pre-wrap' : 'normal';
     const cur = String(deviceStyle?.typography?.whiteSpace || '').trim() || defaultWs;
     const next = cur === 'nowrap' ? defaultWs : 'nowrap';
@@ -2778,7 +2873,7 @@ function NodeRenderer({
   };
 
   const textWrapIsNowrap = (() => {
-    if (node.nodeType !== 'heading' && node.nodeType !== 'text') return false;
+    if (node.nodeType !== 'heading' && node.nodeType !== 'text' && node.nodeType !== 'paragraph') return false;
     const defaultWs = node.nodeType === 'text' ? 'pre-wrap' : 'normal';
     const cur = String(deviceStyle?.typography?.whiteSpace || '').trim() || defaultWs;
     return cur === 'nowrap';
@@ -2810,7 +2905,7 @@ function NodeRenderer({
           <span className="bld-wp-toolbar__sep" aria-hidden />
         </>
       ) : null}
-      {node.nodeType === 'heading' || node.nodeType === 'text' ? (
+      {node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'paragraph' ? (
         <>
           <FontSizeStepper
             className="bld-font-size-stepper--compact"
@@ -2826,13 +2921,15 @@ function NodeRenderer({
         title="Bold"
         aria-pressed={String(deviceStyle?.typography?.fontWeight || '400') === '700'}
         onMouseDown={(event) => {
-          if (node.nodeType === 'heading' || node.nodeType === 'text') event.preventDefault();
+          if (node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'paragraph') {
+            event.preventDefault();
+          }
         }}
         onClick={quickToggleBold}
       >
         <WpIconBold />
       </button>
-      {node.nodeType === 'heading' || node.nodeType === 'text' ? (
+      {node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'paragraph' ? (
         <>
           <button
             type="button"
@@ -2868,11 +2965,26 @@ function NodeRenderer({
         className="bld-wp-toolbar__icon-btn"
         title="Insert / edit link"
         onMouseDown={(event) => {
-          if (node.nodeType === 'heading' || node.nodeType === 'text') event.preventDefault();
+          if (node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'paragraph') {
+            event.preventDefault();
+          }
         }}
         onClick={quickSetLink}
       >
         <WpIconLink />
+      </button>
+      <button
+        type="button"
+        className="bld-wp-toolbar__icon-btn bld-wp-toolbar__icon-btn--text"
+        title="Clear formatting"
+        onMouseDown={(event) => {
+          if (node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'paragraph') {
+            event.preventDefault();
+          }
+        }}
+        onClick={() => void quickClearFormatting()}
+      >
+        ✕
       </button>
       <span className="bld-wp-toolbar__sep" aria-hidden />
       <div className="bld-text-align-group bld-text-align-group--wp-toolbar" role="group" aria-label="Alignment">
@@ -2897,7 +3009,7 @@ function NodeRenderer({
           );
         })}
       </div>
-      {node.nodeType === 'heading' || node.nodeType === 'text' ? (
+      {node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'paragraph' ? (
         <>
           <span className="bld-wp-toolbar__sep" aria-hidden />
           <button
@@ -3319,7 +3431,10 @@ function NodeRenderer({
   const inlineContentPanel =
     isSelected && supportsInlineContentPanel ? (
       <form className="bld-inline-content-panel" onSubmit={handleInlinePanelSave} onClick={(e) => e.stopPropagation()}>
-        {node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'button' ? (
+        {node.nodeType === 'heading' ||
+        node.nodeType === 'text' ||
+        node.nodeType === 'paragraph' ||
+        node.nodeType === 'button' ? (
           <textarea
             className="bld-inline-content-panel__textarea"
             rows={2}

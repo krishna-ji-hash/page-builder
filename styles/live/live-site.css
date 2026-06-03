@@ -11,6 +11,7 @@
 @import '../shared/header-brand-logo.css';
 @import '../shared/live-header-stack.css';
 @import '../shared/rich-text-controls.css';
+@import '../shared/content-composer.css';
 
 .live-site {
   min-height: 100vh;
@@ -1591,7 +1592,7 @@
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(2, 6, 23, 0.55);
-  color: var(--token-border-default);
+  color: var(--carousel-arrow-color, var(--token-border-default));
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -1634,7 +1635,7 @@
   height: 8px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.25);
-  background: rgba(255, 255, 255, 0.10);
+  background: var(--carousel-dot-color, rgba(255, 255, 255, 0.1));
   cursor: pointer;
   transition:
     transform var(--motion-base) var(--ease-spring),
@@ -1655,8 +1656,15 @@
 }
 
 .live-carousel__dot.is-active {
-  background: rgba(255, 255, 255, 0.82);
+  background: var(--carousel-dot-active-color, rgba(255, 255, 255, 0.82));
   width: 18px;
+}
+
+.live-carousel__slide,
+.live-carousel__figure,
+.live-carousel--card .live-carousel__slide {
+  border-radius: var(--carousel-card-radius, 0);
+  overflow: hidden;
 }
 
 /* Card carousel variant — light surface, lifted cards (distinct from image/hero strips) */
@@ -1666,7 +1674,7 @@
 }
 .live-carousel__card-slide {
   height: 100%;
-  border-radius: 16px;
+  border-radius: var(--carousel-card-radius, 16px);
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--color-border, var(--token-border-default)) 85%, transparent);
   background: var(--color-surface, var(--token-bg-surface));

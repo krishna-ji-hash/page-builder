@@ -2,6 +2,12 @@
 
 import { useMemo, useState } from 'react';
 import { isValidNodeHierarchy } from '@/lib/builderHierarchy';
+import {
+  canQuickAddFromSelection,
+  resolveEditableInsertTarget,
+  INSERT_TARGET_MESSAGES,
+} from '@/lib/quickAddResolve';
+import { isDataDrivenCompoundWidget } from '@/lib/compoundWidgetRegistry';
 import { getWidgetsForProjectType } from '@/lib/builder/widgetRegistry';
 import { useBuilderTheme } from '@/context/BuilderThemeContext';
 import { FULL_PAGE_TEMPLATES } from '@/lib/fullPageTemplates';
@@ -15,6 +21,7 @@ import { HEADER_STARTER_CARDS } from '@/lib/headerBehavior.js';
 const ELEMENT_CARDS = [
   { id: 'heading', label: 'Heading', icon: 'H', supported: true },
   { id: 'text', label: 'Text', icon: 'TXT', supported: true },
+  { id: 'paragraph', label: 'Paragraph', icon: '¶', supported: true },
   { id: 'rich_text', label: 'Rich Text', icon: 'RT', supported: true },
   { id: 'image', label: 'Image', icon: 'IMG', supported: true },
   { id: 'button', label: 'Button', icon: 'BTN', supported: true },
@@ -198,10 +205,17 @@ function nodeTypeLabel(nodeType) {
   return 'Widget';
 }
 
-function friendlyHierarchyTitle({ nodeType, selectedNode }) {
+function friendlyHierarchyTitle({ nodeType, selectedNode, tree }) {
   const target = nodeTypeLabel(nodeType);
-  const parent = selectedNode?.nodeType ? nodeTypeLabel(selectedNode.nodeType) : 'the page';
   if (!selectedNode) return `Select a Section, Column, or Stack first to add a ${target}.`;
+  if (selectedNode?.id && tree?.length) {
+    const preview = resolveEditableInsertTarget(tree, selectedNode.id, { widgetNodeType: nodeType });
+    if (!preview.ok && preview.message) return preview.message;
+  }
+  if (isDataDrivenCompoundWidget(selectedNode.nodeType)) {
+    return INSERT_TARGET_MESSAGES.compound;
+  }
+  const parent = selectedNode?.nodeType ? nodeTypeLabel(selectedNode.nodeType) : 'the page';
   return `${target}s can only be added inside compatible containers. Current selection: ${parent}.`;
 }
 
@@ -270,7 +284,13 @@ export default function BuilderSidebar({
   const { tokens, setTokens } = useBuilderTheme();
   const hasGlobalHeader = Boolean(globalSections?.header);
   const hasGlobalFooter = Boolean(globalSections?.footer);
-  const canCreateUnderSelection = Boolean(selectedNode && validParentTypes.has(selectedNode.nodeType));
+  const canCreateUnderSelection = Boolean(
+    selectedNode && (validParentTypes.has(selectedNode.nodeType) || canQuickAddFromSelection(tree, selectedNode))
+  );
+  const insertTargetPreview = useMemo(() => {
+    if (!selectedNode?.id || !tree?.length) return null;
+    return resolveEditableInsertTarget(tree, selectedNode.id, { forLeafWidget: true });
+  }, [tree, selectedNode?.id]);
   const [collapsedLayerMap, setCollapsedLayerMap] = useState({});
   const [selectedFullPageTemplateId, setSelectedFullPageTemplateId] = useState(
     FULL_PAGE_TEMPLATES?.[0]?.id || ''
@@ -471,9 +491,13 @@ export default function BuilderSidebar({
                     Boolean(selectedNode?.id) &&
                     nodeType !== 'row' &&
                     nodeType !== 'column' &&
-                    nodeType !== 'stack';
+                    nodeType !== 'stack' &&
+                    (canQuickAddFromSelection(tree, selectedNode) ||
+                      validParentTypes.has(selectedNode.nodeType));
                   const hierarchyMatches = isValidNodeHierarchy(nodeType, parentType);
-                  const hierarchyValid = selectedNode ? (hierarchyMatches || canQuickAddWidget) : false;
+                  const hierarchyValid = selectedNode
+                    ? hierarchyMatches || canQuickAddWidget || insertTargetPreview?.ok
+                    : false;
                   const allowedWidgets = getWidgetsForProjectType(projectType || 'website');
                   const allowedByProject = Boolean(allowedWidgets[nodeType]);
                   const disabled =
@@ -496,15 +520,24 @@ export default function BuilderSidebar({
                             : !canCreateUnderSelection
                               ? 'Select a Section, Column, or Stack first'
                               : !hierarchyValid
-                                ? friendlyHierarchyTitle({ nodeType, selectedNode })
-                                : block.label
+                                ? friendlyHierarchyTitle({ nodeType, selectedNode, tree })
+                                : insertTargetPreview?.ok
+                                  ? `Add ${block.label} inside ${selectedNode.nodeType === 'stack' ? 'this stack' : 'section'}`
+                                  : block.label
                       }
                       onClick={() => {
-                        if (!block.supported) return;
+                        if (!block.supported || disabled) return;
                         const dividerExtra = block.dividerOrientation
                           ? { dividerOrientation: block.dividerOrientation }
                           : {};
-                        if (canQuickAddWidget) {
+                        const useQuick =
+                          canQuickAddWidget ||
+                          (onQuickAddNode &&
+                            selectedNode?.id &&
+                            nodeType !== 'row' &&
+                            nodeType !== 'column' &&
+                            nodeType !== 'stack');
+                        if (useQuick) {
                           onQuickAddNode({
                             targetNodeId: selectedNode.id,
                             nodeType,

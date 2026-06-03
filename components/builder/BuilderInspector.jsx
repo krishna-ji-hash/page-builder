@@ -9,7 +9,9 @@ import {
   buildInlineTextPropsPatch,
   inlineTextFormFromProps,
   isInlineTextInspectorKey,
+  isTextEffectsInspectorKey,
   propsPatchForTextContent,
+  supportsTextEffectsNodeType,
 } from '@/lib/richTextNodeProps';
 import { sanitizeInlineLeafHtml } from '@/lib/inlineTextHtml';
 import { normalizeMenuAlign, normalizeMenuVariant } from '@/lib/menuNav';
@@ -27,12 +29,22 @@ import {
   normalizeFeatureTabs,
   patchFeatureTabs,
 } from '@/lib/featureTabsDefaults';
+import { featureTabsInspectorFormFromProps } from '@/lib/featureTabsChrome';
 import {
-  featureTabsChromeInspectorFields,
-  featureTabsInspectorFormFromProps,
-  isFeatureTabsChromeKey,
-  patchFeatureTabsChromeFromKey,
-} from '@/lib/featureTabsChrome';
+  compoundChromeFormFields,
+  compoundChromeResetFormFields,
+  isCompoundChromeKey,
+  patchCompoundChromeFromKey,
+} from '@/lib/compoundChromeInspector';
+import { isCompoundWidgetType } from '@/lib/compoundWidgetRegistry';
+import {
+  columnHeadingInspectorFields,
+  isColumnHeadingInspectorKey,
+  isSectionHeadingInspectorKey,
+  patchColumnHeadingFromKey,
+  patchSectionHeadingFromKey,
+  sectionHeadingInspectorFields,
+} from '@/lib/contentComposer';
 import {
   advancedElementFormFromProps,
   advancedElementPatchFromFormKey,
@@ -169,6 +181,7 @@ function inspectorRoleLabel(node) {
   if (node.nodeType === 'logo_block') return 'Logo';
   if (node.nodeType === 'feature_list') return 'Feature list';
   if (node.nodeType === 'table_pro') return 'Table Pro';
+  if (node.nodeType === 'paragraph') return 'Paragraph';
   return 'Widget';
 }
 
@@ -852,7 +865,7 @@ export default function BuilderInspector({
     marqueeDuration: 18,
     marqueePauseOnHover: true,
     marqueeLoop: true,
-    marqueeGapPx: 0,
+    marqueeGapPx: 40,
     marqueeMobileEnabled: true,
     textBlockIconEnabled: false,
     textBlockIconName: '★',
@@ -877,6 +890,19 @@ export default function BuilderInspector({
     featureTabsPanelBorderWidthPx: 0,
     featureTabsPanelRadiusPx: 0,
     featureTabsBlockMaxWidthPct: 100,
+    sectionHeadingEnabled: false,
+    sectionHeadingEyebrow: '',
+    sectionHeadingHeading: '',
+    sectionHeadingDescription: '',
+    sectionHeadingAlign: 'center',
+    sectionHeadingTag: 'h2',
+    sectionHeadingMaxWidth: 760,
+    sectionHeadingSpacingBottom: 32,
+    columnHeadingEnabled: false,
+    columnHeadingHeading: '',
+    columnHeadingDescription: '',
+    columnHeadingAlign: 'left',
+    columnHeadingSpacingBottom: 20,
     faqAccordionJson: '[]',
     headerBehaviorType: 'normal',
     headerBehaviorVariant: 'default',
@@ -1155,6 +1181,12 @@ export default function BuilderInspector({
       actionJson: JSON.stringify(selectedNode.actionsJson || {}, null, 2),
       menuDirection: selectedNode.props?.orientation === 'column' ? 'column' : 'row',
       menuAriaLabel: selectedNode.props?.ariaLabel || 'Main navigation',
+      ...(selectedNode.nodeType === 'row'
+        ? sectionHeadingInspectorFields(selectedNode.props || {}, pickPending)
+        : {}),
+      ...(selectedNode.nodeType === 'column' || selectedNode.nodeType === 'stack'
+        ? columnHeadingInspectorFields(selectedNode.props || {}, pickPending)
+        : {}),
       menuItemsJson: JSON.stringify(Array.isArray(selectedNode.props?.items) ? selectedNode.props.items : [], null, 2),
       menuTextColor: style?.typography?.color || style?.colors?.textColor || '#0f172a',
       menuGapPx: parsePxValue(style?.menu?.gap, 12),
@@ -1202,9 +1234,19 @@ export default function BuilderInspector({
       ),
       menuMobileDrawerDensity: normalizeMenuDrawerDensity(selectedNode.props?.mobile?.drawerDensity, 'compact'),
       menuMobileBreakpointPx: resolveMenuMobileBreakpointPx(selectedNode.props?.mobile || {}),
-      richTextHtml: selectedNode.props?.content || '',
-      ...(selectedNode.nodeType === 'heading' || selectedNode.nodeType === 'text'
+      ...(selectedNode.nodeType === 'heading' ||
+      selectedNode.nodeType === 'text' ||
+      selectedNode.nodeType === 'paragraph'
         ? inlineTextFormFromProps(selectedNode.props || {})
+        : {}),
+      ...(selectedNode.nodeType === 'rich_text'
+        ? {
+            ...inlineTextFormFromProps(selectedNode.props || {}),
+            richTextHtml:
+              typeof selectedNode.props?.content === 'string'
+                ? selectedNode.props.content
+                : '',
+          }
         : {}),
       animationPreset: selectedNode.props?.animation?.preset || 'none',
       animationDuration: Number(selectedNode.props?.animation?.duration ?? 0.6),
@@ -1213,6 +1255,11 @@ export default function BuilderInspector({
       ...(tabsEditProps
         ? featureTabsInspectorFormFromProps(tabsEditProps, pickPending)
         : featureTabsInspectorFormFromProps({}, pickPending)),
+      ...(selectedNode?.nodeType &&
+      isCompoundWidgetType(selectedNode.nodeType) &&
+      selectedNode.nodeType !== 'tabs'
+        ? compoundChromeFormFields(selectedNode.nodeType, selectedNode.props || {}, pickPending)
+        : {}),
       faqAccordionJson: JSON.stringify(
         Array.isArray(selectedNode.props?.items) ? selectedNode.props.items : [],
         null,
@@ -1367,6 +1414,10 @@ export default function BuilderInspector({
   const featureTabsTarget =
     selectedNode?.nodeType === 'tabs' ? selectedNode : nestedFeatureTabsNode;
 
+  const compoundStyleTarget =
+    featureTabsTarget ||
+    (selectedNode && isCompoundWidgetType(selectedNode.nodeType) ? selectedNode : null);
+
   const updateFeatureTabsProps = async (changes) => {
     if (!featureTabsTarget?.id || !onUpdateNode) return;
     if (isLinkedGlobalPlaceholder(featureTabsTarget)) return;
@@ -1375,6 +1426,19 @@ export default function BuilderInspector({
       nodeId: featureTabsTarget.id,
       payload: {
         props: mergeNodePropsJsonPatch(featureTabsTarget.props || {}, changes),
+      },
+    });
+  };
+
+  const updateCompoundStyleProps = async (changes) => {
+    const target = compoundStyleTarget;
+    if (!target?.id || !onUpdateNode) return;
+    if (isLinkedGlobalPlaceholder(target)) return;
+    if (editingDisabledBySectionLock) return;
+    await onUpdateNode({
+      nodeId: target.id,
+      payload: {
+        props: mergeNodePropsJsonPatch(target.props || {}, changes),
       },
     });
   };
@@ -1824,7 +1888,43 @@ export default function BuilderInspector({
       setForm((prev) => ({ ...prev, [key]: value }));
     }
     recordPendingInspectorForm(pendingCarouselFormRef, key, value);
-    if (key === 'text' && (selectedNode.nodeType === 'heading' || selectedNode.nodeType === 'text')) {
+    if (selectedNode.nodeType === 'row' && isSectionHeadingInspectorKey(key)) {
+      if (key === 'sectionHeadingReset') {
+        await updateProps({ sectionHeading: {} });
+        setForm((prev) => ({
+          ...prev,
+          ...sectionHeadingInspectorFields({}, () => ''),
+          sectionHeadingEnabled: false,
+        }));
+        return;
+      }
+      const sh = patchSectionHeadingFromKey(key, value, selectedNode.props?.sectionHeading);
+      if (sh) await updateProps({ sectionHeading: sh });
+      return;
+    }
+    if (
+      (selectedNode.nodeType === 'column' || selectedNode.nodeType === 'stack') &&
+      isColumnHeadingInspectorKey(key)
+    ) {
+      if (key === 'columnHeadingReset') {
+        await updateProps({ columnHeading: {} });
+        setForm((prev) => ({
+          ...prev,
+          ...columnHeadingInspectorFields({}, () => ''),
+          columnHeadingEnabled: false,
+        }));
+        return;
+      }
+      const ch = patchColumnHeadingFromKey(key, value, selectedNode.props?.columnHeading);
+      if (ch) await updateProps({ columnHeading: ch });
+      return;
+    }
+    if (
+      key === 'text' &&
+      (selectedNode.nodeType === 'heading' ||
+        selectedNode.nodeType === 'text' ||
+        selectedNode.nodeType === 'paragraph')
+    ) {
       const next =
         typeof value === 'string' && /<[a-z]/i.test(value)
           ? sanitizeInlineLeafHtml(value)
@@ -1833,7 +1933,21 @@ export default function BuilderInspector({
       return;
     }
     if (key === 'text') await updateProps({ text: value });
-    if (isInlineTextInspectorKey(key) && (selectedNode.nodeType === 'heading' || selectedNode.nodeType === 'text')) {
+    if (
+      isTextEffectsInspectorKey(key) &&
+      supportsTextEffectsNodeType(selectedNode.nodeType)
+    ) {
+      const built = buildInlineTextPropsPatch(selectedNode.props || {}, key, value);
+      if (built?.patch) await updateProps(built.patch);
+      return;
+    }
+    if (
+      isInlineTextInspectorKey(key) &&
+      !isTextEffectsInspectorKey(key) &&
+      (selectedNode.nodeType === 'heading' ||
+        selectedNode.nodeType === 'text' ||
+        selectedNode.nodeType === 'paragraph')
+    ) {
       if (key === 'richTextHtml') {
         const html = sanitizeInlineLeafHtml(String(value ?? ''));
         const built = buildInlineTextPropsPatch(selectedNode.props || {}, 'richTextHtml', html);
@@ -2036,6 +2150,24 @@ export default function BuilderInspector({
         setJsonErrors((prev) => ({ ...prev, carouselSlidesJson: 'Invalid JSON format.' }));
       }
     }
+    if (compoundStyleTarget && isCompoundChromeKey(key, compoundStyleTarget.nodeType)) {
+      if (String(key).endsWith('ChromeReset')) {
+        await updateCompoundStyleProps({ chrome: {} });
+        setForm((prevForm) => ({
+          ...prevForm,
+          ...compoundChromeResetFormFields(compoundStyleTarget.nodeType),
+        }));
+        return;
+      }
+      const chrome = patchCompoundChromeFromKey(
+        key,
+        value,
+        compoundStyleTarget.props?.chrome,
+        compoundStyleTarget.nodeType
+      );
+      if (chrome) await updateCompoundStyleProps({ chrome });
+      return;
+    }
     if (featureTabsTarget) {
       const ftProps = featureTabsTarget.props || {};
       if (key === 'featureTabsJson') {
@@ -2092,19 +2224,6 @@ export default function BuilderInspector({
         const next = addBulletToActiveTab(current, activeId);
         await updateFeatureTabsProps({ tabs: next });
         setForm((prevForm) => ({ ...prevForm, featureTabsJson: JSON.stringify(next, null, 2) }));
-        return;
-      }
-      if (key === 'featureTabsChromeReset') {
-        await updateFeatureTabsProps({ chrome: {} });
-        setForm((prevForm) => ({
-          ...prevForm,
-          ...featureTabsChromeInspectorFields({}, () => ''),
-        }));
-        return;
-      }
-      if (isFeatureTabsChromeKey(key) && key !== 'featureTabsChromeReset') {
-        const chrome = patchFeatureTabsChromeFromKey(key, value, ftProps.chrome);
-        if (chrome) await updateFeatureTabsProps({ chrome });
         return;
       }
       if (key === 'featureTabsTabAlign') {
@@ -3383,6 +3502,7 @@ export default function BuilderInspector({
           capabilities={nodeCaps}
           form={form}
           onChange={handleStyleChange}
+          onCompoundChromeChange={handleContentChange}
           onPatchForm={patchForm}
           projectId={projectId}
           onPreviewStylePatch={previewStylePatch}
@@ -3390,6 +3510,13 @@ export default function BuilderInspector({
           onClearPreviewStyle={clearPreviewCss}
           onActiveSpacingEdit={onSetActiveSpacingEdit}
           onApplyPreset={handleApplyStylePreset}
+          nestedFeatureTabsNode={nestedFeatureTabsNode}
+          onSelectFeatureTabs={
+            nestedFeatureTabsNode && typeof onSelectNode === 'function'
+              ? () => onSelectNode(nestedFeatureTabsNode.id)
+              : undefined
+          }
+          jsonErrors={jsonErrors}
         />
       ) : null}
       {activeTab === 'form' && selectedNode?.nodeType === 'form' ? (

@@ -594,13 +594,25 @@
   color: var(--token-text-muted);
 }
 
+/* Card chrome (pricing / content / testimonial) — props.chrome via --card-* vars */
+.bld-el-pricing-card,
+.bld-el-card,
+.bld-el-testimonial {
+  background: var(--card-bg, var(--token-bg-surface));
+  padding: var(--card-padding, unset);
+  border-width: var(--card-border-width, 1px);
+  border-style: solid;
+  border-color: var(--card-border-color, color-mix(in srgb, var(--token-text-primary) 10%, transparent));
+  border-radius: var(--card-radius, 16px);
+  box-shadow: var(--card-shadow, none);
+  box-sizing: border-box;
+}
+
 /* Pricing card */
 .bld-el-pricing-card {
   position: relative;
-  padding: 1.35rem 1.25rem;
-  border-radius: 16px;
-  border: 1px solid rgba(15, 23, 42, 0.1);
-  background: var(--token-bg-surface);
+  padding: var(--card-padding, 1.35rem 1.25rem);
+  border-radius: var(--card-radius, 16px);
   width: 100%;
 }
 .bld-el-pricing-card--popular {

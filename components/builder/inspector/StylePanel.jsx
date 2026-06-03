@@ -10,9 +10,11 @@ import BackgroundControls from './BackgroundControls';
 import EffectsControls from './EffectsControls';
 import TransformEffectsControls from './TransformEffectsControls';
 import StylePresetsPanel from './StylePresetsPanel';
+import CompoundChromePanel from './CompoundChromePanel';
 import { InspectorPanel, InspectorSection } from './InspectorUi';
 import { useBuilderTheme } from '@/context/BuilderThemeContext';
 import { normalizeStylePresets } from '@/lib/stylePresetsStore';
+import { getCompoundWidgetMeta } from '@/lib/compoundWidgetRegistry';
 
 export default function StylePanel({
   selectedNode,
@@ -26,7 +28,13 @@ export default function StylePanel({
   onClearPreviewStyle,
   onActiveSpacingEdit,
   onApplyPreset,
+  nestedFeatureTabsNode = null,
+  onSelectFeatureTabs = null,
+  jsonErrors = {},
+  /** Props/chrome updates (compound widgets) — defaults to onChange if omitted. */
+  onCompoundChromeChange = null,
 }) {
+  const chromeOnChange = onCompoundChromeChange || onChange;
   if (!selectedNode) {
     return (
       <div className="bld-panel">
@@ -35,7 +43,8 @@ export default function StylePanel({
     );
   }
 
-  const isFeatureTabs = selectedNode?.nodeType === 'tabs';
+  const compoundMeta = getCompoundWidgetMeta(selectedNode?.nodeType);
+  const isCompoundChrome = Boolean(compoundMeta?.caps?.supportsCompoundChrome);
   const isSplitHeroCarousel =
     selectedNode?.nodeType === 'carousel' &&
     String(selectedNode?.props?.variant || '').toLowerCase() === 'splithero';
@@ -56,13 +65,25 @@ export default function StylePanel({
     <InspectorPanel title="Style">
       <StylePresetsPanel selectedNode={selectedNode} onApplyPreset={onApplyPreset} />
 
-      {isFeatureTabs ? (
+      {isCompoundChrome ? (
         <p className="bld-field-note" style={{ margin: '0 0 12px' }}>
-          Tab content and images: <strong>Content</strong> tab. Size and colors here apply to the Feature tabs block.
+          <strong>{compoundMeta.label}</strong> uses <code>props.chrome</code> + widget CSS — not generic typography.
+          Shell margin/padding below still uses <code>style_json</code>. Content editing: <strong>Content</strong> tab.
         </p>
       ) : null}
 
-      {showPresetUi ? (
+      {isCompoundChrome ? (
+        <CompoundChromePanel
+          selectedNode={selectedNode}
+          form={form}
+          onChange={chromeOnChange}
+          jsonErrors={jsonErrors}
+          nestedFeatureTabsNode={nestedFeatureTabsNode}
+          onSelectFeatureTabs={onSelectFeatureTabs}
+        />
+      ) : null}
+
+      {showPresetUi && !isCompoundChrome ? (
         <InspectorSection title="Preset & variant" defaultOpen keywords="preset variant reusable styles">
           <div className="bld-field-grid">
             <div className="bld-field">

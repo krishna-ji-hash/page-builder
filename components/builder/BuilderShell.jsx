@@ -43,9 +43,11 @@ import { payloadForWidgetCreate } from '@/lib/nodeCreatePayload';
 import { resolveDividerInsertPlan } from '@/lib/dividerInsert';
 import {
   findFirstUnlockedStackId,
+  INSERT_TARGET_MESSAGES,
   isStackLeafWidgetType,
-  resolveQuickAddStackParentId,
+  resolveEditableInsertTarget,
 } from '@/lib/quickAddResolve';
+import { fulfillInsertTarget } from '@/lib/fulfillInsertTarget';
 import { buildReusableBulkOrderedNodes } from '@/lib/reusableBlockInsert';
 import PageSeoModal from './seo/PageSeoModal';
 import AuditModal from './audits/AuditModal';
@@ -1540,6 +1542,8 @@ export default function BuilderShell({ pageId }) {
                 ? 'New heading'
                 : nodeType === 'text'
                   ? 'New paragraph'
+                  : nodeType === 'paragraph'
+                    ? 'Add your paragraph text here.'
                   : nodeType === 'button'
                     ? 'Click me'
                     : '',
@@ -1736,98 +1740,15 @@ export default function BuilderShell({ pageId }) {
     return pid;
   };
 
-  const resolveQuickAddParentId = async ({ targetNodeId, nodeType }) => {
-    const target = findNodeInTree(tree, targetNodeId);
-    if (!target?.id) {
-      if (isStackLeafWidgetType(nodeType)) return findFirstUnlockedStackId(tree);
-      return targetNodeId || null;
+  const resolveAndFulfillInsertTarget = async ({ targetNodeId, nodeType }) => {
+    const resolved = resolveEditableInsertTarget(tree, targetNodeId, { widgetNodeType: nodeType });
+    if (!resolved.ok) {
+      return { ok: false, message: resolved.message || INSERT_TARGET_MESSAGES[resolved.reason] };
     }
-    if (isStackLeafWidgetType(nodeType) && target.nodeType !== 'column' && target.nodeType !== 'row') {
-      const stackId = resolveQuickAddStackParentId(tree, targetNodeId);
-      if (stackId) return stackId;
-    }
-    if (target.nodeType === 'modal') {
-      const existingStack = Array.isArray(target.children)
-        ? target.children.find((child) => child?.nodeType === 'stack')
-        : null;
-      if (existingStack?.id) return existingStack.id;
-      const stack = await createNodeRequest({
-        nodeType: 'stack',
-        parentNodeId: target.id,
-        displayName: 'Modal content',
-        positionIndex: 0,
-      });
-      return stack?.id || null;
-    }
-    if (target.nodeType === 'stack') return target.id;
-    if (target.nodeType === 'column') {
-      const existingStack = Array.isArray(target.children)
-        ? target.children.find((child) => child?.nodeType === 'stack')
-        : null;
-      if (existingStack?.id) return existingStack.id;
-      const stack = await createNodeRequest({
-        nodeType: 'stack',
-        parentNodeId: target.id,
-        displayName: 'Stack Block',
-      });
-      return stack?.id || null;
-    }
-    if (target.nodeType === 'row') {
-      const columns = (target.children || []).filter((child) => child?.nodeType === 'column');
-      for (const col of columns) {
-        const stack = (col.children || []).find((child) => child?.nodeType === 'stack');
-        if (stack?.id && !(stack.children || []).length) {
-          return stack.id;
-        }
-      }
-      for (const col of columns) {
-        const stack = (col.children || []).find((child) => child?.nodeType === 'stack');
-        if (!stack?.id) {
-          const newStack = await createNodeRequest({
-            nodeType: 'stack',
-            parentNodeId: col.id,
-            displayName: 'Stack Block',
-          });
-          return newStack?.id || null;
-        }
-      }
-      if (columns.length > 0) {
-        const newColumn = await createNodeRequest({
-          nodeType: 'column',
-          parentNodeId: target.id,
-          displayName: `Column ${columns.length + 1}`,
-          positionIndex: columns.length,
-        });
-        if (!newColumn?.id) return null;
-        const stack = await createNodeRequest({
-          nodeType: 'stack',
-          parentNodeId: newColumn.id,
-          displayName: 'Stack Block',
-          positionIndex: 0,
-        });
-        return stack?.id || null;
-      }
-      const column = await createNodeRequest({
-        nodeType: 'column',
-        parentNodeId: target.id,
-        displayName: 'Column Block',
-      });
-      if (!column?.id) return null;
-      const stack = await createNodeRequest({
-        nodeType: 'stack',
-        parentNodeId: column.id,
-        displayName: 'Stack Block',
-      });
-      return stack?.id || null;
-    }
-    const parentId = target.parentNodeId;
-    if (parentId && isStackLeafWidgetType(nodeType)) {
-      const parent = findNodeInTree(tree, parentId);
-      if (parent?.nodeType === 'stack') return parent.id;
-      const stackId = resolveQuickAddStackParentId(tree, parentId);
-      if (stackId) return stackId;
-    }
-    return parentId || null;
+    const { parentId, insertIndex } = await fulfillInsertTarget(resolved, (payload) =>
+      createNodeRequest(payload)
+    );
+    return { ok: true, parentId, insertIndex };
   };
 
   const executeDividerInsertPlan = async (plan) => {
@@ -1941,17 +1862,26 @@ export default function BuilderShell({ pageId }) {
     setErrorMessage('');
     try {
       let effectiveParentId = parentNodeId;
+      let positionIndex;
       if (parentNodeId && isStackLeafWidgetType(nodeType)) {
-        const resolved = await resolveQuickAddParentId({ targetNodeId: parentNodeId, nodeType });
-        if (resolved != null) effectiveParentId = resolved;
-      }
-      if (effectiveParentId != null) {
-        effectiveParentId = await ensureUnlockedQuickAddParent(effectiveParentId, beforeTree);
+        const resolved = await resolveAndFulfillInsertTarget({ targetNodeId: parentNodeId, nodeType });
+        if (!resolved.ok) {
+          setUndoStack((prev) => prev.slice(0, -1));
+          setErrorMessage(resolved.message);
+          return;
+        }
+        effectiveParentId = resolved.parentId;
+        positionIndex = resolved.insertIndex;
+      } else if (parentNodeId && isNodeEditsDisabledBySectionLock(beforeTree, parentNodeId)) {
+        setUndoStack((prev) => prev.slice(0, -1));
+        setErrorMessage(INSERT_TARGET_MESSAGES.locked);
+        return;
       }
       const dividerExtra = dividerPayloadForCreate(nodeType, dividerOrientation);
       const node = await createNodeRequest({
         nodeType,
         parentNodeId: effectiveParentId,
+        ...(Number.isInteger(positionIndex) ? { positionIndex } : {}),
         props: dividerExtra.props,
         style_json: dividerExtra.style_json,
       });
@@ -2007,30 +1937,50 @@ export default function BuilderShell({ pageId }) {
   };
 
   const handleQuickAddNode = async ({ targetNodeId, nodeType, dividerOrientation }) => {
+    if (nodeType !== 'row' && isStackLeafWidgetType(nodeType)) {
+      const preview = resolveEditableInsertTarget(tree, targetNodeId, { widgetNodeType: nodeType });
+      if (!preview.ok) {
+        setErrorMessage(preview.message || INSERT_TARGET_MESSAGES[preview.reason]);
+        return;
+      }
+    }
     const beforeTree = tree;
     pushHistorySnapshot(beforeTree);
     setIsCreatingNode(true);
     setErrorMessage('');
     try {
-      let resolvedParentNodeId = await resolveQuickAddParentId({ targetNodeId, nodeType });
-      if (resolvedParentNodeId == null && nodeType !== 'row') {
-        throw new Error('Could not resolve quick-add target. Select a Stack or add a section first.');
-      }
-      if (resolvedParentNodeId != null) {
-        resolvedParentNodeId = await ensureUnlockedQuickAddParent(resolvedParentNodeId, beforeTree);
+      let resolvedParentNodeId = null;
+      let positionIndex;
+      if (nodeType === 'row') {
+        resolvedParentNodeId = null;
+      } else if (isStackLeafWidgetType(nodeType)) {
+        const resolved = await resolveAndFulfillInsertTarget({ targetNodeId, nodeType });
+        if (!resolved.ok) {
+          setUndoStack((prev) => prev.slice(0, -1));
+          setErrorMessage(resolved.message);
+          return;
+        }
+        resolvedParentNodeId = resolved.parentId;
+        positionIndex = resolved.insertIndex;
+      } else {
+        resolvedParentNodeId = targetNodeId || null;
       }
       const dividerExtra = dividerPayloadForCreate(nodeType, dividerOrientation);
+      const widgetDefaults = payloadForWidgetCreate(nodeType, page?.projectType || 'website', {
+        dividerOrientation,
+      });
       const node = await createNodeRequest({
         nodeType,
         parentNodeId: resolvedParentNodeId,
-        props: dividerExtra.props,
-        style_json: dividerExtra.style_json,
+        ...(Number.isInteger(positionIndex) ? { positionIndex } : {}),
+        props: dividerExtra.props ?? widgetDefaults.props,
+        style_json: dividerExtra.style_json ?? widgetDefaults.style_json,
       });
       if (node?.id) setSelectedNodeId(node.id);
       setHasUnpublishedEdits(true);
     } catch (error) {
       setUndoStack((prev) => prev.slice(0, -1));
-      setErrorMessage(error.message);
+      setErrorMessage(error instanceof Error ? error.message : String(error));
     } finally {
       setIsCreatingNode(false);
     }

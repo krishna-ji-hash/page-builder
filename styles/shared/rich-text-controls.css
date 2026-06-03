@@ -119,7 +119,8 @@
   animation: bldMarqueeMeasured var(--bld-marquee-duration, 18s) linear infinite;
 }
 
-.bld-rich-text-marquee:not(.bld-rich-text-marquee--no-pause):hover .bld-rich-text-marquee-track {
+.bld-rich-text-marquee:not(.bld-rich-text-marquee--no-pause):hover .bld-rich-text-marquee-track,
+.bld-marquee-pause-hover:hover .bld-marquee-track {
   animation-play-state: paused;
 }
 
@@ -128,6 +129,7 @@
 }
 
 @media (max-width: 767px) {
+  .bld-marquee-mobile-off .bld-marquee-track,
   .bld-rich-text-marquee--mobile-off .bld-rich-text-marquee-track {
     animation: none !important;
     transform: none !important;

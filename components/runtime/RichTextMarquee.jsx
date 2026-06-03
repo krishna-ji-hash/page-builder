@@ -106,9 +106,9 @@ export default function RichTextMarquee({
       className={[className, alignClass, 'bld-rich-text-marquee--scroll'].filter(Boolean).join(' ')}
       style={style}
     >
-      <div className="bld-rich-text-marquee-viewport">
-        <div ref={trackRef} className="bld-rich-text-marquee-track">
-          <div className="bld-rich-text-marquee-content">{children}</div>
+      <div className="bld-rich-text-marquee-viewport bld-marquee-viewport">
+        <div ref={trackRef} className="bld-rich-text-marquee-track bld-marquee-track">
+          <div className="bld-rich-text-marquee-content bld-marquee-content">{children}</div>
         </div>
       </div>
     </div>

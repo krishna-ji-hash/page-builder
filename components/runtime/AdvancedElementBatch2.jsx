@@ -154,10 +154,10 @@ export function LiveRatingStars({ rating = 5, maxStars = 5, reviewText, classNam
   );
 }
 
-export function LiveTestimonialCard({ name, role, message, avatarSrc, rating = 5, className = '' }) {
+export function LiveTestimonialCard({ name, role, message, avatarSrc, rating = 5, className = '', style }) {
   const stars = clamp(Number(rating) || 0, 0, 5);
   return (
-    <blockquote className={`bld-el bld-el-testimonial ${className}`.trim()}>
+    <blockquote className={`bld-el bld-el-testimonial ${className}`.trim()} style={style}>
       <div className="bld-el-rating__stars bld-el-testimonial__stars" aria-hidden>
         {Array.from({ length: 5 }, (_, i) => (
           <span key={i} className={i < stars ? 'bld-el-rating__star is-on' : 'bld-el-rating__star'}>
@@ -195,7 +195,10 @@ export function LivePricingCard({
     .map((l) => l.trim())
     .filter(Boolean);
   return (
-    <article className={`bld-el bld-el-pricing-card ${popular ? 'bld-el-pricing-card--popular' : ''} ${className}`.trim()}>
+    <article
+      className={`bld-el bld-el-pricing-card ${popular ? 'bld-el-pricing-card--popular' : ''} ${className}`.trim()}
+      style={style}
+    >
       {popular ? <span className="bld-el-pricing-card__badge">Popular</span> : null}
       {planName ? <h3 className="bld-el-pricing-card__plan">{planName}</h3> : null}
       <p className="bld-el-pricing-card__price">

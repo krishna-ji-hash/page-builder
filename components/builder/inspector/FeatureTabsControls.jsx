@@ -14,7 +14,11 @@ export default function FeatureTabsControls({
   jsonErrors = {},
   editingViaParent = false,
   onFocusFeatureTabs = null,
+  /** 'content' | 'style' | undefined (both) */
+  chromeSection = undefined,
 }) {
+  const showContent = chromeSection !== 'style';
+  const showChrome = chromeSection !== 'content';
   const featureTabsList = Array.isArray(selectedNode?.props?.tabs) ? selectedNode.props.tabs : [];
   const activeTabId = String(
     form.featureTabsActiveId || selectedNode?.props?.activeTabId || featureTabsList[0]?.id || ''
@@ -39,11 +43,14 @@ export default function FeatureTabsControls({
         </div>
       ) : null}
 
-      <p className="bld-field-note" style={{ marginTop: 0, marginBottom: 12 }}>
-        <strong>Canvas:</strong> click tab to switch · double-click tab name · click heading/body/bullets/image to
-        edit. <strong>Cannot</strong> drag widgets inside this block — use buttons below to add tabs/bullets.
-      </p>
+      {showContent ? (
+        <p className="bld-field-note" style={{ marginTop: 0, marginBottom: 12 }}>
+          <strong>Canvas:</strong> click tab to switch · double-click tab name · click heading/body/bullets/image to
+          edit. <strong>Cannot</strong> drag widgets inside this block — use buttons below to add tabs/bullets.
+        </p>
+      ) : null}
 
+      {showContent ? (
       <InspectorSection title="Tabs & bullets" defaultOpen keywords="add tab bullet">
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
           <button type="button" className="bld-chip" onClick={() => onChange('featureTabsAddTab', '1')}>
@@ -121,7 +128,9 @@ export default function FeatureTabsControls({
           />
         </div>
       </InspectorSection>
+      ) : null}
 
+      {showChrome ? (
       <InspectorSection title="Colors & shape" defaultOpen keywords="color border radius width background">
         <p className="bld-field-note" style={{ marginTop: 0 }}>
           Block width, borders, and tab colors. For outer margin/padding use <strong>Style</strong> tab → Spacing.
@@ -247,7 +256,9 @@ export default function FeatureTabsControls({
           </button>
         </div>
       </InspectorSection>
+      ) : null}
 
+      {showContent ? (
       <details className="bld-details">
         <summary className="bld-details__summary">Advanced: Tabs JSON</summary>
         <div className="bld-field">
@@ -260,6 +271,7 @@ export default function FeatureTabsControls({
           {jsonErrors.featureTabsJson ? <p className="bld-field-error">{jsonErrors.featureTabsJson}</p> : null}
         </div>
       </details>
+      ) : null}
     </div>
   );
 }

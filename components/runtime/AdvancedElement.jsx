@@ -57,9 +57,10 @@ export function LiveContentCard({
   showImage = true,
   showButton = true,
   className = '',
+  style,
 }) {
   return (
-    <article className={`bld-el bld-el-card ${className}`.trim()}>
+    <article className={`bld-el bld-el-card ${className}`.trim()} style={style}>
       {showImage && imageSrc ? (
         <div className="bld-el-card__media">
           <img src={imageSrc} alt={imageAlt || title || 'Card'} loading="lazy" />

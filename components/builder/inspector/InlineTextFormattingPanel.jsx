@@ -2,6 +2,8 @@
 
 import FontSizeStepper, { clampFontSizePx } from '@/components/builder/FontSizeStepper';
 import TextAlignToolbarGroup from '@/components/builder/TextAlignToolbarGroup';
+import InlineRichTextField from '@/components/builder/inspector/InlineRichTextField';
+import TextEffectsControls from '@/components/builder/inspector/TextEffectsControls';
 import { InspectorNumField, inspectorNumStringChange } from '@/components/builder/inspector/InspectorNumeric';
 
 const FONT_WEIGHTS = ['400', '500', '600', '700'];
@@ -29,8 +31,9 @@ function ToggleRow({ label, checked, onChange }) {
  */
 export default function InlineTextFormattingPanel({ form, onChange, nodeType }) {
   const isRich = form.inlineTextMode === 'rich';
-  const marqueeOn = Boolean(form.marqueeEnabled);
-  const iconOn = Boolean(form.textBlockIconEnabled);
+  const showRichEditor = isRich && (nodeType === 'text' || nodeType === 'paragraph');
+  const showTextEffects =
+    nodeType === 'text' || nodeType === 'paragraph' || nodeType === 'heading';
 
   return (
     <div className="bld-inline-text-format">
@@ -126,7 +129,16 @@ export default function InlineTextFormattingPanel({ form, onChange, nodeType }) 
         </select>
       </div>
 
-      {isRich ? (
+      {showRichEditor ? (
+        <div className="bld-field">
+          <label className="bld-label">Rich content</label>
+          <InlineRichTextField
+            html={form.richTextHtml || ''}
+            onChange={onChange}
+            placeholder="Select words and use the toolbar, or double-click the canvas"
+          />
+        </div>
+      ) : isRich ? (
         <div className="bld-field">
           <label className="bld-label">Rich HTML</label>
           <textarea
@@ -139,128 +151,7 @@ export default function InlineTextFormattingPanel({ form, onChange, nodeType }) 
         </div>
       ) : null}
 
-      <div className="bld-panel__subhead" style={{ marginTop: 12 }}>
-        Marquee / scroll
-      </div>
-      <ToggleRow label="Enable marquee" checked={marqueeOn} onChange={(v) => onChange('marqueeEnabled', v)} />
-      {marqueeOn ? (
-        <p className="bld-hint" style={{ marginBottom: 8 }}>
-          Background blue band → parent <strong>Row</strong> (Style → Background). Marquee runs at any quick size (XS–3XL).
-        </p>
-      ) : null}
-      {marqueeOn ? (
-        <>
-          <div className="bld-field">
-            <label className="bld-label">Direction</label>
-            <select
-              className="bld-input"
-              value={form.marqueeDirection || 'left'}
-              onChange={(e) => onChange('marqueeDirection', e.target.value)}
-            >
-              <option value="left">Scroll left</option>
-              <option value="right">Scroll right</option>
-            </select>
-          </div>
-          <div className="bld-field">
-            <label className="bld-label">Speed</label>
-            <select
-              className="bld-input"
-              value={form.marqueeSpeed || 'normal'}
-              onChange={(e) => onChange('marqueeSpeed', e.target.value)}
-            >
-              <option value="slow">Slow</option>
-              <option value="normal">Normal</option>
-              <option value="fast">Fast</option>
-              <option value="custom">Custom (seconds)</option>
-            </select>
-          </div>
-          {form.marqueeSpeed === 'custom' ? (
-            <InspectorNumField
-              id="marquee-duration"
-              label="Duration (seconds)"
-              min={4}
-              max={120}
-              value={form.marqueeDuration ?? 18}
-              onChange={inspectorNumStringChange(onChange, 'marqueeDuration')}
-            />
-          ) : null}
-          <InspectorNumField
-            id="marquee-gap"
-            label="Gap after text (px)"
-            min={0}
-            max={240}
-            value={form.marqueeGapPx ?? 0}
-            onChange={inspectorNumStringChange(onChange, 'marqueeGapPx')}
-          />
-          <p className="bld-hint" style={{ marginTop: 4, marginBottom: 8 }}>
-            Works at any font size (XS–3XL or custom px). Toggle marquee off to center static text.
-          </p>
-          <ToggleRow
-            label="Pause on hover"
-            checked={form.marqueePauseOnHover !== false}
-            onChange={(v) => onChange('marqueePauseOnHover', v)}
-          />
-          <ToggleRow label="Loop" checked={form.marqueeLoop !== false} onChange={(v) => onChange('marqueeLoop', v)} />
-          <ToggleRow
-            label="Enable on mobile"
-            checked={form.marqueeMobileEnabled !== false}
-            onChange={(v) => onChange('marqueeMobileEnabled', v)}
-          />
-        </>
-      ) : null}
-
-      <div className="bld-panel__subhead" style={{ marginTop: 12 }}>
-        Icon
-      </div>
-      <ToggleRow label="Show icon" checked={iconOn} onChange={(v) => onChange('textBlockIconEnabled', v)} />
-      {iconOn ? (
-        <>
-          <div className="bld-field">
-            <label className="bld-label">Icon symbol</label>
-            <input
-              className="bld-input"
-              value={form.textBlockIconName || '★'}
-              onChange={(e) => onChange('textBlockIconName', e.target.value)}
-            />
-          </div>
-          <div className="bld-field">
-            <label className="bld-label">Position</label>
-            <select
-              className="bld-input"
-              value={form.textBlockIconPosition || 'before'}
-              onChange={(e) => onChange('textBlockIconPosition', e.target.value)}
-            >
-              <option value="before">Before text</option>
-              <option value="after">After text</option>
-            </select>
-          </div>
-          <div className="bld-field">
-            <label className="bld-label">Icon color</label>
-            <input
-              type="color"
-              className="bld-input"
-              value={form.textBlockIconColor || '#2563eb'}
-              onChange={(e) => onChange('textBlockIconColor', e.target.value)}
-            />
-          </div>
-          <InspectorNumField
-            id="text-icon-size"
-            label="Icon size (px)"
-            min={10}
-            max={96}
-            value={form.textBlockIconSize ?? 16}
-            onChange={inspectorNumStringChange(onChange, 'textBlockIconSize')}
-          />
-          <InspectorNumField
-            id="text-icon-spacing"
-            label="Spacing (px)"
-            min={0}
-            max={64}
-            value={form.textBlockIconSpacing ?? 8}
-            onChange={inspectorNumStringChange(onChange, 'textBlockIconSpacing')}
-          />
-        </>
-      ) : null}
+      {showTextEffects ? <TextEffectsControls form={form} onChange={onChange} /> : null}
 
       {nodeType === 'button' ? (
         <p className="bld-hint" style={{ marginTop: 8 }}>

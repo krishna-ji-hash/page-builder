@@ -7,12 +7,27 @@ const PORT = Number(process.env.PORT || 3000);
 killPort(PORT);
 killPort(3001);
 
-fs.rmSync('.next', { recursive: true, force: true });
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function rmWithRetry(target, attempts = 8, delayMs = 400) {
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      fs.rmSync(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+      return true;
+    } catch (err) {
+      if (i === attempts - 1) throw err;
+      await sleep(delayMs);
+    }
+  }
+  return false;
+}
+
+await rmWithRetry('.next');
 console.log('Cleared .next cache');
 
 const webpackCache = path.join('node_modules', '.cache');
 if (fs.existsSync(webpackCache)) {
-  fs.rmSync(webpackCache, { recursive: true, force: true });
+  await rmWithRetry(webpackCache);
   console.log('Cleared node_modules/.cache');
 }
 
