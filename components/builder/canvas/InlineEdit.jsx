@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { shouldDeferInlineEditBlurCommit } from '@/lib/inlineEditBlurGuard';
+import { syncInlineFontSizeHostFromHtml } from '@/lib/inlineFontSize';
 
 export default function InlineEdit({
   value,
@@ -32,8 +33,10 @@ export default function InlineEdit({
     const el = ref.current;
     if (htmlMode) {
       el.innerHTML = value || '';
+      syncInlineFontSizeHostFromHtml(el, value || '');
     } else {
       el.innerText = value || '';
+      syncInlineFontSizeHostFromHtml(el, '');
     }
     el.focus();
     const range = document.createRange();

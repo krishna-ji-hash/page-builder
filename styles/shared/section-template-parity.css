@@ -1,0 +1,214 @@
+/**
+ * Section template layout — builder mirror, draft preview, published live.
+ * Parity surface: :is(.live-doc, .bld-canvas__live-mirror) — see lib/paritySurface.js
+ */
+
+/* —— platformHero —— */
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='platformHero'] {
+  align-items: stretch !important;
+  overflow-x: clip;
+  overflow-y: visible;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='platformHero']
+  > .live-node.bld-column {
+  align-self: stretch !important;
+  min-height: min-content;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='platformHero']
+  > .live-node.bld-column:first-child {
+  flex: 2 1 0 !important;
+  align-self: stretch !important;
+  min-height: 100%;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='platformHero']
+  > .live-node.bld-column
+  > .live-node.bld-stack {
+  flex: 1 1 0;
+  min-height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='platformHero']
+  .live-node.bld-stack
+  p
+  strong {
+  font-weight: 700;
+  color: inherit;
+}
+
+/* —— whyChooseCourier —— */
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='whyChooseCourier'] {
+  overflow-x: clip;
+  overflow-y: visible;
+}
+
+/* —— howItWorks —— */
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='howItWorks'] {
+  align-items: center !important;
+  overflow-x: clip;
+  overflow-y: visible;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='howItWorks']
+  > .live-node.bld-column {
+  align-self: center !important;
+  width: 100%;
+  max-width: 100%;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='howItWorks']
+  > .live-node.bld-column
+  > .live-node.bld-stack
+  > .live-node.bld-stack:nth-child(2) {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: stretch !important;
+  width: 100%;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='howItWorks']
+  > .live-node.bld-column
+  > .live-node.bld-stack
+  > .live-node.bld-stack:nth-child(2)
+  > .live-node.bld-stack {
+  flex: 1 1 0 !important;
+  min-width: 0;
+  align-self: stretch !important;
+}
+
+@media (max-width: 767px) {
+  :is(.live-doc, .bld-canvas__live-mirror)
+    > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='howItWorks']
+    > .live-node.bld-column
+    > .live-node.bld-stack
+    > .live-node.bld-stack:nth-child(2) {
+    flex-direction: column !important;
+    flex-wrap: nowrap !important;
+  }
+
+  :is(.live-doc, .bld-canvas__live-mirror)
+    > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='howItWorks']
+    > .live-node.bld-column
+    > .live-node.bld-stack
+    > .live-node.bld-stack:nth-child(2)
+    > .live-node.bld-stack {
+    flex: 1 1 auto !important;
+    max-width: 100%;
+  }
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='howItWorks']
+  figure.live-node
+  img {
+  max-width: 100%;
+  width: 100%;
+  object-fit: cover;
+}
+
+/* —— faq —— */
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='faq'] {
+  align-items: stretch !important;
+  overflow-y: visible;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='faq']
+  > .live-node.bld-column,
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='faq']
+  > .live-node.bld-column
+  > .live-node.bld-stack {
+  align-self: stretch !important;
+  width: 100%;
+  max-width: 100%;
+  min-height: min-content;
+  overflow: visible;
+}
+
+/* —— resourcesBlogs —— */
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='resourcesBlogs'] {
+  align-items: stretch !important;
+  overflow-y: visible;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='resourcesBlogs']
+  > .live-node.bld-column,
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='resourcesBlogs']
+  > .live-node.bld-column
+  > .live-node.bld-stack {
+  align-self: stretch !important;
+  width: 100%;
+  max-width: 100%;
+  min-height: min-content;
+  overflow: visible;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='resourcesBlogs']
+  figure.live-node
+  img {
+  max-width: 100%;
+  width: 100%;
+  object-fit: cover;
+}
+
+/* —— courierFeatureBands —— */
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='courierFeatureBands'] {
+  align-items: center !important;
+  overflow-x: clip;
+  overflow-y: visible;
+  flex-wrap: nowrap;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='courierFeatureBands']
+  > .live-node.bld-column {
+  align-self: center !important;
+  flex: 1 1 0 !important;
+  min-width: 0;
+  max-width: 100%;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='courierFeatureBands']
+  figure.live-node
+  img {
+  max-width: 100%;
+  width: 100%;
+}
+
+/* —— carousel widget —— */
+:is(.live-doc, .bld-canvas__live-mirror) .live-carousel {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror) .live-carousel__viewport {
+  width: 100%;
+}

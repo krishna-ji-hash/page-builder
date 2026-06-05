@@ -3,6 +3,17 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import FeatureTabCanvasField from '@/components/builder/canvas/FeatureTabCanvasField';
 import { resolveFeatureTabsProps } from '@/lib/featureTabsDefaults';
+import { FEATURE_TAB_FIELD_SELECTOR } from '@/lib/builderTextEditClick.js';
+import {
+  featureTabFieldHasInlineHtml,
+  featureTabBulletInnerHtml,
+  sanitizeFeatureTabFieldHtml,
+} from '@/lib/featureTabInlineHtml';
+import { inlineFontSizeOverridePropsFromHtml } from '@/lib/inlineFontSize';
+import {
+  featureTabPanelFigureVars,
+  featureTabPanelImageInlineStyle,
+} from '@/lib/featureTabPanelImage';
 
 /**
  * Dispatch Solutions-style feature tabs: nav bar + two-column panel (copy | image).
@@ -18,11 +29,16 @@ export default function FeatureTabs({
   onActiveTabChange,
   builderMode = false,
   builderEditable = false,
+  textEditBlurCommitGuard = null,
+  featureTabValueSyncGuard = null,
   onPatchTab,
   onTabImageFile,
+  panelMode = 'fields',
+  panelContent = null,
   style,
   className,
 }) {
+  const useElementsPanel = String(panelMode || 'fields').trim() === 'elements';
   const { tabs, activeTabId: initialActive, imageFit, imageHeightPx, tabAlign } = useMemo(
     () =>
       resolveFeatureTabsProps({
@@ -85,16 +101,35 @@ export default function FeatureTabs({
         event.preventDefault();
         if (builderMode) event.stopPropagation();
       }
-      if (!id) return;
-      if (id !== activeId) {
-        setEditingTabLabelId(null);
-        setActiveId(id);
-        lastPropActiveRef.current = id;
-        onActiveTabChange?.(id);
+      if (!id || id === activeId) return;
+      setEditingTabLabelId(null);
+      /** Builder: save current panel only; active tab is local until Inspector sets default for live. */
+      if (controlled && builderMode) {
+        void (async () => {
+          await onActiveTabChange?.(id);
+          setActiveId(id);
+          lastPropActiveRef.current = id;
+        })();
+        return;
       }
+      if (controlled) {
+        void onActiveTabChange?.(id);
+        return;
+      }
+      setActiveId(id);
+      lastPropActiveRef.current = id;
+      onActiveTabChange?.(id);
     },
-    [activeId, builderMode, onActiveTabChange]
+    [activeId, builderMode, controlled, onActiveTabChange]
   );
+
+  /** Keep the active tab label fully visible inside the horizontal nav strip. */
+  useEffect(() => {
+    const wrap = navWrapRef.current;
+    if (!wrap || !activeId) return;
+    const tabBtn = wrap.querySelector('.live-feature-tabs__tab.is-active');
+    tabBtn?.scrollIntoView?.({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+  }, [activeId, tabIdsSignature]);
 
   const onNavPointerDown = useCallback((event) => {
     if (event.pointerType !== 'mouse') return;
@@ -152,14 +187,6 @@ export default function FeatureTabs({
       }
     : undefined;
 
-  const patchActive = useCallback(
-    (patch) => {
-      if (!activePanel?.id || !onPatchTab) return;
-      onPatchTab(activePanel.id, patch);
-    },
-    [activePanel?.id, onPatchTab]
-  );
-
   const patchTabById = useCallback(
     (tabId, patch) => {
       if (!tabId || !onPatchTab) return;
@@ -171,13 +198,19 @@ export default function FeatureTabs({
   const commitBulletsFromList = useCallback(() => {
     const list = bulletsListRef.current;
     if (!list || !activePanel?.id) return;
-    const items = Array.from(list.querySelectorAll('li'))
-      .map((li) => String(li.innerText || '').trim())
+    const items = Array.from(list.querySelectorAll(FEATURE_TAB_FIELD_SELECTOR))
+      .map((el) => {
+        const raw = el.innerHTML;
+        if (featureTabFieldHasInlineHtml(raw)) {
+          return sanitizeFeatureTabFieldHtml(raw);
+        }
+        return String(el.innerText || '').trim();
+      })
       .filter(Boolean);
-    const prev = (activePanel.bullets || []).join('\n');
-    const next = items.join('\n');
-    if (next !== prev) patchActive({ bullets: items });
-  }, [activePanel, patchActive]);
+    const prev = JSON.stringify(activePanel.bullets || []);
+    const next = JSON.stringify(items);
+    if (next !== prev) patchTabById(activePanel.id, { bullets: items });
+  }, [activePanel, patchTabById]);
 
   const handleImageFile = (event) => {
     const file = event.target.files?.[0];
@@ -201,7 +234,9 @@ export default function FeatureTabs({
     >
       {canvasEdit ? (
         <p className="live-feature-tabs__builder-hint" aria-hidden>
-          Click a tab to switch · double-click tab name to rename · click panel text / image to edit
+          {useElementsPanel
+            ? 'Click a tab to switch · select blocks in the panel · + Add element (sidebar) for rows, Counter, cards'
+            : 'Click a tab to edit its content · Inspector → Default active tab sets live/draft · double-click tab name to rename'}
         </p>
       ) : null}
 
@@ -243,6 +278,8 @@ export default function FeatureTabs({
                     className="live-feature-tabs__tab-label live-feature-tabs__editable"
                     value={tab.label}
                     autoFocus
+                    blurCommitGuard={textEditBlurCommitGuard}
+                    valueSyncGuard={featureTabValueSyncGuard}
                     onCommit={(next) => {
                       patchTabById(tab.id, { label: next });
                       setEditingTabLabelId(null);
@@ -265,6 +302,24 @@ export default function FeatureTabs({
         className="live-feature-tabs__panel is-active"
         key={activePanel.id}
       >
+        {useElementsPanel ? (
+          <div
+            className={`live-feature-tabs__panel-body live-feature-tabs__panel-body--elements${
+              canvasEdit ? ' live-feature-tabs__panel-body--editable' : ''
+            }`}
+            onPointerDown={canvasEdit ? stopCanvasBubble : undefined}
+          >
+            {panelContent ? (
+              panelContent
+            ) : (
+              <p className="live-feature-tabs__elements-empty">
+                {canvasEdit
+                  ? 'Inspector → Content → Enable section layout (elements), or add Row / Counter / Image here after switching tabs.'
+                  : 'Tab panel content is empty.'}
+              </p>
+            )}
+          </div>
+        ) : (
         <div className="live-feature-tabs__grid">
           <div
             className={`live-feature-tabs__copy${canvasEdit ? ' live-feature-tabs__copy--editable' : ''}`}
@@ -276,8 +331,16 @@ export default function FeatureTabs({
                   as="h3"
                   className="live-feature-tabs__heading live-feature-tabs__editable"
                   value={activePanel.heading}
-                  onCommit={(next) => patchActive({ heading: next })}
+                  htmlMode
+                  blurCommitGuard={textEditBlurCommitGuard}
+                  valueSyncGuard={featureTabValueSyncGuard}
+                  onCommit={(next) => patchTabById(activePanel.id, { heading: next })}
                   onPointerDown={stopCanvasBubble}
+                />
+              ) : featureTabFieldHasInlineHtml(activePanel.heading) ? (
+                <h3
+                  className="live-feature-tabs__heading"
+                  dangerouslySetInnerHTML={{ __html: sanitizeFeatureTabFieldHtml(activePanel.heading) }}
                 />
               ) : (
                 <h3 className="live-feature-tabs__heading">{activePanel.heading}</h3>
@@ -290,8 +353,17 @@ export default function FeatureTabs({
                   className="live-feature-tabs__paragraph live-feature-tabs__editable"
                   value={activePanel.paragraph}
                   multiline
-                  onCommit={(next) => patchActive({ paragraph: next })}
+                  htmlMode
+                  blurCommitGuard={textEditBlurCommitGuard}
+                  valueSyncGuard={featureTabValueSyncGuard}
+                  onCommit={(next) => patchTabById(activePanel.id, { paragraph: next })}
                   onPointerDown={stopCanvasBubble}
+                />
+              ) : featureTabFieldHasInlineHtml(activePanel.paragraph) ? (
+                <p
+                  className="live-feature-tabs__paragraph"
+                  {...inlineFontSizeOverridePropsFromHtml(activePanel.paragraph)}
+                  dangerouslySetInnerHTML={{ __html: sanitizeFeatureTabFieldHtml(activePanel.paragraph) }}
                 />
               ) : (
                 <p className="live-feature-tabs__paragraph">{activePanel.paragraph}</p>
@@ -304,14 +376,24 @@ export default function FeatureTabs({
                 onBlur={canvasEdit ? commitBulletsFromList : undefined}
               >
                 {(activePanel.bullets?.length ? activePanel.bullets : canvasEdit ? [''] : []).map((item, bulletIdx) => (
-                  <li key={`${activePanel.id}-b-${bulletIdx}`}>
+                  <li
+                    key={`${activePanel.id}-b-${bulletIdx}`}
+                    {...inlineFontSizeOverridePropsFromHtml(item)}
+                  >
                     {canvasEdit ? (
                       <FeatureTabCanvasField
                         as="span"
                         className="live-feature-tabs__editable"
                         value={item}
+                        htmlMode
+                        blurCommitGuard={textEditBlurCommitGuard}
+                        valueSyncGuard={featureTabValueSyncGuard}
                         onCommit={() => commitBulletsFromList()}
                         onPointerDown={stopCanvasBubble}
+                      />
+                    ) : featureTabFieldHasInlineHtml(item) ? (
+                      <span
+                        dangerouslySetInnerHTML={{ __html: featureTabBulletInnerHtml(item) }}
                       />
                     ) : (
                       item
@@ -324,6 +406,8 @@ export default function FeatureTabs({
           <div className="live-feature-tabs__visual">
             <figure
               className={`live-feature-tabs__figure${canvasEdit ? ' live-feature-tabs__figure--editable' : ''}`}
+              data-ft-image-fit={imageFit}
+              style={featureTabPanelFigureVars(imageFit, panelHeightPx)}
               onPointerDown={canvasEdit ? stopCanvasBubble : undefined}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -334,14 +418,8 @@ export default function FeatureTabs({
                 loading="eager"
                 fetchPriority="high"
                 decoding="async"
-                height={panelHeightPx > 0 ? panelHeightPx : undefined}
-                style={{
-                  objectFit: imageFit,
-                  width: '100%',
-                  height: `${panelHeightPx}px`,
-                  minHeight: `${Math.min(220, panelHeightPx)}px`,
-                  maxHeight: 'none',
-                }}
+                data-ft-panel-image=""
+                style={featureTabPanelImageInlineStyle(imageFit, panelHeightPx)}
               />
               {canvasEdit ? (
                 <>
@@ -369,6 +447,7 @@ export default function FeatureTabs({
             </figure>
           </div>
         </div>
+        )}
       </div>
     </div>
   );

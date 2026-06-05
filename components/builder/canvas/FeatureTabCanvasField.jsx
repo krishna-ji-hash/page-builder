@@ -1,6 +1,28 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
+import {
+  featureTabFieldHasInlineHtml,
+  sanitizeFeatureTabFieldHtml,
+} from '@/lib/featureTabInlineHtml';
+import { isFocusInFloatingToolbar, shouldDeferInlineEditBlurCommit } from '@/lib/inlineEditBlurGuard';
+import { saveRichTextSelection } from '@/lib/richTextExecCommands';
+import { syncInlineFontSizeHostFromHtml } from '@/lib/inlineFontSize';
+
+export const BLD_FORMATTING_LOCK_ATTR = 'data-bld-formatting-lock';
+
+function writeFieldContent(el, value, htmlMode) {
+  if (!el) return;
+  if (htmlMode) {
+    el.innerHTML = featureTabFieldHasInlineHtml(value)
+      ? sanitizeFeatureTabFieldHtml(value)
+      : String(value || '');
+    syncInlineFontSizeHostFromHtml(el, el.innerHTML);
+  } else {
+    el.innerText = String(value || '');
+    syncInlineFontSizeHostFromHtml(el, '');
+  }
+}
 
 /**
  * Canvas inline field for Feature Tabs — click to edit, blur to save.
@@ -10,9 +32,14 @@ export default function FeatureTabCanvasField({
   className = '',
   value = '',
   multiline = false,
+  htmlMode = false,
+  neutralizeBodyColorsPersist = false,
   disabled = false,
   onCommit,
   onPointerDown,
+  blurCommitGuard,
+  /** Skip prop→DOM sync while toolbar session is open (blur uses blurCommitGuard only). */
+  valueSyncGuard = null,
   stopPropagation = true,
   autoFocus = false,
   id,
@@ -20,10 +47,20 @@ export default function FeatureTabCanvasField({
   const ref = useRef(null);
   const focusedRef = useRef(false);
 
+  useLayoutEffect(() => {
+    writeFieldContent(ref.current, value, htmlMode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate once per mount
+  }, []);
+
   useEffect(() => {
     if (!ref.current || focusedRef.current) return;
-    ref.current.innerText = value || '';
-  }, [value]);
+    if (ref.current.getAttribute(BLD_FORMATTING_LOCK_ATTR) === '1') return;
+    const syncBlocked =
+      (typeof valueSyncGuard === 'function' && Boolean(valueSyncGuard())) ||
+      isFocusInFloatingToolbar();
+    if (syncBlocked) return;
+    writeFieldContent(ref.current, value, htmlMode);
+  }, [value, htmlMode, valueSyncGuard]);
 
   useEffect(() => {
     if (!autoFocus || !ref.current) return;
@@ -41,7 +78,21 @@ export default function FeatureTabCanvasField({
     onPointerDown?.(event);
   };
 
-  const pointerHandler = onPointerDown || stopPropagation ? stopBubble : undefined;
+  const pointerHandler = (event) => {
+    if (ref.current) saveRichTextSelection(ref.current);
+    stopBubble(event);
+  };
+
+  const commitFromElement = (el) => {
+    if (!el || el.getAttribute(BLD_FORMATTING_LOCK_ATTR) === '1') return;
+    const raw = htmlMode ? el.innerHTML : el.innerText;
+    const sanitizeOpts = { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist };
+    const next = htmlMode ? sanitizeFeatureTabFieldHtml(String(raw || ''), sanitizeOpts) : String(raw || '').trim();
+    const prev = htmlMode
+      ? sanitizeFeatureTabFieldHtml(String(value || ''), sanitizeOpts)
+      : String(value || '').trim();
+    if (next !== prev) onCommit?.(next);
+  };
 
   return (
     <Tag
@@ -53,20 +104,30 @@ export default function FeatureTabCanvasField({
       data-bld-feature-tab-field=""
       onFocus={() => {
         focusedRef.current = true;
+        if (ref.current) saveRichTextSelection(ref.current);
       }}
       onBlur={(event) => {
         focusedRef.current = false;
-        const next = String(event.currentTarget.innerText || '').trim();
-        const prev = String(value || '').trim();
-        if (next !== prev) onCommit?.(next);
+        window.setTimeout(() => {
+          const sessionOpen =
+            typeof blurCommitGuard === 'function' ? Boolean(blurCommitGuard()) : false;
+          if (shouldDeferInlineEditBlurCommit(event, sessionOpen)) return;
+          commitFromElement(event.currentTarget);
+        }, 0);
       }}
-      onPointerDown={pointerHandler}
+      onPointerDown={onPointerDown || stopPropagation ? pointerHandler : undefined}
       onClick={stopPropagation ? stopBubble : undefined}
+      onKeyUp={() => {
+        if (ref.current) saveRichTextSelection(ref.current);
+      }}
+      onMouseUp={() => {
+        if (ref.current) saveRichTextSelection(ref.current);
+      }}
       onKeyDown={(event) => {
         event.stopPropagation();
         if (event.key === 'Escape') {
           event.preventDefault();
-          if (ref.current) ref.current.innerText = value || '';
+          if (ref.current) writeFieldContent(ref.current, value, htmlMode);
           event.currentTarget.blur();
         } else if (event.key === 'Enter' && !multiline && !event.shiftKey) {
           event.preventDefault();

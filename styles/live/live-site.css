@@ -1,6 +1,8 @@
 @import '../shared/live-semantic-tokens.css';
 @import '../shared/site-header-bar.css';
 @import '../shared/feature-tabs.css';
+@import '../shared/section-template-parity.css';
+@import '../shared/inline-font-size.css';
 @import '../shared/faq-accordion.css';
 @import '../shared/get-in-touch.css';
 @import '../shared/section-layout.css';
@@ -1786,51 +1788,7 @@
   overflow: visible;
 }
 
-/* Section templates (builder parity): stretch / overflow — match section + main landmarks */
-.live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='platformHero'] {
-  align-items: stretch !important;
-  overflow-x: clip;
-  overflow-y: visible;
-}
-
-.live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='platformHero']
-  > .live-node.bld-column {
-  align-self: stretch !important;
-  min-height: min-content;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='platformHero']
-  > .live-node.bld-column:first-child {
-  flex: 2 1 0 !important;
-  align-self: stretch !important;
-  min-height: 100%;
-}
-
-.live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='platformHero']
-  > .live-node.bld-column
-  > .live-node.bld-stack {
-  flex: 1 1 0;
-  min-height: 100%;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='platformHero']
-  .live-node.bld-stack
-  p
-  strong {
-  font-weight: 700;
-  color: inherit;
-}
+/* Section template layout: styles/shared/section-template-parity.css */
 
 /* Dark pitch column — light site (builder wraps columns in .bld-node-children). */
 :is(.live-doc, .bld-canvas__live-mirror)
@@ -1855,79 +1813,7 @@
   color: var(--live-section-fg-on-dark) !important;
 }
 
-.live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='whyChooseCourier'] {
-  overflow-x: clip;
-  overflow-y: visible;
-}
-
-.live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='howItWorks'] {
-  align-items: center !important;
-  overflow-x: clip;
-  overflow-y: visible;
-}
-
-.live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='howItWorks']
-  > .live-node.bld-column {
-  align-self: center !important;
-  width: 100%;
-  max-width: 100%;
-}
-
-/* Steps grid: 2nd stack under content column (heading | grid | CTA). */
-.live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='howItWorks']
-  > .live-node.bld-column
-  > .live-node.bld-stack
-  > .live-node.bld-stack:nth-child(2) {
-  display: flex !important;
-  flex-direction: row !important;
-  flex-wrap: nowrap !important;
-  align-items: stretch !important;
-  width: 100%;
-}
-
-.live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='howItWorks']
-  > .live-node.bld-column
-  > .live-node.bld-stack
-  > .live-node.bld-stack:nth-child(2)
-  > .live-node.bld-stack {
-  flex: 1 1 0 !important;
-  min-width: 0;
-  align-self: stretch !important;
-}
-
-@media (max-width: 767px) {
-  .live-doc
-    > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='howItWorks']
-    > .live-node.bld-column
-    > .live-node.bld-stack
-    > .live-node.bld-stack:nth-child(2) {
-    flex-direction: column !important;
-    flex-wrap: nowrap !important;
-  }
-
-  .live-doc
-    > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='howItWorks']
-    > .live-node.bld-column
-    > .live-node.bld-stack
-    > .live-node.bld-stack:nth-child(2)
-    > .live-node.bld-stack {
-    flex: 1 1 auto !important;
-    max-width: 100%;
-  }
-}
-
-.live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='featureTabs'] {
-  align-items: stretch !important;
-  align-content: flex-start;
-  overflow-x: clip;
-  overflow-y: visible;
-}
+/* Feature tabs layout + images: styles/shared/feature-tabs.css (parity surface) */
 
 /* Feature tabs — tab labels inherit row section contrast (dark mode readable) */
 :is(.live-doc, .bld-canvas__live-mirror)
@@ -1976,103 +1862,6 @@
   .live-feature-tabs[data-section-tone='dark']
   .live-feature-tabs__bullets li {
   color: var(--live-section-muted, #cbd5e1);
-}
-
-.live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='featureTabs']
-  > .live-node.bld-column,
-.live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='featureTabs']
-  > .live-node.bld-column
-  > .live-node.bld-stack {
-  align-self: stretch !important;
-  width: 100%;
-  max-width: 100%;
-  min-height: min-content;
-  overflow: visible;
-}
-
-.live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='faq'] {
-  align-items: stretch !important;
-  overflow-y: visible;
-}
-
-.live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='faq']
-  > .live-node.bld-column,
-.live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='faq']
-  > .live-node.bld-column
-  > .live-node.bld-stack {
-  align-self: stretch !important;
-  width: 100%;
-  max-width: 100%;
-  min-height: min-content;
-  overflow: visible;
-}
-
-.live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='howItWorks']
-  figure.live-node
-  img {
-  max-width: 100%;
-  width: 100%;
-  object-fit: cover;
-}
-
-.live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='resourcesBlogs'] {
-  align-items: stretch !important;
-  overflow-y: visible;
-}
-
-.live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='resourcesBlogs']
-  > .live-node.bld-column,
-.live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='resourcesBlogs']
-  > .live-node.bld-column
-  > .live-node.bld-stack {
-  align-self: stretch !important;
-  width: 100%;
-  max-width: 100%;
-  min-height: min-content;
-  overflow: visible;
-}
-
-.live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='resourcesBlogs']
-  figure.live-node
-  img {
-  max-width: 100%;
-  width: 100%;
-  object-fit: cover;
-}
-
-.live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='courierFeatureBands'] {
-  align-items: center !important;
-  overflow-x: clip;
-  overflow-y: visible;
-  flex-wrap: nowrap;
-}
-
-.live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='courierFeatureBands']
-  > .live-node.bld-column {
-  align-self: center !important;
-  flex: 1 1 0 !important;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.live-doc
-  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='courierFeatureBands']
-  figure.live-node
-  img {
-  max-width: 100%;
-  width: 100%;
 }
 
 /* If footer is unstyled, prevent it from visually "floating" on top of prior section backgrounds. */

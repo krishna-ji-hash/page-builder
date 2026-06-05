@@ -1,0 +1,48 @@
+/**
+ * Template vs toolbar font-size
+ * --------------------------------
+ * Section templates (e.g. feature-tabs.css) set preset font-size (15px, clamp headings).
+ * That CSS applies while copy uses the template default.
+ *
+ * After the builder toolbar changes font size, we set [data-bld-inline-font-size] on the field.
+ * Rules below disable template font-size/line-height and use --bld-inline-font-size instead.
+ *
+ * Clear formatting (X) removes [data-bld-inline-font-size] + inline spans → template CSS returns.
+ */
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  :is(
+    .live-feature-tabs__paragraph,
+    .live-feature-tabs__heading,
+    .live-feature-tabs__editable,
+    .live-feature-tabs__bullets li,
+    .bld-inline-text-editor,
+    .bld-demo-paragraph,
+    .bld-demo-text,
+    .bld-demo-heading,
+    p,
+    span,
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6
+  )[data-bld-inline-font-size] {
+  font-size: var(--bld-inline-font-size) !important;
+  line-height: var(--bld-inline-line-height, 1.45) !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror) [data-bld-inline-font-size] [data-bld-fs],
+:is(.live-doc, .bld-canvas__live-mirror) [data-bld-inline-font-size] > span[style*='font-size'],
+:is(.live-doc, .bld-canvas__live-mirror) [data-bld-inline-font-size] span[data-bld-fs] {
+  font-size: var(--bld-inline-font-size) !important;
+  line-height: var(--bld-inline-line-height, 1.45) !important;
+}
+
+/* Bullets: override on <li> — template sets font-size on li, not inner span */
+:is(.live-doc, .bld-canvas__live-mirror)
+  .live-feature-tabs__bullets li[data-bld-inline-font-size] {
+  font-size: var(--bld-inline-font-size) !important;
+  line-height: var(--bld-inline-line-height, 1.45) !important;
+}

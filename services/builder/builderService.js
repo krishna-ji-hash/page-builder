@@ -17,6 +17,11 @@ import { freezeGlobalSectionsForPublish } from '@/lib/globalSectionSnapshot';
 import { applyResponsiveDefaultsToTree } from '@/lib/applyPageResponsiveDefaults';
 import { isBrandFontNormalizeStyleJson } from '@/lib/projectBrand.js';
 import { normalizeSiteTheme } from '@/lib/siteDesignTheme';
+import {
+  mergeCarouselPropsForBulkPersist,
+  mergeFeatureTabsPropsForBulkPersist,
+  mergeImageNodePropsForBulkPersist,
+} from '@/lib/inlineImagePersist.js';
 
 function parseSnapshot(value) {
   if (!value) return null;
@@ -1173,7 +1178,25 @@ async function persistClientTreeOntoDraft(connection, draftVersionId, clientRoot
     if (!existing || Number(existing.version_id) !== Number(draftVersionId)) continue;
 
     const existingProps = normalizeNodeProps(parseSnapshot(existing.props_json) || {}, existing.node_type);
-    const merged = mergeNodePropsJsonPatch(existingProps, raw.props || {});
+    let merged;
+    if (existing.node_type === 'tabs' && raw.props) {
+      merged = normalizeNodeProps(
+        mergeFeatureTabsPropsForBulkPersist(raw.props, existingProps),
+        existing.node_type
+      );
+    } else if (existing.node_type === 'carousel' && raw.props) {
+      merged = normalizeNodeProps(
+        mergeCarouselPropsForBulkPersist(raw.props, existingProps),
+        existing.node_type
+      );
+    } else if (existing.node_type === 'image' && raw.props) {
+      merged = normalizeNodeProps(
+        mergeImageNodePropsForBulkPersist(raw.props, existingProps),
+        existing.node_type
+      );
+    } else {
+      merged = mergeNodePropsJsonPatch(existingProps, raw.props || {});
+    }
     merged.style_json = mergeResponsiveStyleJsonDeep(existingProps.style_json, merged.style_json);
     if (raw.style_json !== undefined) {
       merged.style_json = mergeResponsiveStyleJsonDeep(merged.style_json, raw.style_json);
@@ -1184,10 +1207,20 @@ async function persistClientTreeOntoDraft(connection, draftVersionId, clientRoot
     if (existing.node_type === 'rich_text' && merged.content !== undefined) {
       merged.content = sanitizeRichHtml(String(merged.content));
     }
-    const nextPropsStr = JSON.stringify(normalizeNodeProps(merged, existing.node_type));
+    const nextPropsNormalized = normalizeNodeProps(merged, existing.node_type);
+    const nextPropsStr = JSON.stringify(nextPropsNormalized);
+    const existingPropsStr = JSON.stringify(existingProps);
     const nextDisplayName = raw.displayName ?? existing.display_name;
     const nextParent = st.parentId;
     const nextPosition = st.index;
+
+    const propsUnchanged = nextPropsStr === existingPropsStr;
+    const parentUnchanged = Number(existing.parent_node_id ?? null) === Number(nextParent ?? null);
+    const positionUnchanged = Number(existing.position_index) === Number(nextPosition);
+    const nameUnchanged = String(existing.display_name || '') === String(nextDisplayName || '');
+    if (propsUnchanged && parentUnchanged && positionUnchanged && nameUnchanged) {
+      continue;
+    }
 
     let parentNode = null;
     if (nextParent) {

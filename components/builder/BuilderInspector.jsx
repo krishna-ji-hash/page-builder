@@ -422,6 +422,7 @@ export default function BuilderInspector({
   onInsertDivider,
   canInsertDivider = true,
   isCreatingNode = false,
+  onSetupFeatureTabsElementMode = null,
   onSelectNode,
   onApplyResponsiveToPage,
   isApplyingResponsive = false,
@@ -879,7 +880,7 @@ export default function BuilderInspector({
     carouselSlidesJson: '[]',
     featureTabsJson: '[]',
     featureTabsActiveId: '',
-    featureTabsImageFit: 'cover',
+    featureTabsImageFit: 'contain',
     featureTabsImageHeightPx: '360',
     featureTabsTabAlign: 'center',
     featureTabsBarBg: '',
@@ -890,6 +891,7 @@ export default function BuilderInspector({
     featureTabsPanelBorderWidthPx: 0,
     featureTabsPanelRadiusPx: 0,
     featureTabsBlockMaxWidthPct: 100,
+    featureTabsPanelMode: 'fields',
     sectionHeadingEnabled: false,
     sectionHeadingEyebrow: '',
     sectionHeadingHeading: '',
@@ -2190,6 +2192,23 @@ export default function BuilderInspector({
         await updateFeatureTabsProps({ activeTabId: id });
         return;
       }
+      if (key === 'featureTabsEnableElementMode') {
+        if (typeof onSetupFeatureTabsElementMode === 'function' && featureTabsTarget?.id) {
+          await onSetupFeatureTabsElementMode(featureTabsTarget.id, { seedStarter: true });
+          setForm((prevForm) => ({ ...prevForm, featureTabsPanelMode: 'elements' }));
+        }
+        return;
+      }
+      if (key === 'featureTabsPanelMode') {
+        const mode = String(value || 'fields').trim() === 'elements' ? 'elements' : 'fields';
+        if (mode === 'elements' && typeof onSetupFeatureTabsElementMode === 'function') {
+          await onSetupFeatureTabsElementMode(featureTabsTarget.id, { seedStarter: true });
+        } else {
+          await updateFeatureTabsProps({ panelMode: mode });
+        }
+        setForm((prevForm) => ({ ...prevForm, featureTabsPanelMode: mode }));
+        return;
+      }
       if (key === 'featureTabsAddTab') {
         const current = normalizeFeatureTabs(ftProps.tabs);
         const tab = newFeatureTabFromList(current);
@@ -2233,8 +2252,8 @@ export default function BuilderInspector({
         return;
       }
       if (key === 'featureTabsImageFit') {
-        const fit = String(value || 'cover').trim().toLowerCase();
-        const imageFit = fit === 'contain' || fit === 'fill' ? fit : 'cover';
+        const fit = String(value || 'contain').trim().toLowerCase();
+        const imageFit = fit === 'fill' ? 'fill' : 'contain';
         await updateFeatureTabsProps({ imageFit });
         return;
       }
@@ -3458,6 +3477,7 @@ export default function BuilderInspector({
               ? () => onSelectNode(nestedFeatureTabsNode.id)
               : undefined
           }
+          onSetupFeatureTabsElementMode={onSetupFeatureTabsElementMode}
         />
       ) : null}
       {activeTab === 'layout' ? (

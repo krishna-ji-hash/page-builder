@@ -20,6 +20,7 @@
     "lines:remove-all": "node --env-file=.env scripts/remove-all-divider-nodes.mjs",
     "test": "node scripts/test-all.mjs",
     "audit:section-contrast": "node scripts/audit-hardcoded-colors.mjs --section-contrast",
+    "audit:builder-live-parity": "node scripts/audit-builder-live-parity.mjs",
     "test:pat": "node scripts/production-acceptance.mjs"
   },
   "dependencies": {

@@ -43,6 +43,7 @@ export default function ContentPanel({
   onPatchStripRowPaddingY = null,
   nestedFeatureTabsNode = null,
   onSelectFeatureTabs = null,
+  onSetupFeatureTabsElementMode = null,
 }) {
   const [mediaOpen, setMediaOpen] = useState(false);
   const [mediaAllowedKinds, setMediaAllowedKinds] = useState(null);
@@ -169,12 +170,40 @@ export default function ContentPanel({
     reader.readAsDataURL(file);
   };
 
-  const handleImageUpload = (event) => {
+  const applyCarouselSlideImageSrc = (slideIndex, src, altText = '') => {
+    onChange('carouselSlidePatch', {
+      index: slideIndex,
+      patch: {
+        imageSrc: src,
+        image: src,
+        imageAlt: altText || '',
+      },
+    });
+  };
+
+  const uploadImageFileToMedia = async (file, folder) => {
+    const { publicUrl, altText, title } = await uploadProjectMediaFile(Number(projectId), file, { folder });
+    const alt = altText || title || String(file.name || '').replace(/\.[^.]+$/, '') || '';
+    return { publicUrl, alt };
+  };
+
+  const handleImageUpload = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
     if (!file.type?.startsWith('image/')) {
       event.target.value = '';
       return;
+    }
+    if (canUseMedia) {
+      try {
+        const { publicUrl, alt } = await uploadImageFileToMedia(file, 'images');
+        onChange('src', publicUrl);
+        if (!form.alt?.trim()) onChange('alt', alt);
+        event.target.value = '';
+        return;
+      } catch {
+        /* fall through to inline data URL */
+      }
     }
     const reader = new FileReader();
     reader.onload = () => {
@@ -191,24 +220,27 @@ export default function ContentPanel({
     reader.readAsDataURL(file);
   };
 
-  const handleCarouselSlideImageUpload = (slideIndex, event) => {
+  const handleCarouselSlideImageUpload = async (slideIndex, event) => {
     const file = event.target.files?.[0];
     if (!file) return;
     if (!file.type?.startsWith('image/')) {
       event.target.value = '';
       return;
     }
+    if (canUseMedia) {
+      try {
+        const { publicUrl, alt } = await uploadImageFileToMedia(file, 'carousel');
+        applyCarouselSlideImageSrc(slideIndex, publicUrl, alt);
+        event.target.value = '';
+        return;
+      } catch {
+        /* fall through to inline data URL */
+      }
+    }
     const reader = new FileReader();
     reader.onload = () => {
       const src = typeof reader.result === 'string' ? reader.result : '';
-      onChange('carouselSlidePatch', {
-        index: slideIndex,
-        patch: {
-          imageSrc: src,
-          image: src,
-          imageAlt: file.name.replace(/\.[^.]+$/, ''),
-        },
-      });
+      applyCarouselSlideImageSrc(slideIndex, src, file.name.replace(/\.[^.]+$/, ''));
       event.target.value = '';
     };
     reader.onerror = () => {
@@ -217,12 +249,22 @@ export default function ContentPanel({
     reader.readAsDataURL(file);
   };
 
-  const handleCarouselQuickImageUpload = (event) => {
+  const handleCarouselQuickImageUpload = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
     if (!file.type?.startsWith('image/')) {
       event.target.value = '';
       return;
+    }
+    if (canUseMedia) {
+      try {
+        const { publicUrl } = await uploadImageFileToMedia(file, 'carousel');
+        onChange('carouselEnsureSlide0Image', publicUrl);
+        event.target.value = '';
+        return;
+      } catch {
+        /* fall through to inline data URL */
+      }
     }
     const reader = new FileReader();
     reader.onload = () => {
@@ -1679,6 +1721,7 @@ export default function ContentPanel({
           jsonErrors={jsonErrors}
           editingViaParent={selectedNode?.nodeType !== 'tabs'}
           onFocusFeatureTabs={onSelectFeatureTabs}
+          onSetupFeatureTabsElementMode={onSetupFeatureTabsElementMode}
           chromeSection="content"
         />
       ) : null}

@@ -16,6 +16,17 @@ import { isValidNodeHierarchy } from '@/lib/builderHierarchy';
 import { computeReorderFromDrop, findNodeInTree } from '@/lib/builderTree';
 import { isFooterRowNode, isHeaderRowNode, isNodeEditsDisabledBySectionLock } from '@/lib/rowLayoutMeta';
 import { resolveBuilderCanvasSelectTarget, isSplitHeroCarouselNode } from '@/lib/builderCanvasSelect.js';
+import {
+  FEATURE_TAB_FIELD_SELECTOR,
+  shouldStartFeatureTabTextEdit,
+  shouldStartTextEditFromCanvasClick,
+} from '@/lib/builderTextEditClick.js';
+import {
+  execFormatOnTextRoot,
+  preserveTextEditSelectionForToolbar,
+  scheduleAfterCanvasSelection,
+} from '@/lib/canvasTextEditSession.js';
+import { placeCaretAtPointer, selectionIsInsideRoot } from '@/lib/placeCaretAtPointer.js';
 import { normalizeResponsiveStyle } from '@/lib/styleNormalizer';
 import { withResolvedLayoutGap } from '@/lib/layoutGapUtils';
 import { mergeDeviceStyleWithTypeDefaults, mergeMenuDeviceStyle } from '@/lib/nodeLayoutDefaults';
@@ -76,23 +87,40 @@ import { useBuilderTheme } from '@/context/BuilderThemeContext';
 import { mergeNodeStyleWithSiteTheme, normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesignTheme';
 import { alignThemeTokensWithSiteTheme, themeTokensToCssVariableStyle } from '@/lib/themeTokens';
 import Carousel from '@/components/runtime/Carousel';
-import { patchFeatureTabs, resolveFeatureTabsProps } from '@/lib/featureTabsDefaults';
+import {
+  featureTabsPropsFingerprint,
+  patchFeatureTabs,
+  resolveFeatureTabsProps,
+} from '@/lib/featureTabsDefaults';
+import {
+  findFeatureTabPanelStack,
+  isFeatureTabsElementPanelMode,
+  resolveActiveFeatureTabPanelIdFromDom,
+} from '@/lib/featureTabPanels';
+import { buildFeatureTabPanelPatchFromDom } from '@/lib/featureTabPanelCommit';
+import { sanitizeFeatureTabFieldHtml, featureTabFieldHasInlineHtml } from '@/lib/featureTabInlineHtml';
+import { BLD_FORMATTING_LOCK_ATTR } from '@/components/builder/canvas/FeatureTabCanvasField';
 import { appendFaqItem, patchFaqItems, resolveFaqAccordionProps } from '@/lib/faqAccordionDefaults';
 import Menu from '@/components/runtime/Menu';
 import { applyBindingsToString } from '@/lib/cms/cmsBindings';
 import { isProbablyInlineHtml, sanitizeInlineLeafHtml } from '@/lib/inlineTextHtml';
+import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
 import {
   normalizeInlineTextProps,
   propsPatchForTextContent,
   resolveInlineTextHtml,
 } from '@/lib/richTextNodeProps';
 import {
+  applyFontSizePxInRoot,
+  ensureFontSizeMarkupInRoot,
   applyRichColorInRoot,
   execRichCommandInRoot,
+  readFontSizePxFromRoot,
   restoreRichTextSelection,
   saveRichTextSelection,
   selectionNonCollapsedInRoot,
 } from '@/lib/richTextExecCommands';
+import { clearInlineFontSizeOnHost, stripToolbarFontSizeFromHtml } from '@/lib/inlineFontSize';
 import {
   computeFloatingToolbarBesidePosition,
   computeFloatingToolbarPosition,
@@ -117,7 +145,7 @@ import GapHandlesOverlay from './canvas/GapHandlesOverlay';
 import SpacingGuidesOverlay from './canvas/SpacingGuidesOverlay';
 import GridOverlay from './canvas/GridOverlay';
 import RichTextEditor from './RichTextEditor';
-import FontSizeStepper, { FONT_SIZE_MAX_PX, FONT_SIZE_MIN_PX } from './FontSizeStepper';
+import FontSizeStepper, { clampFontSizePx, FONT_SIZE_MAX_PX, FONT_SIZE_MIN_PX } from './FontSizeStepper';
 import { getGlobalLinkMeta } from '@/lib/globalComponentLinkMeta';
 import { normalizeHeadingLevel as normalizeHeadingTag, semanticHeadingTypography } from '@/lib/headingLevel';
 import { finalizeLeafDeviceStyle } from '@/lib/leafStylePipeline';
@@ -219,7 +247,7 @@ function consumeFloatingToolbarPointerForCanvas(event) {
     const inToolbar = t.closest('.bld-floating-inline-toolbar, .bld-floating-quick-toolbar, .bld-wp-toolbar');
     if (inToolbar) {
       const native = t.closest(
-        'select, option, textarea, input[type="color"], input[type="number"], input:not([type]), label, button'
+        'select, option, textarea, input, button, label, .bld-font-size-stepper, .bld-font-size-stepper__input, .bld-font-size-stepper__btn'
       );
       if (native && inToolbar.contains(native)) {
         event.stopPropagation();
@@ -251,13 +279,33 @@ const LIVE_MIRROR_TEXT_ROOT_SELECTOR = [
   '.bld-rich-content',
 ].join(', ');
 
-function getRichTextCommandRoot({ isInlineEditing, inlineEditWrapRef, nodeElementRef, nodeType }) {
+function getRichTextCommandRoot({
+  isInlineEditing,
+  isRichTextEditing,
+  isFeatureTabFieldEditing,
+  inlineEditWrapRef,
+  nodeElementRef,
+  nodeType,
+  pinnedTextEditRoot = null,
+}) {
   if (isInlineEditing && inlineEditWrapRef?.current) {
     const ed = inlineEditWrapRef.current.querySelector('[contenteditable="true"], [contenteditable=""]');
     if (ed) return ed;
   }
   const shell = nodeElementRef?.current;
   if (!shell) return null;
+  if (nodeType === 'tabs' && isFeatureTabFieldEditing) {
+    const focused = shell.querySelector(`${FEATURE_TAB_FIELD_SELECTOR}:focus`);
+    if (focused) return focused;
+    if (pinnedTextEditRoot && shell.contains(pinnedTextEditRoot)) return pinnedTextEditRoot;
+    return shell.querySelector(FEATURE_TAB_FIELD_SELECTOR);
+  }
+  if (nodeType === 'rich_text' && isRichTextEditing) {
+    return (
+      shell.querySelector('.bld-rich-text--editing[contenteditable], .bld-rich-text[contenteditable]') ||
+      shell.querySelector('.bld-rich-text--editing, .bld-rich-text')
+    );
+  }
   if (nodeType === 'heading') {
     return shell.querySelector(LIVE_MIRROR_HEADING_ROOT_SELECTOR);
   }
@@ -277,31 +325,6 @@ function parseTypographyFontSizePx(raw, fallback = 16) {
     return Number.isFinite(n) ? Math.round(n) : fallback;
   }
   return fallback;
-}
-
-function applyInlineFontSizePxInRoot(root, px) {
-  if (!root || typeof document === 'undefined') return null;
-  const n = Math.max(FONT_SIZE_MIN_PX, Math.min(FONT_SIZE_MAX_PX, Math.round(px)));
-  const sizeStr = `${n}px`;
-  const before = root.innerHTML;
-  const hadCe = root.getAttribute('contenteditable');
-  root.setAttribute('contenteditable', 'true');
-  root.focus();
-  try {
-    document.execCommand('fontSize', '7');
-    root.querySelectorAll('font[size="7"]').forEach((font) => {
-      const span = document.createElement('span');
-      span.style.fontSize = sizeStr;
-      span.innerHTML = font.innerHTML;
-      font.replaceWith(span);
-    });
-  } catch (_) {
-    /* ignore */
-  }
-  const after = root.innerHTML;
-  if (hadCe === null) root.removeAttribute('contenteditable');
-  else root.setAttribute('contenteditable', hadCe);
-  return { before, after };
 }
 
 function applyDeviceStylePatch(existingStyle, device, patch, nodeType = null, siteTheme = null) {
@@ -461,21 +484,38 @@ function renderNodeContent(node, renderOpts = {}) {
     builderProjectId = null,
     formPreviewMode = null,
     sectionTone = null,
+    textEditToolbarOpen = false,
+    textEditBlurCommitGuard = null,
+    featureTabValueSyncGuard = null,
+    renderFeatureTabPanel = null,
   } = renderOpts;
   const liveStylePresets = renderOpts.stylePresets ?? null;
   const liveAnimationPresets = renderOpts.animationPresets ?? null;
   const bind = (s) => (cmsBindingContext ? applyBindingsToString(String(s || ''), cmsBindingContext) : s);
 
   const builderCanvasHooks =
-    onTabsActiveChange || onFaqOpenChange || onSplitHeroSlidePatch || sectionEditLocked
+    onTabsActiveChange ||
+    onFeatureTabsPatch ||
+    onFeatureTabsImageFile ||
+    onFaqOpenChange ||
+    onSplitHeroSlidePatch ||
+    sectionEditLocked ||
+    textEditBlurCommitGuard ||
+    featureTabValueSyncGuard
       ? {
           sectionEditLocked,
-          ...(onTabsActiveChange
+          textEditBlurCommitGuard,
+          featureTabValueSyncGuard,
+          ...(onTabsActiveChange ||
+          onFeatureTabsPatch ||
+          onFeatureTabsImageFile ||
+          typeof renderFeatureTabPanel === 'function'
             ? {
                 tabs: {
-                  onActiveTabChange: onTabsActiveChange,
-                  onPatchTab: onFeatureTabsPatch,
-                  onTabImageFile: onFeatureTabsImageFile,
+                  ...(onTabsActiveChange ? { onActiveTabChange: onTabsActiveChange } : {}),
+                  ...(onFeatureTabsPatch ? { onPatchTab: onFeatureTabsPatch } : {}),
+                  ...(onFeatureTabsImageFile ? { onTabImageFile: onFeatureTabsImageFile } : {}),
+                  ...(typeof renderFeatureTabPanel === 'function' ? { renderPanel: renderFeatureTabPanel } : {}),
                 },
               }
             : {}),
@@ -538,6 +578,7 @@ function renderNodeContent(node, renderOpts = {}) {
     const headingHtmlMode =
       isInlineEditing &&
       (headingNorm.richText.enabled ||
+        textEditToolbarOpen ||
         isProbablyInlineHtml(inlineDraftText) ||
         isProbablyInlineHtml(rawText));
     if (isInlineEditing) {
@@ -591,6 +632,7 @@ function renderNodeContent(node, renderOpts = {}) {
     const textHtmlMode =
       isInlineEditing &&
       (textNorm.richText.enabled ||
+        textEditToolbarOpen ||
         isProbablyInlineHtml(inlineDraftText) ||
         isProbablyInlineHtml(rawText));
     if (isInlineEditing) {
@@ -688,6 +730,7 @@ function renderNodeContent(node, renderOpts = {}) {
         className={`bld-rich-text--canvas ${animRich.className || ''}`.trim()}
         neutralizeBodyColorsPreview={neutralizeBodyColorsPreview}
         neutralizeBodyColorsPersist={neutralizeBodyColorsPersist}
+        useFloatingToolbar
       />
     );
   }
@@ -972,6 +1015,24 @@ function CanvasFloatingToolbar({
   );
 }
 
+/** Renders per-tab panel stack children inside Feature Tabs (elements mode). */
+function FeatureTabPanelChildren({ panelStack, nodeRendererProps }) {
+  const kids = panelStack?.children;
+  if (!Array.isArray(kids) || !kids.length) return null;
+  return (
+    <div className="bld-feature-tab-panel-children">
+      {kids.map((childNode) => (
+        <NodeRenderer
+          key={childNode.id}
+          node={childNode}
+          parentNodeType="stack"
+          {...nodeRendererProps}
+        />
+      ))}
+    </div>
+  );
+}
+
 function NodeRenderer({
   node,
   rowIndex = null,
@@ -1038,6 +1099,8 @@ function NodeRenderer({
   builderProjectId = null,
 }) {
   const isSelected = node.id === selectedNodeId;
+  const pendingTextEditPointerRef = useRef(null);
+  const activeTextEditRootRef = useRef(null);
   const handleSelect = (event) => {
     const selectTarget = resolveBuilderCanvasSelectTarget(event, node.id);
     if (selectTarget === 'nav') {
@@ -1092,6 +1155,12 @@ function NodeRenderer({
     node.nodeType === 'text' ||
     node.nodeType === 'paragraph' ||
     node.nodeType === 'button';
+  const featureTabsElementsMode =
+    node.nodeType === 'tabs' && isFeatureTabsElementPanelMode(node.props);
+  const supportsFloatingTextToolbar =
+    supportsInlineTextEdit ||
+    node.nodeType === 'rich_text' ||
+    (node.nodeType === 'tabs' && !featureTabsElementsMode);
 
   const repeatCfg =
     node?.props?.meta?.cms?.repeat && typeof node.props.meta.cms.repeat === 'object' && !Array.isArray(node.props.meta.cms.repeat)
@@ -1117,71 +1186,132 @@ function NodeRenderer({
     Array.isArray(tree) &&
     tree.length > 0 &&
     isNodeEditsDisabledBySectionLock(tree, node.id);
+  /** Latest tabs props — avoids stale closure when tab content + activeTabId save in quick succession. */
+  const nodePropsRef = useRef(node.props);
+  nodePropsRef.current = node.props;
+  const featureTabSwitchInFlightRef = useRef(null);
+  const featureTabsSavedFingerprintRef = useRef(
+    node.nodeType === 'tabs' ? featureTabsPropsFingerprint(node.props) : ''
+  );
+  const featureTabsPersistTimerRef = useRef(null);
+  const featureTabsPersistChainRef = useRef(Promise.resolve());
+  const featureTabsPendingPropsRef = useRef(null);
+
+  const flushFeatureTabsPersist = useCallback(
+    async ({ immediate = false, skipHistorySnapshot = false } = {}) => {
+      if (sectionEditLocked || !onUpdateNode || node.nodeType !== 'tabs') return;
+      if (featureTabsPersistTimerRef.current) {
+        window.clearTimeout(featureTabsPersistTimerRef.current);
+        featureTabsPersistTimerRef.current = null;
+      }
+      const run = async () => {
+        const nextProps = nodePropsRef.current;
+        if (!nextProps) return;
+        featureTabsPendingPropsRef.current = null;
+        const fp = featureTabsPropsFingerprint(nextProps);
+        if (fp === featureTabsSavedFingerprintRef.current) return;
+        await onUpdateNode({
+          nodeId: node.id,
+          payload: { props: nextProps },
+          skipHistorySnapshot,
+        });
+        featureTabsSavedFingerprintRef.current = fp;
+      };
+      featureTabsPersistChainRef.current = featureTabsPersistChainRef.current.then(run).catch(() => {});
+      if (immediate) await featureTabsPersistChainRef.current;
+    },
+    [node.id, node.nodeType, onUpdateNode, sectionEditLocked]
+  );
+
+  const queueFeatureTabsPersist = useCallback(
+    (nextProps, { immediate = false, skipHistorySnapshot = false } = {}) => {
+      if (sectionEditLocked || !onUpdateNode || node.nodeType !== 'tabs' || !nextProps) return;
+      nodePropsRef.current = nextProps;
+      featureTabsPendingPropsRef.current = nextProps;
+      if (immediate) {
+        void flushFeatureTabsPersist({ immediate: true, skipHistorySnapshot });
+        return;
+      }
+      if (featureTabsPersistTimerRef.current) window.clearTimeout(featureTabsPersistTimerRef.current);
+      featureTabsPersistTimerRef.current = window.setTimeout(() => {
+        featureTabsPersistTimerRef.current = null;
+        void flushFeatureTabsPersist({ skipHistorySnapshot: true });
+      }, 800);
+    },
+    [flushFeatureTabsPersist, node.nodeType, onUpdateNode, sectionEditLocked]
+  );
+
+  useEffect(() => {
+    if (node.nodeType !== 'tabs') return;
+    nodePropsRef.current = node.props;
+    featureTabsSavedFingerprintRef.current = featureTabsPropsFingerprint(node.props);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset queue state only when tabs node changes
+  }, [node.id]);
+
   const handleTabsActiveChange = useCallback(
     async (tabId) => {
       if (sectionEditLocked || !onUpdateNode || node.nodeType !== 'tabs') return;
       const nextId = String(tabId || '').trim();
       if (!nextId) return;
-      await onUpdateNode({
-        nodeId: node.id,
-        payload: {
-          props: {
-            ...(node.props || {}),
-            activeTabId: nextId,
-          },
-        },
-      });
+      const nextProps = { ...(nodePropsRef.current || {}), activeTabId: nextId };
+      queueFeatureTabsPersist(nextProps, { immediate: true });
     },
-    [node.id, node.nodeType, node.props, onUpdateNode, sectionEditLocked]
+    [node.nodeType, onUpdateNode, queueFeatureTabsPersist, sectionEditLocked]
   );
-  const tabsActiveChangeHandler = node.nodeType === 'tabs' ? handleTabsActiveChange : null;
   const handleFeatureTabsPatch = useCallback(
-    async (tabId, patch) => {
+    async (tabId, patch, options = {}) => {
       if (sectionEditLocked || !onUpdateNode || node.nodeType !== 'tabs' || !patch) return;
-      const { tabs } = resolveFeatureTabsProps(node.props);
+      const { tabs } = resolveFeatureTabsProps(nodePropsRef.current);
       const index = tabs.findIndex((t) => t.id === tabId);
       if (index < 0) return;
       const nextTabs = patchFeatureTabs(tabs, index, patch);
-      await onUpdateNode({
-        nodeId: node.id,
-        payload: {
-          props: {
-            ...(node.props || {}),
-            tabs: nextTabs,
-          },
-        },
-      });
+      const nextProps = { ...(nodePropsRef.current || {}), tabs: nextTabs };
+      const immediate = Boolean(options.immediate);
+      queueFeatureTabsPersist(nextProps, { immediate, skipHistorySnapshot: !immediate });
+      if (immediate) await featureTabsPersistChainRef.current;
     },
-    [node.id, node.nodeType, node.props, onUpdateNode, sectionEditLocked]
+    [node.nodeType, onUpdateNode, queueFeatureTabsPersist, sectionEditLocked]
   );
   const handleFeatureTabsImageFile = useCallback(
     async (tabId, file) => {
       if (sectionEditLocked || !onUpdateNode || node.nodeType !== 'tabs' || !file?.type?.startsWith?.('image/')) return;
-      const { tabs } = resolveFeatureTabsProps(node.props);
+      const { tabs } = resolveFeatureTabsProps(nodePropsRef.current);
       const index = tabs.findIndex((t) => t.id === tabId);
       if (index < 0) return;
+
+      const applyImagePatch = async (patch) => {
+        const freshTabs = resolveFeatureTabsProps(nodePropsRef.current).tabs;
+        const freshIndex = freshTabs.findIndex((t) => t.id === tabId);
+        if (freshIndex < 0) return;
+        const nextTabs = patchFeatureTabs(freshTabs, freshIndex, patch);
+        const nextProps = { ...(nodePropsRef.current || {}), tabs: nextTabs };
+        queueFeatureTabsPersist(nextProps, { immediate: true });
+      };
+
+      if (Number(builderProjectId) > 0) {
+        try {
+          const { uploadFeatureTabPanelImage } = await import('@/lib/featureTabMedia.js');
+          const patch = await uploadFeatureTabPanelImage(builderProjectId, file);
+          await applyImagePatch(patch);
+          return;
+        } catch {
+          /* fall through to inline preview only when upload unavailable */
+        }
+      }
+
       const reader = new FileReader();
       reader.onload = async () => {
         const src = typeof reader.result === 'string' ? reader.result : '';
         if (!src) return;
-        const nextTabs = patchFeatureTabs(tabs, index, {
+        await applyImagePatch({
           imageSrc: src,
           image: src,
           imageAlt: String(file.name || '').replace(/\.[^.]+$/, '') || tabs[index]?.label || '',
         });
-        await onUpdateNode({
-          nodeId: node.id,
-          payload: {
-            props: {
-              ...(node.props || {}),
-              tabs: nextTabs,
-            },
-          },
-        });
       };
       reader.readAsDataURL(file);
     },
-    [node.id, node.nodeType, node.props, onUpdateNode, sectionEditLocked]
+    [builderProjectId, node.nodeType, onUpdateNode, queueFeatureTabsPersist, sectionEditLocked]
   );
   const featureTabsPatchHandler = node.nodeType === 'tabs' ? handleFeatureTabsPatch : null;
   const featureTabsImageHandler = node.nodeType === 'tabs' ? handleFeatureTabsImageFile : null;
@@ -1271,34 +1401,48 @@ function NodeRenderer({
       const slides = Array.isArray(node.props?.slides) ? node.props.slides : [];
       const index = slides.findIndex((s) => String(s?.id) === String(slideId));
       if (index < 0) return;
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const src = typeof reader.result === 'string' ? reader.result : '';
-        if (!src) return;
-        const current = slides[index] || {};
-        const next = slides.map((s, i) =>
-          i === index
-            ? {
-                ...current,
-                imageSrc: src,
-                image: src,
-                imageAlt: String(file.name || '').replace(/\.[^.]+$/, '') || current.title || '',
-              }
-            : s
-        );
+
+      const applySlidePatch = async (patch) => {
+        const freshSlides = Array.isArray(nodePropsRef.current?.slides) ? nodePropsRef.current.slides : slides;
+        const freshIndex = freshSlides.findIndex((s) => String(s?.id) === String(slideId));
+        if (freshIndex < 0) return;
+        const current = freshSlides[freshIndex] || {};
+        const next = freshSlides.map((s, i) => (i === freshIndex ? { ...current, ...patch } : s));
         await onUpdateNode({
           nodeId: node.id,
           payload: {
             props: {
-              ...(node.props || {}),
+              ...(nodePropsRef.current || node.props || {}),
               slides: next,
             },
           },
         });
       };
+
+      if (Number(builderProjectId) > 0) {
+        try {
+          const { uploadCarouselSlideImage } = await import('@/lib/featureTabMedia.js');
+          const patch = await uploadCarouselSlideImage(builderProjectId, file, { folder: 'split-hero' });
+          await applySlidePatch(patch);
+          return;
+        } catch {
+          /* fall through to inline preview when upload unavailable */
+        }
+      }
+
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const src = typeof reader.result === 'string' ? reader.result : '';
+        if (!src) return;
+        await applySlidePatch({
+          imageSrc: src,
+          image: src,
+          imageAlt: String(file.name || '').replace(/\.[^.]+$/, '') || slides[index]?.title || '',
+        });
+      };
       reader.readAsDataURL(file);
     },
-    [node, onUpdateNode, sectionEditLocked]
+    [builderProjectId, node, onUpdateNode, sectionEditLocked]
   );
   const splitHeroSlidePatchHandler = isSplitHeroCarouselNode(node) ? handleSplitHeroSlidePatch : null;
   const splitHeroSlideImageHandler = isSplitHeroCarouselNode(node) ? handleSplitHeroSlideImageFile : null;
@@ -1306,6 +1450,10 @@ function NodeRenderer({
   const wpToolbarHeadingId = useId();
   const [isInlineEditing, setIsInlineEditing] = useState(false);
   const [isRichTextEditing, setIsRichTextEditing] = useState(false);
+  const [isFeatureTabFieldEditing, setIsFeatureTabFieldEditing] = useState(false);
+  const [textEditToolbarOpen, setTextEditToolbarOpen] = useState(false);
+  const [toolbarFontSizeLive, setToolbarFontSizeLive] = useState(null);
+  const showFloatingTextToolbar = textEditToolbarOpen && isSelected && !sectionEditLocked;
   const dragLocked = isInlineEditing || isRichTextEditing || sectionEditLocked;
   const { attributes, listeners, setNodeRef: setDraggableRef, isDragging } = useDraggable({
     id: `node-${node.id}`,
@@ -1389,6 +1537,7 @@ function NodeRenderer({
   const nodeElementRef = useRef(null);
   const inlineEditWrapRef = useRef(null);
   const [floatingToolbarPos, setFloatingToolbarPos] = useState(null);
+  const [fallbackToolbarPos, setFallbackToolbarPos] = useState(null);
   const floatingToolbarRef = useRef(null);
   const floatingToolbarPosRef = useRef(null);
   const floatingToolbarFreezeRef = useRef(false);
@@ -1411,6 +1560,62 @@ function NodeRenderer({
   const neutralizeBodyColors = darkContentMode;
   const neutralizeBodyColorsPreview = neutralizeBodyColors;
   const neutralizeBodyColorsPersist = neutralizeBodyColors;
+
+  const commitActiveFeatureTabPanelFromDom = useCallback(async () => {
+    if (sectionEditLocked || node.nodeType !== 'tabs' || !featureTabsPatchHandler) return;
+    const shell = nodeElementRef.current;
+    if (!shell) return;
+    const sanitizeOpts = { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist };
+    const built = buildFeatureTabPanelPatchFromDom(shell, nodePropsRef.current, sanitizeOpts);
+    if (!built) return;
+    await featureTabsPatchHandler(built.tabId, built.patch, { immediate: true });
+  }, [
+    sectionEditLocked,
+    node.nodeType,
+    featureTabsPatchHandler,
+    neutralizeBodyColorsPersist,
+  ]);
+
+  const handleTabsActiveChangeWithCommit = useCallback(
+    async (_tabId) => {
+      if (sectionEditLocked || !onUpdateNode || node.nodeType !== 'tabs') return;
+      if (featureTabSwitchInFlightRef.current) {
+        await featureTabSwitchInFlightRef.current;
+      }
+      let release = () => {};
+      featureTabSwitchInFlightRef.current = new Promise((resolve) => {
+        release = resolve;
+      });
+      try {
+        const shell = nodeElementRef.current;
+        const baseProps = nodePropsRef.current || {};
+        const sanitizeOpts = { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist };
+        const built = buildFeatureTabPanelPatchFromDom(shell, baseProps, sanitizeOpts);
+        if (!built?.tabId || !built.patch) return;
+        const { tabs } = resolveFeatureTabsProps(baseProps);
+        const idx = tabs.findIndex((t) => t.id === built.tabId);
+        if (idx < 0) return;
+        const nextTabs = patchFeatureTabs(tabs, idx, built.patch);
+        const nextProps = { ...baseProps, tabs: nextTabs };
+        queueFeatureTabsPersist(nextProps, { immediate: true });
+        await featureTabsPersistChainRef.current;
+      } finally {
+        release();
+        featureTabSwitchInFlightRef.current = null;
+      }
+    },
+    [
+      sectionEditLocked,
+      node.nodeType,
+      onUpdateNode,
+      neutralizeBodyColorsPersist,
+      queueFeatureTabsPersist,
+    ]
+  );
+
+  const tabsActiveChangeHandler =
+    node.nodeType === 'tabs' ? handleTabsActiveChangeWithCommit : null;
+
   const rawDevice = getDeviceStyle(node.style_json, device);
   const surfaceReady = neutralizeLightSurfaceDeviceStyle(rawDevice, siteTheme, alignedContentTokens, node);
   const themed = mergeNodeStyleWithSiteTheme(surfaceReady, siteTheme, node.nodeType, { treeNode: node });
@@ -2104,10 +2309,221 @@ function NodeRenderer({
     setIsRichTextEditing(false);
   };
 
+  const inlineEditDraftFromProps = (targetProps) => {
+    const norm = normalizeInlineTextProps(targetProps || {});
+    return resolveInlineTextHtml(norm) || norm.text || '';
+  };
+
+  const getTextCommandRoot = useCallback(
+    (extra = {}) =>
+      getRichTextCommandRoot({
+        isInlineEditing,
+        isRichTextEditing,
+        isFeatureTabFieldEditing,
+        inlineEditWrapRef,
+        nodeElementRef,
+        nodeType: node.nodeType,
+        pinnedTextEditRoot: activeTextEditRootRef.current,
+        ...extra,
+      }),
+    [
+      isInlineEditing,
+      isRichTextEditing,
+      isFeatureTabFieldEditing,
+      node.nodeType,
+      inlineEditWrapRef,
+      nodeElementRef,
+    ]
+  );
+
+  const syncActiveTextEditRoot = useCallback(() => {
+    const root = getTextCommandRoot();
+    if (root) activeTextEditRootRef.current = root;
+    return root;
+  }, [
+    getTextCommandRoot,
+  ]);
+
+  const focusActiveTextEditRoot = useCallback(
+    (options = {}) => {
+      const root = syncActiveTextEditRoot();
+      if (!root || typeof root.focus !== 'function') return;
+
+      const pointerEvent = options.pointerEvent;
+      if (pointerEvent && placeCaretAtPointer(root, pointerEvent)) {
+        preserveTextEditSelectionForToolbar(root);
+        return;
+      }
+
+      if (!options.forceEnd && selectionIsInsideRoot(root)) {
+        preserveTextEditSelectionForToolbar(root);
+        return;
+      }
+
+      root.focus();
+      try {
+        const sel = window.getSelection();
+        if (!sel) return;
+        const range = document.createRange();
+        range.selectNodeContents(root);
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        preserveTextEditSelectionForToolbar(root);
+      } catch {
+        /* ignore */
+      }
+    },
+    [syncActiveTextEditRoot]
+  );
+
+  const beginTextEditSession = useCallback(
+    (event) => {
+      if (sectionEditLocked) return;
+      setTextEditToolbarOpen(true);
+      if (node.nodeType === 'tabs' && shouldStartFeatureTabTextEdit(event)) {
+        const field = event?.target?.closest?.(FEATURE_TAB_FIELD_SELECTOR);
+        if (field) {
+          activeTextEditRootRef.current = field;
+        }
+        setIsFeatureTabFieldEditing(true);
+        scheduleAfterCanvasSelection(() => {
+          focusActiveTextEditRoot({ pointerEvent: event });
+          const root = syncActiveTextEditRoot();
+          if (root) setToolbarFontSizeLive(readFontSizePxFromRoot(root, 16));
+        });
+        return;
+      }
+      if (!shouldStartTextEditFromCanvasClick(event, node.nodeType)) return;
+      if (supportsInlineTextEdit) {
+        if (!isInlineEditing) {
+          setInlineDraftText(inlineEditDraftFromProps(node.props));
+          setIsInlineEditing(true);
+        }
+        scheduleAfterCanvasSelection(() => {
+          focusActiveTextEditRoot({ pointerEvent: event });
+          const root = syncActiveTextEditRoot();
+          if (root) setToolbarFontSizeLive(readFontSizePxFromRoot(root, 16));
+        });
+      } else if (node.nodeType === 'rich_text') {
+        if (!isRichTextEditing) handleRichTextEditStart();
+        scheduleAfterCanvasSelection(() => {
+          focusActiveTextEditRoot({ pointerEvent: event });
+          const root = syncActiveTextEditRoot();
+          if (root) setToolbarFontSizeLive(readFontSizePxFromRoot(root, 16));
+        });
+      }
+    },
+    [
+      sectionEditLocked,
+      node.nodeType,
+      supportsInlineTextEdit,
+      isInlineEditing,
+      isRichTextEditing,
+      node.props,
+      inlineEditDraftFromProps,
+      syncActiveTextEditRoot,
+      focusActiveTextEditRoot,
+      handleRichTextEditStart,
+    ]
+  );
+
+  const queueTextEditSession = useCallback(
+    (event) => {
+      if (!event || sectionEditLocked) return;
+      const wantsTabs = node.nodeType === 'tabs' && shouldStartFeatureTabTextEdit(event);
+      const wantsLeaf = shouldStartTextEditFromCanvasClick(event, node.nodeType);
+      if (!wantsTabs && !wantsLeaf) return;
+      if (isSelected) {
+        beginTextEditSession(event);
+        return;
+      }
+      pendingTextEditPointerRef.current = event;
+      onSelectNode(node.id);
+    },
+    [sectionEditLocked, node.nodeType, node.id, isSelected, beginTextEditSession, onSelectNode]
+  );
+
+  const handleTextEditPointerDownCapture = useCallback(
+    (event) => {
+      if (event.button !== 0) return;
+      queueTextEditSession(event);
+    },
+    [queueTextEditSession]
+  );
+
+  useEffect(() => {
+    if (!isSelected || !pendingTextEditPointerRef.current) return;
+    const ev = pendingTextEditPointerRef.current;
+    pendingTextEditPointerRef.current = null;
+    scheduleAfterCanvasSelection(() => beginTextEditSession(ev));
+  }, [isSelected, beginTextEditSession]);
+
+  const resolveFloatingToolbarWrapEl = () => {
+    if (supportsInlineTextEdit && isInlineEditing && inlineEditWrapRef.current) {
+      return inlineEditWrapRef.current;
+    }
+    if (node.nodeType === 'rich_text' && isRichTextEditing && nodeElementRef.current) {
+      return (
+        nodeElementRef.current.querySelector('.bld-rich-text--editing[contenteditable], .bld-rich-text[contenteditable]') ||
+        nodeElementRef.current
+      );
+    }
+    if (node.nodeType === 'tabs' && isFeatureTabFieldEditing && nodeElementRef.current) {
+      return (
+        nodeElementRef.current.querySelector(`${FEATURE_TAB_FIELD_SELECTOR}:focus`) ||
+        nodeElementRef.current.querySelector('.live-feature-tabs__copy') ||
+        nodeElementRef.current
+      );
+    }
+    return null;
+  };
+
+  const persistFeatureTabFieldFromRoot = async (root, htmlOverride = null) => {
+    if (!root || node.nodeType !== 'tabs' || !featureTabsPatchHandler) return false;
+    const { tabs } = resolveFeatureTabsProps(node.props);
+    const activeTabId = resolveActiveFeatureTabPanelIdFromDom(nodeElementRef.current, node.props);
+    const panel = tabs.find((t) => t.id === activeTabId) || tabs[0];
+    if (!panel?.id) return false;
+    const sanitizeOpts = { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist };
+    const rawHtml =
+      typeof htmlOverride === 'string' ? htmlOverride : ensureFontSizeMarkupInRoot(root);
+    let patch = null;
+    if (root.classList.contains('live-feature-tabs__heading')) {
+      patch = {
+        heading: sanitizeFeatureTabFieldHtml(rawHtml, sanitizeOpts),
+      };
+    } else if (root.classList.contains('live-feature-tabs__paragraph')) {
+      patch = {
+        paragraph: sanitizeFeatureTabFieldHtml(rawHtml, sanitizeOpts),
+      };
+    } else if (root.closest('.live-feature-tabs__bullets')) {
+      const list = nodeElementRef.current?.querySelector('.live-feature-tabs__bullets');
+      if (!list) return false;
+      const items = Array.from(list.querySelectorAll(FEATURE_TAB_FIELD_SELECTOR))
+        .map((el) => {
+          const raw =
+            el === root && typeof htmlOverride === 'string' ? htmlOverride : el.innerHTML;
+          if (featureTabFieldHasInlineHtml(raw)) {
+            return sanitizeFeatureTabFieldHtml(raw, sanitizeOpts);
+          }
+          return String(el.innerText || '').trim();
+        })
+        .filter(Boolean);
+      patch = { bullets: items };
+    } else if (root.classList.contains('live-feature-tabs__tab-label')) {
+      patch = { label: String(root.innerText || '').trim() };
+    }
+    if (!patch) return false;
+    await featureTabsPatchHandler(panel.id, patch, { immediate: true });
+    return true;
+  };
+
   useEffect(() => {
     if (!supportsInlineTextEdit || !isInlineEditing) return;
+    if (textEditToolbarOpen) return;
     setInlineDraftText(node.props?.text || '');
-  }, [isInlineEditing, node.props?.text, supportsInlineTextEdit]);
+  }, [isInlineEditing, node.props?.text, supportsInlineTextEdit, textEditToolbarOpen]);
 
   useEffect(() => {
     setIsRichTextEditing(false);
@@ -2116,6 +2532,44 @@ function NodeRenderer({
   useEffect(() => {
     if (!isSelected) setIsRichTextEditing(false);
   }, [isSelected]);
+
+  useEffect(() => {
+    if (!showFloatingTextToolbar && !isFeatureTabFieldEditing && !isInlineEditing) {
+      activeTextEditRootRef.current = null;
+    }
+  }, [showFloatingTextToolbar, isFeatureTabFieldEditing, isInlineEditing]);
+
+  useEffect(() => {
+    if (node.nodeType !== 'tabs' || !isSelected || sectionEditLocked) return undefined;
+    const shell = nodeElementRef.current;
+    if (!shell) return undefined;
+    const onFocusIn = (event) => {
+      const field = event.target?.closest?.(FEATURE_TAB_FIELD_SELECTOR);
+      if (!field) return;
+      const prevRoot = activeTextEditRootRef.current;
+      if (prevRoot && prevRoot !== field && shell.contains(prevRoot)) {
+        void persistFeatureTabFieldFromRoot(prevRoot);
+      }
+      activeTextEditRootRef.current = field;
+      setIsFeatureTabFieldEditing(true);
+      scheduleAfterCanvasSelection(() => {
+        const root = syncActiveTextEditRoot();
+        if (root) setToolbarFontSizeLive(readFontSizePxFromRoot(root, 16));
+      });
+    };
+    shell.addEventListener('focusin', onFocusIn, true);
+    return () => shell.removeEventListener('focusin', onFocusIn, true);
+  }, [node.nodeType, isSelected, sectionEditLocked, node.id, syncActiveTextEditRoot]);
+
+  useEffect(() => {
+    if (!showFloatingTextToolbar) return undefined;
+    const onSelectionChange = () => {
+      const root = activeTextEditRootRef.current || syncActiveTextEditRoot();
+      if (root) preserveTextEditSelectionForToolbar(root);
+    };
+    document.addEventListener('selectionchange', onSelectionChange);
+    return () => document.removeEventListener('selectionchange', onSelectionChange);
+  }, [showFloatingTextToolbar, syncActiveTextEditRoot]);
 
   useEffect(() => {
     setInlinePanelText(node.props?.text || '');
@@ -2137,9 +2591,10 @@ function NodeRenderer({
   }, []);
 
   useLayoutEffect(() => {
-    if (!supportsInlineTextEdit || !isInlineEditing) {
+    if (!showFloatingTextToolbar) {
       floatingToolbarPosRef.current = null;
       setFloatingToolbarPos(null);
+      setFallbackToolbarPos(null);
       return undefined;
     }
     let raf = 0;
@@ -2148,8 +2603,10 @@ function NodeRenderer({
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
         if (floatingToolbarFreezeRef.current || isFocusInsideFloatingToolbar()) return;
-        const anchorRect = resolveFloatingToolbarAnchorRect({ wrapRef: inlineEditWrapRef });
-        if (!anchorRect) return;
+        syncActiveTextEditRoot();
+        const wrapEl = resolveFloatingToolbarWrapEl();
+        const anchorRect = resolveFloatingToolbarAnchorRect({ wrapRef: { current: wrapEl } });
+        const wrapRect = wrapEl?.getBoundingClientRect?.();
 
         const tb = floatingToolbarRef.current?.getBoundingClientRect?.();
         const toolbarSize =
@@ -2157,12 +2614,26 @@ function NodeRenderer({
             ? { width: tb.width, height: tb.height || 48 }
             : { width: 420, height: 44 };
 
-        const pos = computeFloatingToolbarPosition(anchorRect, toolbarSize, {
-          margin: 10,
-          gap: 8,
+        const anchor =
+          anchorRect ||
+          (wrapRect && wrapRect.width >= 0
+            ? {
+                left: wrapRect.left,
+                top: wrapRect.top,
+                bottom: wrapRect.bottom,
+                width: wrapRect.width,
+                height: wrapRect.height,
+              }
+            : null);
+        if (!anchor) return;
+
+        const pos = computeFloatingToolbarPosition(anchor, toolbarSize, {
+          margin: node.nodeType === 'tabs' ? 14 : 10,
+          gap: 10,
         });
         floatingToolbarPosRef.current = pos;
         setFloatingToolbarPos(pos);
+        setFallbackToolbarPos(pos);
       });
     };
 
@@ -2181,7 +2652,17 @@ function NodeRenderer({
       window.removeEventListener('scroll', update, true);
       document.removeEventListener('selectionchange', update, true);
     };
-  }, [supportsInlineTextEdit, isInlineEditing, isSelected, node.id, inlineDraftText]);
+  }, [
+    showFloatingTextToolbar,
+    isInlineEditing,
+    isRichTextEditing,
+    isFeatureTabFieldEditing,
+    isSelected,
+    node.id,
+    inlineDraftText,
+    node.nodeType,
+    syncActiveTextEditRoot,
+  ]);
 
   const showImageMediaToolbar =
     (node.nodeType === 'image' || node.nodeType === 'menu') && isNodeActive && !sectionEditLocked;
@@ -2219,11 +2700,6 @@ function NodeRenderer({
       window.removeEventListener('scroll', update, true);
     };
   }, [showImageMediaToolbar, node.id, node.nodeType, node.props?.logoWidth, deviceStyle?.size?.width]);
-
-  const inlineEditDraftFromProps = (targetProps) => {
-    const norm = normalizeInlineTextProps(targetProps || {});
-    return resolveInlineTextHtml(norm) || norm.text || '';
-  };
 
   const handleInlineEditStart = (targetNode, event) => {
     if (sectionEditLocked) return;
@@ -2280,33 +2756,63 @@ function NodeRenderer({
     }
   };
 
+  const endTextEditSession = useCallback(async () => {
+    if (node.nodeType === 'tabs' && (isFeatureTabFieldEditing || activeTextEditRootRef.current)) {
+      const tabRoot =
+        activeTextEditRootRef.current ||
+        nodeElementRef.current?.querySelector(`${FEATURE_TAB_FIELD_SELECTOR}:focus`) ||
+        nodeElementRef.current?.querySelector(FEATURE_TAB_FIELD_SELECTOR);
+      if (tabRoot) await persistFeatureTabFieldFromRoot(tabRoot);
+    }
+    setTextEditToolbarOpen(false);
+    setToolbarFontSizeLive(null);
+    const root = nodeElementRef.current?.querySelector?.(
+      `${FEATURE_TAB_FIELD_SELECTOR}:focus, [contenteditable="true"]:focus, [contenteditable=""]:focus`
+    );
+    activeTextEditRootRef.current = null;
+    if (root && typeof root.blur === 'function') root.blur();
+    if (isInlineEditing) {
+      await handleInlineEditCommit(node);
+    } else {
+      setIsInlineEditing(false);
+    }
+    setIsFeatureTabFieldEditing(false);
+    if (isRichTextEditing) setIsRichTextEditing(false);
+    setFloatingToolbarPos(null);
+    setFallbackToolbarPos(null);
+  }, [
+    node,
+    node.nodeType,
+    isInlineEditing,
+    isRichTextEditing,
+    isFeatureTabFieldEditing,
+    handleInlineEditCommit,
+    persistFeatureTabFieldFromRoot,
+  ]);
+
   useEffect(() => {
     const hadSelection = wasSelectedRef.current;
     wasSelectedRef.current = isSelected;
     if (isSelected) return;
-    if (hadSelection && isInlineEditing) {
-      void handleInlineEditCommit(node);
-    } else {
-      setIsInlineEditing(false);
-    }
-    setFloatingToolbarPos(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- commit/clear when selection leaves this node only
+    void endTextEditSession();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- close toolbar when selection leaves this node
   }, [isSelected, node.id]);
 
   useEffect(() => {
-    if (!isInlineEditing || !isSelected || sectionEditLocked) return undefined;
+    if (!textEditToolbarOpen || !isSelected || sectionEditLocked) return undefined;
+    const shell = nodeElementRef.current;
     const onPointerDown = (event) => {
-      if (toolbarColorPickerOpenRef.current || isFocusInsideFloatingToolbar()) return;
+      if (toolbarColorPickerOpenRef.current) return;
       const target = event.target;
       if (!target || typeof target.closest !== 'function') return;
       if (target.closest(FLOATING_TOOLBAR_SELECTOR)) return;
-      if (inlineEditWrapRef.current?.contains(target) || nodeElementRef.current?.contains(target)) return;
-      void handleInlineEditCommit(node);
+      if (target.closest('.bld-floating-inline-toolbar, .bld-wp-toolbar')) return;
+      if (shell?.contains(target)) return;
+      void endTextEditSession();
     };
     document.addEventListener('pointerdown', onPointerDown, true);
     return () => document.removeEventListener('pointerdown', onPointerDown, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- dismiss inline edit on outside press
-  }, [isInlineEditing, isSelected, sectionEditLocked, node.id]);
+  }, [textEditToolbarOpen, isSelected, sectionEditLocked, node.id, endTextEditSession]);
 
   const handleInlinePanelSave = async (event) => {
     event.preventDefault();
@@ -2506,14 +3012,16 @@ function NodeRenderer({
   const beginToolbarColorPicker = () => {
     toolbarColorPickerOpenRef.current = true;
     freezeFloatingToolbar(4000);
-    const root = getRichTextCommandRoot({
-      isInlineEditing,
-      inlineEditWrapRef,
-      nodeElementRef,
-      nodeType: node.nodeType,
-    });
-    if (root) saveRichTextSelection(root);
+    const root = activeTextEditRootRef.current || syncActiveTextEditRoot();
+    preserveTextEditSelectionForToolbar(root);
     return root;
+  };
+
+  const handleFloatingToolbarPointerDown = (event) => {
+    const root = activeTextEditRootRef.current || syncActiveTextEditRoot();
+    preserveTextEditSelectionForToolbar(root);
+    consumeFloatingToolbarPointerForCanvas(event);
+    freezeFloatingToolbar(1600);
   };
 
   const endToolbarColorPicker = () => {
@@ -2522,23 +3030,49 @@ function NodeRenderer({
     }, 200);
   };
 
-  const inlineEditBlurCommitGuard = () => toolbarColorPickerOpenRef.current;
+  const inlineEditBlurCommitGuard = () =>
+    toolbarColorPickerOpenRef.current || isFocusInFloatingToolbar();
+  const textEditBlurCommitGuard = inlineEditBlurCommitGuard;
+  const featureTabValueSyncGuard = () => textEditToolbarOpen;
 
   const persistRichHtmlFromCommand = async (command, value) => {
-    if (node.nodeType !== 'heading' && node.nodeType !== 'text' && node.nodeType !== 'paragraph') {
+    if (
+      node.nodeType !== 'heading' &&
+      node.nodeType !== 'text' &&
+      node.nodeType !== 'paragraph' &&
+      node.nodeType !== 'rich_text' &&
+      node.nodeType !== 'tabs'
+    ) {
       return false;
     }
-    const root = getRichTextCommandRoot({
-      isInlineEditing,
-      inlineEditWrapRef,
-      nodeElementRef,
-      nodeType: node.nodeType,
-    });
-    if (root) restoreRichTextSelection(root);
-    if (!root || !selectionNonCollapsedInRoot(root)) return false;
-    const result = execRichCommandInRoot(root, command, value);
+    const root =
+      activeTextEditRootRef.current || getTextCommandRoot();
+    if (!root) return false;
+    const result = execFormatOnTextRoot(root, command, value);
     if (!result) return false;
     const { before, after } = result;
+    if (node.nodeType === 'tabs') {
+      await persistFeatureTabFieldFromRoot(root);
+      return true;
+    }
+    if (node.nodeType === 'rich_text') {
+      const sanitizeOpts = { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist };
+      if (sanitizeRichHtml(before, sanitizeOpts) === sanitizeRichHtml(after, sanitizeOpts)) {
+        return false;
+      }
+      const content = sanitizeRichHtml(after, sanitizeOpts);
+      if (!isRichTextEditing || !onUpdateNode) return false;
+      await onUpdateNode({
+        nodeId: node.id,
+        payload: {
+          props: {
+            ...(node.props || {}),
+            content,
+          },
+        },
+      });
+      return true;
+    }
     if (
       sanitizeInlineLeafHtml(before, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist }) ===
       sanitizeInlineLeafHtml(after, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist })
@@ -2573,7 +3107,14 @@ function NodeRenderer({
       });
       return;
     }
-    if (node.nodeType !== 'heading' && node.nodeType !== 'text' && node.nodeType !== 'paragraph') return;
+    if (
+      node.nodeType !== 'heading' &&
+      node.nodeType !== 'text' &&
+      node.nodeType !== 'paragraph' &&
+      node.nodeType !== 'rich_text' &&
+      node.nodeType !== 'tabs'
+    )
+      return;
     const applied = await persistRichHtmlFromCommand('bold');
     if (!applied) {
       const current = String(deviceStyle?.typography?.fontWeight || '400');
@@ -2584,26 +3125,59 @@ function NodeRenderer({
 
   const quickRichFormat = (command, value) => async () => {
     if (sectionEditLocked) return;
-    if (node.nodeType !== 'heading' && node.nodeType !== 'text' && node.nodeType !== 'paragraph') return;
+    if (
+      node.nodeType !== 'heading' &&
+      node.nodeType !== 'text' &&
+      node.nodeType !== 'paragraph' &&
+      node.nodeType !== 'rich_text' &&
+      node.nodeType !== 'tabs'
+    )
+      return;
     await persistRichHtmlFromCommand(command, value);
   };
 
   const quickClearFormatting = async () => {
     if (sectionEditLocked) return;
-    if (node.nodeType !== 'heading' && node.nodeType !== 'text' && node.nodeType !== 'paragraph') return;
-    const root = getRichTextCommandRoot({
-      isInlineEditing,
-      inlineEditWrapRef,
-      nodeElementRef,
-      nodeType: node.nodeType,
-    });
+    if (
+      node.nodeType !== 'heading' &&
+      node.nodeType !== 'text' &&
+      node.nodeType !== 'paragraph' &&
+      node.nodeType !== 'rich_text' &&
+      node.nodeType !== 'tabs'
+    )
+      return;
+    const root =
+      activeTextEditRootRef.current || getTextCommandRoot();
     if (!root) return;
-    restoreRichTextSelection(root);
     if (selectionNonCollapsedInRoot(root)) {
-      execRichCommandInRoot(root, 'removeFormat');
-      execRichCommandInRoot(root, 'unlink');
+      execFormatOnTextRoot(root, 'removeFormat');
+      execFormatOnTextRoot(root, 'unlink');
     } else {
       root.textContent = root.textContent || '';
+    }
+    clearInlineFontSizeOnHost(root);
+    if (root.innerHTML && /<[a-z]/i.test(root.innerHTML)) {
+      root.innerHTML = stripToolbarFontSizeFromHtml(root.innerHTML);
+    }
+    if (node.nodeType === 'tabs') {
+      await persistFeatureTabFieldFromRoot(root);
+      return;
+    }
+    if (node.nodeType === 'rich_text') {
+      const content = sanitizeRichHtml(root.innerHTML, {
+        neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist,
+      });
+      if (!isRichTextEditing || !onUpdateNode) return;
+      await onUpdateNode({
+        nodeId: node.id,
+        payload: {
+          props: {
+            ...(node.props || {}),
+            content,
+          },
+        },
+      });
+      return;
     }
     const after = sanitizeInlineLeafHtml(root.innerHTML, {
       neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist,
@@ -2638,12 +3212,7 @@ function NodeRenderer({
     const hex = String(color || '').trim();
     if (!hex) return;
 
-    const root = getRichTextCommandRoot({
-      isInlineEditing,
-      inlineEditWrapRef,
-      nodeElementRef,
-      nodeType: node.nodeType,
-    });
+    const root = getTextCommandRoot();
 
     const applyToEditor = () => {
       if (!root) return;
@@ -2701,12 +3270,7 @@ function NodeRenderer({
     const hex = String(color || '').trim();
     if (!hex) return;
 
-    const root = getRichTextCommandRoot({
-      isInlineEditing,
-      inlineEditWrapRef,
-      nodeElementRef,
-      nodeType: node.nodeType,
-    });
+    const root = getTextCommandRoot();
 
     if ((node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'paragraph') && root) {
       const result = applyRichColorInRoot(root, 'hiliteColor', hex);
@@ -2765,7 +3329,14 @@ function NodeRenderer({
       });
       return;
     }
-    if (node.nodeType !== 'heading' && node.nodeType !== 'text' && node.nodeType !== 'paragraph') return;
+    if (
+      node.nodeType !== 'heading' &&
+      node.nodeType !== 'text' &&
+      node.nodeType !== 'paragraph' &&
+      node.nodeType !== 'rich_text' &&
+      node.nodeType !== 'tabs'
+    )
+      return;
     const next =
       typeof window !== 'undefined' ? window.prompt('Set link URL', 'https://') : null;
     if (next == null || String(next).trim() === '') return;
@@ -2780,6 +3351,10 @@ function NodeRenderer({
   };
 
   const readToolbarFontSizePx = () => {
+    const root = activeTextEditRootRef.current || syncActiveTextEditRoot();
+    if (root && typeof window !== 'undefined') {
+      return readFontSizePxFromRoot(root, 16);
+    }
     const raw = String(deviceStyle?.typography?.fontSize || '').trim();
     const fromStyle = parseTypographyFontSizePx(raw, 0);
     if (fromStyle > 0) return fromStyle;
@@ -2791,13 +3366,30 @@ function NodeRenderer({
     const leaf =
       nodeElementRef.current?.querySelector?.('.bld-demo-text, .bld-demo-heading') || nodeElementRef.current;
     if (leaf && typeof window !== 'undefined') {
-      const computed = parseFloat(window.getComputedStyle(leaf).fontSize);
-      if (Number.isFinite(computed) && computed > 0) return Math.round(computed);
+      return readFontSizePxFromRoot(leaf, 16);
     }
     return 16;
   };
 
   const persistInlineRichHtml = async (afterHtml) => {
+    if (node.nodeType === 'rich_text') {
+      const content = sanitizeRichHtml(afterHtml, {
+        neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist,
+      });
+      if (!isRichTextEditing || !onUpdateNode) return;
+      const prev = String(node.props?.content || '');
+      if (prev === content) return;
+      await onUpdateNode({
+        nodeId: node.id,
+        payload: {
+          props: {
+            ...(node.props || {}),
+            content,
+          },
+        },
+      });
+      return;
+    }
     const text = sanitizeInlineLeafHtml(afterHtml, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist });
     if (isInlineEditing) {
       setInlineDraftText(text);
@@ -2817,52 +3409,118 @@ function NodeRenderer({
     });
   };
 
+  const persistFontSizeHtmlFromRoot = async (root, result) => {
+    if (!root || !result) return;
+    const { before, after } = result;
+    const sanitizeOpts = { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist };
+    const unchanged =
+      node.nodeType === 'rich_text'
+        ? sanitizeRichHtml(before, sanitizeOpts) === sanitizeRichHtml(after, sanitizeOpts)
+        : sanitizeInlineLeafHtml(before, sanitizeOpts) === sanitizeInlineLeafHtml(after, sanitizeOpts);
+    if (unchanged) return;
+    if (node.nodeType === 'tabs') {
+      await persistFeatureTabFieldFromRoot(root, after);
+      return;
+    }
+    await persistInlineRichHtml(after);
+  };
+
+  const lockTextEditRootForFormatting = (root) => {
+    if (!root?.setAttribute) return;
+    root.setAttribute(BLD_FORMATTING_LOCK_ATTR, '1');
+    window.setTimeout(() => {
+      root.removeAttribute?.(BLD_FORMATTING_LOCK_ATTR);
+    }, 400);
+  };
+
+  const applyFontSizeToActiveRoot = async (nextPx, options = {}) => {
+    const root =
+      activeTextEditRootRef.current || getTextCommandRoot();
+    if (!root) return false;
+    preserveTextEditSelectionForToolbar(root);
+    const isFeatureTabField = Boolean(root.closest?.('[data-bld-feature-tab-field]') ?? root.hasAttribute?.('data-bld-feature-tab-field'));
+    const hasHighlight = selectionNonCollapsedInRoot(root);
+    const selectAllIfCollapsed =
+      options.selectAllIfCollapsed ?? !hasHighlight;
+    const useWholeBlock =
+      isFeatureTabField ||
+      node.nodeType === 'tabs' ||
+      isInlineEditing ||
+      node.nodeType === 'rich_text';
+    const result = applyFontSizePxInRoot(root, nextPx, {
+      selectAllIfCollapsed: isFeatureTabField || isInlineEditing ? true : selectAllIfCollapsed,
+      wholeBlock: useWholeBlock,
+    });
+    if (!result) return false;
+    lockTextEditRootForFormatting(root);
+    await persistFontSizeHtmlFromRoot(root, result);
+    if (isInlineEditing && supportsInlineTextEdit) {
+      setInlineDraftText(
+        node.nodeType === 'rich_text'
+          ? result.after
+          : sanitizeInlineLeafHtml(result.after, {
+              neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist,
+            })
+      );
+    }
+    activeTextEditRootRef.current = root;
+    setToolbarFontSizeLive(readFontSizePxFromRoot(root, nextPx));
+    preserveTextEditSelectionForToolbar(root);
+    if (typeof root.focus === 'function') root.focus();
+    setTextEditToolbarOpen(true);
+    return true;
+  };
+
+  const quickSetFontSizePx = async (px) => {
+    if (sectionEditLocked) return;
+    if (
+      node.nodeType !== 'heading' &&
+      node.nodeType !== 'text' &&
+      node.nodeType !== 'paragraph' &&
+      node.nodeType !== 'rich_text' &&
+      node.nodeType !== 'tabs'
+    )
+      return;
+    const nextPx = clampFontSizePx(px, readToolbarFontSizePx());
+    const applied = await applyFontSizeToActiveRoot(nextPx, { selectAllIfCollapsed: true });
+    if (!applied) {
+      await commitStylePatch({
+        typography: { fontSize: `${nextPx}px` },
+      });
+    }
+  };
+
   const quickAdjustFontSize = async (delta) => {
     if (sectionEditLocked) return;
-    if (node.nodeType !== 'heading' && node.nodeType !== 'text' && node.nodeType !== 'paragraph') return;
+    if (
+      node.nodeType !== 'heading' &&
+      node.nodeType !== 'text' &&
+      node.nodeType !== 'paragraph' &&
+      node.nodeType !== 'rich_text' &&
+      node.nodeType !== 'tabs'
+    )
+      return;
     const step = Number(delta) || 0;
     if (!step) return;
 
-    const root = getRichTextCommandRoot({
-      isInlineEditing,
-      inlineEditWrapRef,
-      nodeElementRef,
-      nodeType: node.nodeType,
-    });
+    const root =
+      activeTextEditRootRef.current || getTextCommandRoot();
 
-    if (root && selectionNonCollapsedInRoot(root)) {
-      let currentPx = readToolbarFontSizePx();
-      const sel = typeof window !== 'undefined' ? window.getSelection() : null;
-      if (sel?.rangeCount) {
-        const range = sel.getRangeAt(0);
-        let el = range.startContainer;
-        if (el?.nodeType === 3) el = el.parentElement;
-        if (el && root.contains(el) && typeof window !== 'undefined') {
-          const computed = parseFloat(window.getComputedStyle(el).fontSize);
-          if (Number.isFinite(computed) && computed > 0) currentPx = Math.round(computed);
-        }
-      }
-      const nextPx = Math.max(FONT_SIZE_MIN_PX, Math.min(FONT_SIZE_MAX_PX, currentPx + step));
-      const result = applyInlineFontSizePxInRoot(root, nextPx);
-      if (!result) return;
-      const { before, after } = result;
-      if (
-        sanitizeInlineLeafHtml(before, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist }) ===
-        sanitizeInlineLeafHtml(after, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist })
-      )
-        return;
-      await persistInlineRichHtml(after);
+    if (root) {
+      const currentPx = readFontSizePxFromRoot(root, readToolbarFontSizePx());
+      const nextPx = clampFontSizePx(currentPx + step, currentPx);
+      await applyFontSizeToActiveRoot(nextPx);
       return;
     }
 
     const currentPx = readToolbarFontSizePx();
-    const nextPx = Math.max(FONT_SIZE_MIN_PX, Math.min(FONT_SIZE_MAX_PX, currentPx + step));
+    const nextPx = clampFontSizePx(currentPx + step, currentPx);
     await commitStylePatch({
       typography: { fontSize: `${nextPx}px` },
     });
   };
 
-  const toolbarFontSizePx = readToolbarFontSizePx();
+  const toolbarFontSizePx = toolbarFontSizeLive ?? readToolbarFontSizePx();
 
   const quickToggleTextWrap = async () => {
     if (node.nodeType !== 'heading' && node.nodeType !== 'text' && node.nodeType !== 'paragraph') return;
@@ -2879,7 +3537,14 @@ function NodeRenderer({
     return cur === 'nowrap';
   })();
 
-  const inlineRichToolbarControls = supportsInlineTextEdit ? (
+  const isCanvasTextLeaf =
+    node.nodeType === 'heading' ||
+    node.nodeType === 'text' ||
+    node.nodeType === 'paragraph' ||
+    node.nodeType === 'rich_text' ||
+    (node.nodeType === 'tabs' && isFeatureTabFieldEditing);
+
+  const inlineRichToolbarControls = supportsFloatingTextToolbar ? (
     <div className="bld-wp-toolbar bld-wp-toolbar--floating" role="toolbar" aria-label="Text formatting">
       {node.nodeType === 'heading' ? (
         <>
@@ -2905,12 +3570,17 @@ function NodeRenderer({
           <span className="bld-wp-toolbar__sep" aria-hidden />
         </>
       ) : null}
-      {node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'paragraph' ? (
+      {isCanvasTextLeaf ? (
         <>
           <FontSizeStepper
             className="bld-font-size-stepper--compact"
             value={toolbarFontSizePx}
+            onBeforeDelta={() => {
+              const root = activeTextEditRootRef.current || syncActiveTextEditRoot();
+              preserveTextEditSelectionForToolbar(root);
+            }}
             onDelta={(delta) => void quickAdjustFontSize(delta)}
+            onSetPx={(px) => void quickSetFontSizePx(px)}
           />
           <span className="bld-wp-toolbar__sep" aria-hidden />
         </>
@@ -2921,7 +3591,7 @@ function NodeRenderer({
         title="Bold"
         aria-pressed={String(deviceStyle?.typography?.fontWeight || '400') === '700'}
         onMouseDown={(event) => {
-          if (node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'paragraph') {
+          if (isCanvasTextLeaf) {
             event.preventDefault();
           }
         }}
@@ -2929,7 +3599,7 @@ function NodeRenderer({
       >
         <WpIconBold />
       </button>
-      {node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'paragraph' ? (
+      {isCanvasTextLeaf ? (
         <>
           <button
             type="button"
@@ -2965,7 +3635,7 @@ function NodeRenderer({
         className="bld-wp-toolbar__icon-btn"
         title="Insert / edit link"
         onMouseDown={(event) => {
-          if (node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'paragraph') {
+          if (isCanvasTextLeaf) {
             event.preventDefault();
           }
         }}
@@ -2978,7 +3648,7 @@ function NodeRenderer({
         className="bld-wp-toolbar__icon-btn bld-wp-toolbar__icon-btn--text"
         title="Clear formatting"
         onMouseDown={(event) => {
-          if (node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'paragraph') {
+          if (isCanvasTextLeaf) {
             event.preventDefault();
           }
         }}
@@ -3363,6 +4033,66 @@ function NodeRenderer({
       </div>
     ) : null;
 
+  const renderFeatureTabPanel = featureTabsElementsMode
+    ? (tabsNode, activeTabId) => (
+        <FeatureTabPanelChildren
+          panelStack={findFeatureTabPanelStack(tabsNode, activeTabId)}
+          nodeRendererProps={{
+            tree,
+            selectedNodeId,
+            onSelectNode,
+            draggingNodeType,
+            device,
+            previewCssByNodeId,
+            onSetPreviewCssForNode,
+            formPreviewByNodeId,
+            activeSpacingEdit,
+            onReportOverflow,
+            onDeleteNode,
+            onRequestNavigator,
+            onInsertStarterTemplate,
+            onInsertHeaderTemplate,
+            onSetContainerDirection,
+            onUpdateNode,
+            onCreateNode,
+            onQuickAddNode,
+            onDuplicateNode,
+            onReorderNode,
+            isReorderingNode,
+            isCreatingNode,
+            isSavingNode,
+            isDeletingNode,
+            deletingNodeId,
+            onOpenWidgetPicker,
+            onOpenSectionInsert,
+            hoveredNodeId,
+            onHoverNode,
+            onSaveGlobalSection,
+            onConvertToGlobalComponent,
+            onDetachFromGlobalComponent,
+            onEditGlobalComponent,
+            onAlignMenuRightInRow,
+            onUploadLogoInRow,
+            onStretchSectionFullWidth,
+            onStretchSectionFromSelection,
+            onAlignMenuRightFromSelection,
+            isFreeMode,
+            onCopyNodeId,
+            flashPasteNodeId,
+            flashReorderNodeId,
+            onAddSectionPreviewEnter,
+            onAddSectionPreviewLeave,
+            onFreeMoveBrush,
+            freeMoveBrushActive,
+            cmsPreviewByCollection,
+            insideSiteHeaderRow: childInsideSiteHeaderRow,
+            builderPageId,
+            builderProjectId,
+          }}
+        />
+      )
+    : undefined;
+
   const isRowContainer = node.nodeType === 'row';
   const canShowGapHandles =
     isLayoutContainer && isSelected && !isFreeMode && !sectionEditLocked && (node.children?.length || 0) > 1;
@@ -3686,6 +4416,9 @@ function NodeRenderer({
           style={rowInlineStyle}
           onClick={handleSelect}
           onClickCapture={handleSelectCapture}
+          onPointerDownCapture={
+            supportsFloatingTextToolbar ? handleTextEditPointerDownCapture : undefined
+          }
           onMouseDown={maybeStartDirectMove}
           onKeyDown={handleKeyDown}
           onMouseEnter={() => onHoverNode?.(node.id)}
@@ -3901,6 +4634,9 @@ function NodeRenderer({
           }
           onClick={handleSelect}
           onClickCapture={handleSelectCapture}
+          onPointerDownCapture={
+            supportsFloatingTextToolbar ? handleTextEditPointerDownCapture : undefined
+          }
           onMouseDown={maybeStartDirectMove}
           onKeyDown={handleKeyDown}
           role={
@@ -4051,6 +4787,9 @@ function NodeRenderer({
                   onInlineEditCommit: handleInlineEditCommit,
                   onInlineEditCancel: handleInlineEditCancel,
                   inlineEditBlurCommitGuard,
+                  textEditToolbarOpen,
+                  textEditBlurCommitGuard,
+                  featureTabValueSyncGuard,
                   isSavingNode,
                   sectionEditLocked,
                   isRichTextEditing,
@@ -4082,6 +4821,7 @@ function NodeRenderer({
                   formPreviewMode: formPreviewByNodeId?.[node.id] ?? null,
                   sectionTone: ancestorSectionTone,
                   builderTree: tree,
+                  renderFeatureTabPanel,
                 })}
               </div>
             ) : (
@@ -4093,6 +4833,9 @@ function NodeRenderer({
                 onInlineEditCommit: handleInlineEditCommit,
                 onInlineEditCancel: handleInlineEditCancel,
                 inlineEditBlurCommitGuard,
+                textEditToolbarOpen,
+                textEditBlurCommitGuard,
+                featureTabValueSyncGuard,
                 isSavingNode,
                 sectionEditLocked,
                 isRichTextEditing,
@@ -4124,6 +4867,7 @@ function NodeRenderer({
                 formPreviewMode: formPreviewByNodeId?.[node.id] ?? null,
                 sectionTone: ancestorSectionTone,
                 builderTree: tree,
+                renderFeatureTabPanel,
               })
             )}
             {null}
@@ -4481,21 +5225,21 @@ function NodeRenderer({
             ) : null}
           </div>
       )}
-      {supportsInlineTextEdit &&
+      {showFloatingTextToolbar &&
       isSelected &&
-      isInlineEditing &&
-      floatingToolbarPos &&
+      (floatingToolbarPos || fallbackToolbarPos) &&
       typeof document !== 'undefined'
         ? createPortal(
             <div
               className="bld-floating-inline-toolbar"
-              data-placement={floatingToolbarPos.placement || undefined}
+              data-placement={(floatingToolbarPos || fallbackToolbarPos)?.placement || undefined}
               ref={floatingToolbarRef}
               style={{
                 position: 'fixed',
-                top: floatingToolbarPos.top,
-                left: floatingToolbarPos.left,
-                transform: floatingToolbarPos.transform || 'translate(-50%, -100%)',
+                top: (floatingToolbarPos || fallbackToolbarPos)?.top,
+                left: (floatingToolbarPos || fallbackToolbarPos)?.left,
+                transform:
+                  (floatingToolbarPos || fallbackToolbarPos)?.transform || 'translate(-50%, -100%)',
                 zIndex: 13000,
               }}
               role="toolbar"
@@ -4505,7 +5249,7 @@ function NodeRenderer({
                 if (t?.closest?.('input[type="color"], select, label.bld-wp-toolbar__swatch')) {
                   freezeFloatingToolbar(2000);
                 }
-                consumeFloatingToolbarPointerForCanvas(event);
+                handleFloatingToolbarPointerDown(event);
               }}
               onFocusCapture={() => freezeFloatingToolbar(2000)}
             >

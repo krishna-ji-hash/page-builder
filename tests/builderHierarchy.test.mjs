@@ -22,6 +22,12 @@ test('stack only inside column', () => {
   assert.throws(() => assertValidNodeHierarchy('stack', 'row'), /inside column/);
 });
 
+test('stack panel roots may live inside feature tabs (elements mode)', () => {
+  assertValidNodeHierarchy('stack', 'tabs');
+  assert.throws(() => assertValidNodeHierarchy('heading', 'tabs'), /only stack panel roots/);
+  assertValidNodeHierarchy('tabs', 'stack');
+});
+
 test('blocks only inside stack', () => {
   assertValidNodeHierarchy('heading', 'stack');
   assertValidNodeHierarchy('text', 'stack');

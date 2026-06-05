@@ -212,7 +212,7 @@ function friendlyHierarchyTitle({ nodeType, selectedNode, tree }) {
     const preview = resolveEditableInsertTarget(tree, selectedNode.id, { widgetNodeType: nodeType });
     if (!preview.ok && preview.message) return preview.message;
   }
-  if (isDataDrivenCompoundWidget(selectedNode.nodeType)) {
+  if (isDataDrivenCompoundWidget(selectedNode.nodeType, selectedNode)) {
     return INSERT_TARGET_MESSAGES.compound;
   }
   const parent = selectedNode?.nodeType ? nodeTypeLabel(selectedNode.nodeType) : 'the page';

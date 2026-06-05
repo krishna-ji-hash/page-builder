@@ -194,7 +194,6 @@
 .bld-demo-faq-accordion {
   width: 100%;
   min-width: 0;
-  overflow: visible;
 }
 
 .bld-demo-faq-accordion .live-faq-accordion__chevron-btn,
@@ -304,6 +303,3 @@
   color: var(--token-text-muted);
 }
 
-.bld-canvas__page .bld-node__shell:has(.bld-demo-faq-accordion) {
-  overflow: visible !important;
-}

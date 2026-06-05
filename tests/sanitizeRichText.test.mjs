@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sanitizeRichText } from '../lib/sanitizeRichText.js';
-import { sanitizeInlineLeafHtml } from '../lib/inlineTextHtml.js';
+import { collapseRepeatedAmpEntities, sanitizeInlineLeafHtml } from '../lib/inlineTextHtml.js';
 import { richTextFromLegacyContent, normalizeInlineTextProps } from '../lib/richTextNodeProps.js';
 
 test('sanitizeRichText allows inline formatting tags', () => {
@@ -28,6 +28,21 @@ test('sanitizeRichText keeps safe style properties only', () => {
   assert.match(out, /background-color/i);
   assert.ok(!out.includes('position'));
   assert.match(out, /bld-text-highlight/);
+});
+
+test('sanitizeRichText keeps font-size in px', () => {
+  const out = sanitizeRichText('<span style="font-size:24px">big</span>');
+  assert.match(out, /font-size:\s*24px/i);
+});
+
+test('sanitizeInlineLeafHtml preserves font-size after apply', () => {
+  const raw = '<span data-bld-fs="1" style="font-size:22px">copy</span>';
+  const out = sanitizeInlineLeafHtml(raw);
+  assert.match(out, /font-size:\s*22px/i);
+});
+
+test('collapseRepeatedAmpEntities fixes double-encoded ampersands', () => {
+  assert.equal(collapseRepeatedAmpEntities('Domestic &amp;amp; International'), 'Domestic &amp; International');
 });
 
 test('sanitizeInlineLeafHtml uses inline sanitizer', () => {

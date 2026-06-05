@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  featureTabsPropsFingerprint,
   normalizeFeatureTabs,
   patchFeatureTabs,
   resolveFeatureTabsProps,
@@ -30,4 +31,14 @@ test('patchFeatureTabs updates image and bullets from textarea', () => {
   });
   assert.equal(next[0].imageSrc, '/b.png');
   assert.deepEqual(next[0].bullets, ['Line one', 'Line two']);
+});
+
+test('featureTabsPropsFingerprint changes when tab copy changes', () => {
+  const tabs = normalizeFeatureTabs([{ id: 't1', label: 'One', heading: 'H', paragraph: 'P', bullets: [], imageSrc: '/a.png' }]);
+  const a = featureTabsPropsFingerprint({ tabs, activeTabId: 't1' });
+  const b = featureTabsPropsFingerprint({
+    tabs: patchFeatureTabs(tabs, 0, { heading: 'H2' }),
+    activeTabId: 't1',
+  });
+  assert.notEqual(a, b);
 });

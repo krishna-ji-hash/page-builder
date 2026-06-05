@@ -33,5 +33,6 @@
 .bld-builder-root .bld-canvas__live-mirror .bld-demo-carousel {
   width: 100%;
   min-width: 0;
-  overflow: visible;
 }
+
+/* Feature tabs images: styles/shared/feature-tabs.css + lib/featureTabPanelImage.js */

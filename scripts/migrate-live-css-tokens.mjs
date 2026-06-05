@@ -11,6 +11,7 @@ const FILES = [
   'styles/shared/menu.css',
   'styles/shared/button.css',
   'styles/shared/feature-tabs.css',
+  'styles/shared/section-template-parity.css',
   'styles/shared/faq-accordion.css',
   'styles/shared/template-sections.css',
   'styles/shared/get-in-touch.css',

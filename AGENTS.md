@@ -95,13 +95,51 @@ Use semantic tokens; do not introduce new hardcoded slate neutrals in `styles/sh
 
 ### 6. Builder / live parity rule
 
-Any contrast fix must use the same pipeline for:
+**Jo builder me dikhe, wahi preview aur live par dikhna chahiye** — permanently enforced.
 
-- Builder canvas (`.bld-canvas__live-mirror`)
-- Draft preview
-- Published live (`.live-doc`)
+#### One render pipeline
 
-No builder-only overrides that skip `liveRenderer`.
+- All three surfaces render through `lib/liveRenderer.js` (builder mirror uses the same components).
+- Do **not** add builder-only React trees or duplicate widget markup in `BuilderCanvas.jsx`.
+
+#### One CSS surface
+
+Layout CSS for live widgets must target the parity surface:
+
+```css
+:is(.live-doc, .bld-canvas__live-mirror) …
+```
+
+Defined in `lib/paritySurface.js` as `PARITY_SURFACE_SELECTOR`.
+
+**Forbidden** for widget layout (overflow, height, object-fit, etc.):
+
+```css
+.bld-canvas__page [data-section-template='featureTabs'] { overflow: visible; }
+.bld-demo-feature-tabs { height: 360px; }
+```
+
+**Allowed** builder-only CSS: selection chrome, pointer-events, placeholders (see `PARITY_BUILDER_CHROME_ALLOW`).
+
+Put shared widget layout in `styles/shared/*`, not split across `styles/builder/*` + `styles/live/*`.
+
+| Shared file | Widgets / templates |
+|-------------|---------------------|
+| `styles/shared/feature-tabs.css` | Feature tabs layout + images |
+| `styles/shared/section-template-parity.css` | FAQ, blogs, hero, carousel, other `data-section-template` layout |
+
+#### Inline style contracts
+
+When global `.live-doc img` or mobile rules can override widget sizing, use a JS contract in `lib/*` and register it in `PARITY_INLINE_STYLE_CONTRACTS` (`lib/paritySurface.js`). Example: `lib/featureTabPanelImage.js` + `data-ft-panel-image`.
+
+#### Regression tests + audit
+
+| Test / script | Covers |
+|---------------|--------|
+| `tests/builderLiveParityAudit.test.mjs` | No builder-only widget layout overrides in CSS |
+| `npm run audit:builder-live-parity` | Same audit (CI-friendly) |
+
+Run `npm test` before merge. New widgets/templates must pass the parity audit.
 
 ---
 
@@ -116,6 +154,7 @@ When adding a section template, extend:
 | `tests/mixedContrastContext.test.mjs` | Light row + dark nested column |
 | `tests/getInTouchSection.test.mjs` | Template detection |
 | `tests/darkModeRegression.test.mjs` | CSS audit + health score |
+| `tests/builderLiveParityAudit.test.mjs` | Builder ↔ preview ↔ live CSS parity |
 
 Run: `npm test`
 
@@ -125,12 +164,15 @@ Run: `npm test`
 
 ```bash
 npm run audit:section-contrast
+npm run audit:builder-live-parity
 ```
 
-Warns when banned neutrals (`#0f172a`, `#111827`, `#ffffff`, `#f8fafc`, …) appear on `color` / `background` in audited CSS. Implemented in `scripts/audit-hardcoded-colors.mjs`.
+- **section-contrast** — banned neutrals on `color` / `background` (`scripts/audit-hardcoded-colors.mjs`).
+- **builder-live-parity** — builder-only widget layout overrides (`scripts/audit-builder-live-parity.mjs`).
 
 ---
 
-### Cursor rule
+### Cursor rules
 
-`.cursor/rules/section-contrast.mdc` — loaded when editing `lib/`, `styles/`, `components/`, or `tests/`.
+- `.cursor/rules/section-contrast.mdc` — contrast tokens when editing `lib/`, `styles/`, `components/`, or `tests/`.
+- `.cursor/rules/builder-live-parity.mdc` — builder = preview = live when adding widgets or CSS.

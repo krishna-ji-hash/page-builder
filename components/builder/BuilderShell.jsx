@@ -14,6 +14,7 @@ import {
   sameBuilderNodeId,
   validateTree,
 } from '@/lib/builderTree';
+import { prepareTreeForBulkSave } from '@/lib/inlineImagePersist.js';
 import { adminBuilderPagePath, previewPagePath } from '@/lib/builder/adminBuilderRoutes';
 import { publicPagePath } from '@/lib/publicSiteUrls';
 import { isValidNodeHierarchy } from '@/lib/builderHierarchy';
@@ -29,6 +30,7 @@ import { getBlankSectionLayout, getBlankSectionLayoutForColumnCount } from '@/li
 import { buildHeaderStarterSectionRoots, materializeSectionTemplate, SECTION_TEMPLATES } from '@/lib/sectionTemplates';
 import { getFullPageTemplateById } from '@/lib/fullPageTemplates';
 import { flattenTemplateToBulkNodes } from '@/lib/sectionTemplates';
+import { setupFeatureTabsElementMode } from '@/lib/setupFeatureTabsElementMode';
 import { normalizeSiteTheme, themeSpacingPx } from '@/lib/siteDesignTheme';
 import { BuilderThemeProvider } from '@/context/BuilderThemeContext';
 import BuilderTopbar from './BuilderTopbar';
@@ -2139,6 +2141,50 @@ export default function BuilderShell({ pageId }) {
     return stack.id;
   };
 
+  const handleSetupFeatureTabsElementMode = useCallback(
+    async (tabsNodeId, { seedStarter = true } = {}) => {
+      if (!pageIdValid || isCreatingNode) return;
+      const tabsNode = findNodeInTree(tree, tabsNodeId);
+      if (!tabsNode || tabsNode.nodeType !== 'tabs') return;
+      const beforeTree = tree;
+      pushHistorySnapshot(beforeTree);
+      setIsCreatingNode(true);
+      setErrorMessage('');
+      try {
+        await setupFeatureTabsElementMode(tree, tabsNodeId, {
+          createNodeRequest: (payload) => createNodeRequest(payload),
+          seedStarter,
+          updateTabsProps: async (changes) => {
+            await handleNodeUpdate({
+              nodeId: tabsNodeId,
+              payload: {
+                props: mergeNodePropsJsonPatch(tabsNode.props || {}, changes),
+              },
+            });
+          },
+        });
+        await reloadBuilder();
+        setSelectedNodeId(tabsNodeId);
+        setFlashReorderNodeId(tabsNodeId);
+        setHasUnpublishedEdits(true);
+      } catch (error) {
+        setUndoStack((prev) => prev.slice(0, -1));
+        setErrorMessage(error instanceof Error ? error.message : String(error));
+      } finally {
+        setIsCreatingNode(false);
+      }
+    },
+    [
+      pageIdValid,
+      isCreatingNode,
+      tree,
+      pushHistorySnapshot,
+      createNodeRequest,
+      handleNodeUpdate,
+      reloadBuilder,
+    ]
+  );
+
   const handleInsertStarterTemplate = async ({ targetRowId = null } = {}) => {
     const beforeTree = tree;
     pushHistorySnapshot(beforeTree);
@@ -2847,7 +2893,7 @@ export default function BuilderShell({ pageId }) {
     setErrorMessage('');
     try {
       await siteThemePersistFlushRef.current?.();
-      const fixedTree = autoFixTree(reconcileStructuralParents(tree));
+      const fixedTree = prepareTreeForBulkSave(autoFixTree(reconcileStructuralParents(tree)));
       validateTree(fixedTree);
       const response = await fetch('/api/nodes/update-bulk', {
         method: 'PUT',
@@ -2880,7 +2926,7 @@ export default function BuilderShell({ pageId }) {
       await siteThemePersistFlushRef.current?.();
       // Always publish from authoritative draft nodes in DB to avoid
       // client-tree snapshot drift, duplicate blocks, or style conflicts.
-      const treeForSync = autoFixTree(reconcileStructuralParents(tree));
+      const treeForSync = prepareTreeForBulkSave(autoFixTree(reconcileStructuralParents(tree)));
       validateTree(treeForSync);
       const syncResponse = await fetch('/api/nodes/update-bulk', {
         method: 'PUT',
@@ -4668,6 +4714,7 @@ export default function BuilderShell({ pageId }) {
               onInsertStarterTemplate={({ targetRowId }) =>
                 handleInsertStarterTemplate({ targetRowId })
               }
+              onSetupFeatureTabsElementMode={handleSetupFeatureTabsElementMode}
               onInsertHeaderTemplate={({ targetRowId }) =>
                 handleInsertHeaderTemplate({ targetRowId, replaceExisting: true })
               }
@@ -4750,6 +4797,7 @@ export default function BuilderShell({ pageId }) {
               onApplyResponsiveToPage={handleApplyResponsiveToPage}
               isApplyingResponsive={isApplyingResponsive}
               hideBrandThemeSections={leftPanelTab === 'theme'}
+              onSetupFeatureTabsElementMode={handleSetupFeatureTabsElementMode}
             />
           </aside>
         </div>

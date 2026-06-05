@@ -1,0 +1,53 @@
+---
+description: Builder = preview = live — one render pipeline and shared CSS surface
+globs: lib/**/*.{js,jsx},components/**/*.{js,jsx},styles/**/*.{css},tests/**/*.mjs
+alwaysApply: false
+---
+
+# Builder / Live Parity
+
+What the builder shows must match draft preview and published live. See `AGENTS.md` §6.
+
+## Render
+
+- Use `lib/liveRenderer.js` for all three surfaces.
+- Do not duplicate widget markup in builder-only components.
+
+## CSS layout
+
+Target the parity surface only:
+
+```css
+:is(.live-doc, .bld-canvas__live-mirror) …
+```
+
+Import `PARITY_SURFACE_SELECTOR` from `lib/paritySurface.js` when generating selectors in JS.
+
+**Do not** set `overflow`, `height`, `max-height`, or `object-fit` on live widgets via:
+
+- `.bld-canvas__page …`
+- `.bld-demo-* …` (except `pointer-events` / editing chrome)
+
+Put widget layout in `styles/shared/*`:
+
+- `feature-tabs.css` — feature tabs
+- `section-template-parity.css` — FAQ, blogs, hero, carousel, other `data-section-template` rows
+
+Do not re-add bare `.live-doc [data-section-template='…']` layout rules in `live-site.css` or `builder-live-mirror.css`.
+
+## Inline contracts
+
+If global `.live-doc img` or device CSS can override sizing:
+
+1. Add `lib/<widget>Image.js` (or similar) with inline styles.
+2. Register in `PARITY_INLINE_STYLE_CONTRACTS` (`lib/paritySurface.js`).
+3. Mark DOM with a `data-*` attribute.
+
+## Before merge
+
+```bash
+npm test
+npm run audit:builder-live-parity
+```
+
+New widgets must pass `tests/builderLiveParityAudit.test.mjs`.

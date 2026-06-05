@@ -11,6 +11,8 @@
 
 .live-feature-tabs__nav-wrap {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   background: var(--ft-bar-bg, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--token-shadow-tint) 12%, transparent);
   margin-bottom: 36px;
@@ -20,6 +22,22 @@
   scrollbar-width: none;
   overscroll-behavior-x: contain;
   touch-action: pan-x;
+  scroll-padding-inline: 12px;
+}
+
+/* Builder — same hidden scrollbar as live; drag tab bar sideways to reach clipped labels */
+.live-feature-tabs--builder .live-feature-tabs__nav-wrap {
+  scrollbar-width: none;
+}
+
+.live-feature-tabs--builder .live-feature-tabs__nav-wrap::-webkit-scrollbar {
+  display: none;
+}
+
+.live-feature-tabs--builder.live-feature-tabs--align-center .live-feature-tabs__nav,
+.live-feature-tabs--builder.live-feature-tabs--align-left .live-feature-tabs__nav {
+  margin-left: 0;
+  margin-right: 0;
 }
 
 .live-feature-tabs__nav-wrap.is-dragging {
@@ -128,6 +146,28 @@
   }
 }
 
+/* Elements mode — full panel built from Row / Column / Stack / widgets (see inline-font-size.css for toolbar type) */
+.live-feature-tabs__panel-body--elements {
+  width: 100%;
+  min-width: 0;
+  padding: 4px 0 0;
+}
+
+.live-feature-tabs__panel-body--elements .bld-feature-tab-panel-children,
+.live-feature-tabs__panel-body--elements .bld-node-children {
+  width: 100%;
+  min-width: 0;
+}
+
+.live-feature-tabs__elements-empty {
+  margin: 0;
+  padding: 20px 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--live-section-muted, var(--color-muted));
+  max-width: 48ch;
+}
+
 .live-feature-tabs__grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
@@ -138,23 +178,31 @@
 
 .live-feature-tabs__copy {
   min-width: 0;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: clamp(12px, 2vw, 18px);
   align-items: flex-start;
-  justify-content: center;
+  justify-content: flex-start;
   padding: 4px 0;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .live-feature-tabs__heading {
   margin: 0;
+  max-width: 100%;
   font-size: clamp(22px, 2.4vw, 30px);
   font-weight: 800;
   line-height: 1.2;
   letter-spacing: -0.02em;
   color: var(--live-section-fg, var(--color-text));
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
+/* Preset copy size — disabled when [data-bld-inline-font-size] is set (toolbar); see inline-font-size.css */
 .live-feature-tabs__paragraph {
   margin: 0;
   font-size: 15px;
@@ -176,6 +224,14 @@
   font-size: 15px;
   line-height: 1.55;
   color: var(--live-section-muted, var(--color-muted));
+  overflow: visible;
+}
+
+.live-feature-tabs__bullets li .live-feature-tabs__editable {
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
+  vertical-align: baseline;
 }
 
 .live-feature-tabs__bullets li::marker {
@@ -196,7 +252,6 @@
   width: 100%;
   max-width: 100%;
   border-radius: 18px;
-  overflow: visible;
   background: linear-gradient(160deg, #e8f2fc 0%, #cfe4f8 55%, #b8d4f0 100%);
   box-shadow:
     0 18px 48px color-mix(in srgb, var(--token-shadow-tint) 10%, transparent),
@@ -205,13 +260,25 @@
   height: auto;
 }
 
-.live-feature-tabs__figure img {
+/* Default — full infographic height (builder / preview / live parity) */
+.live-feature-tabs__figure[data-ft-image-fit='contain'] {
+  overflow: visible;
   display: block;
-  width: 100%;
-  height: auto;
-  max-width: 100%;
-  border-radius: inherit;
-  object-position: center;
+}
+
+.live-feature-tabs__figure[data-ft-image-fit='fill'] {
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/*
+ * Panel image sizing lives in FeatureTabs inline styles (lib/featureTabPanelImage.js).
+ * Shell-only rules here — builder / preview / live must stay identical.
+ */
+.live-feature-tabs__figure > img[data-ft-panel-image] {
+  border-radius: 18px;
   vertical-align: top;
 }
 
@@ -357,34 +424,83 @@
   opacity: 1;
 }
 
-/* Builder canvas — do not clip tab images or section padding inside column/stack */
-.bld-canvas__page [data-section-template='featureTabs'].live-node.bld-row,
-.bld-canvas__page [data-section-template='featureTabs'] .live-node.bld-column,
-.bld-canvas__page [data-section-template='featureTabs'] .live-node.bld-stack {
-  overflow-x: clip;
-  overflow-y: visible !important;
-  min-height: min-content;
+/* Parity surface — builder mirror, draft preview, published live (see lib/paritySurface.js) */
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='featureTabs'] {
   align-items: stretch !important;
   align-content: flex-start;
+  overflow-x: visible;
+  overflow-y: visible;
 }
 
-.bld-canvas__page [data-section-template='featureTabs'] .live-node.bld-column {
+:is(.live-doc, .bld-canvas__live-mirror):has(
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='featureTabs']
+) {
+  overflow-x: visible;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='featureTabs']
+  > .live-node.bld-column,
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='featureTabs']
+  > .live-node.bld-column
+  > .live-node.bld-stack {
   align-self: stretch !important;
+  width: 100%;
+  max-width: 100%;
+  min-height: min-content;
+  overflow: visible;
 }
 
-.bld-canvas__page .bld-node__shell:has(.bld-demo-feature-tabs) {
-  overflow: visible !important;
-  min-height: min-content;
+.live-site:has([data-section-template='featureTabs']) {
+  overflow-x: visible;
+}
+
+/* Panel images — inline contract (lib/featureTabPanelImage.js); guard against global .live-doc img resets */
+:is(.live-doc, .bld-canvas__live-mirror) .live-feature-tabs__figure > img[data-ft-panel-image] {
+  max-width: 100%;
+  width: 100%;
+  display: block;
+  box-sizing: border-box;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  .live-feature-tabs__figure[data-ft-image-fit='contain']
+  > img[data-ft-panel-image] {
+  height: auto !important;
+  max-height: none !important;
+  object-fit: contain !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror):not([data-bld-device])
+  .live-feature-tabs__figure
+  > img[data-ft-panel-image] {
+  max-width: 100% !important;
+  width: 100% !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror):not([data-bld-device])
+  .live-feature-tabs__figure[data-ft-image-fit='contain']
+  > img[data-ft-panel-image] {
+  height: auto !important;
+  max-height: none !important;
+  object-fit: contain !important;
 }
 
 /* Builder canvas */
 .bld-demo-feature-tabs {
   width: 100%;
   min-width: 0;
+  max-width: 100%;
   position: relative;
   z-index: 2;
-  overflow: visible;
   padding-bottom: 4px;
+}
+
+.bld-demo-feature-tabs .live-feature-tabs__nav-wrap {
+  width: 100%;
+  max-width: 100%;
 }
 
 .bld-demo-feature-tabs,

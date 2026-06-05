@@ -3,6 +3,7 @@ import { syncDraftSnapshot } from '@/services/builder/builderService';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 300;
 
 export async function PUT(request) {
   const body = await parseJsonBody(request);

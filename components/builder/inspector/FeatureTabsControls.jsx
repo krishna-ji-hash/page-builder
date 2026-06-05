@@ -14,6 +14,7 @@ export default function FeatureTabsControls({
   jsonErrors = {},
   editingViaParent = false,
   onFocusFeatureTabs = null,
+  onSetupFeatureTabsElementMode = null,
   /** 'content' | 'style' | undefined (both) */
   chromeSection = undefined,
 }) {
@@ -44,10 +45,45 @@ export default function FeatureTabsControls({
       ) : null}
 
       {showContent ? (
-        <p className="bld-field-note" style={{ marginTop: 0, marginBottom: 12 }}>
-          <strong>Canvas:</strong> click tab to switch · double-click tab name · click heading/body/bullets/image to
-          edit. <strong>Cannot</strong> drag widgets inside this block — use buttons below to add tabs/bullets.
-        </p>
+        <div className="bld-field" style={{ marginBottom: 12 }}>
+          <label className="bld-label" htmlFor="feature-tabs-panel-mode">
+            Panel layout
+          </label>
+          {form.featureTabsPanelMode !== 'elements' && typeof onSetupFeatureTabsElementMode === 'function' ? (
+            <button
+              type="button"
+              className="bld-btn bld-btn--primary"
+              style={{ width: '100%', marginBottom: 10 }}
+              onClick={() => onChange('featureTabsEnableElementMode', '1')}
+            >
+              Enable section layout (elements) — 2 columns
+            </button>
+          ) : null}
+          <select
+            id="feature-tabs-panel-mode"
+            className="bld-input"
+            value={form.featureTabsPanelMode || 'fields'}
+            onChange={(e) => onChange('featureTabsPanelMode', e.target.value)}
+          >
+            <option value="fields">Built-in (heading, text, bullets, image)</option>
+            <option value="elements">Build with elements (rows, columns, stacks)</option>
+          </select>
+          <p className="bld-field-note" style={{ marginTop: 8, marginBottom: 0 }}>
+            {form.featureTabsPanelMode === 'elements' ? (
+              <>
+                <strong>Elements mode (same widget):</strong> har tab ka apna panel — <strong>Row → 2 columns</strong>.
+                Left: heading, text, Counter (98%), button. Right: image / cards. Canvas par <strong>+ Add element</strong>{' '}
+                se row, column, stack, Counter, Card add karein; har block select karke Style tab se edit.
+              </>
+            ) : (
+              <>
+                <strong>Built-in:</strong> sirf fixed heading, paragraph, bullets, image (aapki 1st screenshot). Reference
+                jaisa 2-column layout (98%, Learn more, cards) ke liye upar wala button dabayein — alag section nahi, isi
+                Feature tabs ke andar elements banenge.
+              </>
+            )}
+          </p>
+        </div>
       ) : null}
 
       {showContent ? (
@@ -109,12 +145,11 @@ export default function FeatureTabsControls({
             <label className="bld-label">Image fit (all tabs)</label>
             <select
               className="bld-input"
-              value={form.featureTabsImageFit || 'cover'}
+              value={form.featureTabsImageFit === 'fill' ? 'fill' : 'contain'}
               onChange={(e) => onChange('featureTabsImageFit', e.target.value)}
             >
-              <option value="cover">Cover</option>
-              <option value="contain">Contain</option>
-              <option value="fill">Fill</option>
+              <option value="contain">Full image (no crop)</option>
+              <option value="fill">Fixed height (stretch)</option>
             </select>
           </div>
           <InspectorNumField

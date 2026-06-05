@@ -159,6 +159,8 @@ export default function RichTextEditor({
   style,
   neutralizeBodyColorsPreview = false,
   neutralizeBodyColorsPersist = false,
+  /** When true, canvas uses the shared floating WP toolbar instead of the docked rich toolbar. */
+  useFloatingToolbar = false,
 }) {
   const editableRef = useRef(null);
   const snapshotRef = useRef('');
@@ -402,7 +404,7 @@ export default function RichTextEditor({
           onPaste={handlePaste}
         />
         <DockedRichToolbar
-          visible={Boolean(toolbarPlacement)}
+          visible={!useFloatingToolbar && Boolean(toolbarPlacement)}
           placement={toolbarPlacement}
           onHeading={applyHeading}
           onBold={() => {
@@ -432,6 +434,11 @@ export default function RichTextEditor({
       className={`bld-rich-text ${className}`.trim()}
       style={style}
       dangerouslySetInnerHTML={{ __html: safePreview }}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onStartEdit?.();
+      }}
       onDoubleClick={(e) => {
         e.preventDefault();
         e.stopPropagation();
