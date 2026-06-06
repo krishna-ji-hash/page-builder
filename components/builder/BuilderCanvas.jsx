@@ -81,7 +81,7 @@ import {
 } from '@/lib/livePageCssVars';
 import { bindInteractionObservers } from '@/lib/interactionScrollRuntime';
 import { bindHeaderBehaviorScroll } from '@/lib/headerBehaviorScroll';
-import { interactionPresentationClass, resolveLeafInteractionShell } from '@/lib/nodeInteractionCss';
+import { interactionPresentationClass, resolveLeafInteractionShell, deviceStyleForInteractionPreview } from '@/lib/nodeInteractionCss';
 import { getDeviceStyle, sanitizeInlineMarginCss, styleToCss } from '@/lib/styleToCss';
 import { useBuilderTheme } from '@/context/BuilderThemeContext';
 import { mergeNodeStyleWithSiteTheme, normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesignTheme';
@@ -1042,6 +1042,7 @@ function NodeRenderer({
   draggingNodeType,
   device,
   previewCssByNodeId,
+  previewIxByNodeId = {},
   onSetPreviewCssForNode,
   formPreviewByNodeId = {},
   activeSpacingEdit,
@@ -1641,6 +1642,16 @@ function NodeRenderer({
     (device === 'mobile' || device === 'tablet') && (siteHeaderRow || insideSiteHeaderRow);
   deviceStyle = applyCompactHeaderDeviceStyle(node, device, deviceStyle, insideSiteHeaderRow);
   const childInsideSiteHeaderRow = insideSiteHeaderRow || siteHeaderRow;
+  const externalPreviewRawEarly = previewCssByNodeId?.[node.id] || null;
+  const previewIx = previewIxByNodeId?.[node.id];
+  const deviceStyleWithPreviewIx = previewIx
+    ? { ...deviceStyle, interactions: previewIx }
+    : deviceStyle;
+  const deviceStyleForIx = deviceStyleForInteractionPreview(
+    deviceStyleWithPreviewIx,
+    externalPreviewRawEarly,
+    animationPresets
+  );
   const imageAlignAxes = readImageAlignAxes(node.props || {});
   const imageParentFlexDirection = useMemo(() => {
     if (node.nodeType !== 'image' || !Array.isArray(tree) || !tree.length) return 'column';
@@ -1887,10 +1898,13 @@ function NodeRenderer({
     Object.keys(rowHeaderRevealExtras.style).length
       ? sanitizeInlineMarginCss({ ...inlineStyle, ...rowHeaderRevealExtras.style })
       : inlineStyle;
-  const leafInteractionShell =
-    !shellCarriesLeafLayout && node.nodeType !== 'image'
-      ? resolveLeafInteractionShell({ deviceStyle, previewCss: externalPreview, animationPresets })
-      : { ixStyle: null, ixClass: '' };
+  const leafInteractionShell = !shellCarriesLeafLayout
+    ? resolveLeafInteractionShell({
+        deviceStyle: deviceStyleForIx,
+        previewCss: externalPreview,
+        animationPresets,
+      })
+    : { ixStyle: null, ixClass: '' };
   const isImageLeaf = node.nodeType === 'image';
   const imageCssSplit = isImageLeaf ? splitImageNodeCss(inlineStyle) : null;
   const imageShellAlignLive = resolveImageShellAlignFromProps(node.props || {}, imageParentFlexDirection);
@@ -4044,6 +4058,7 @@ function NodeRenderer({
             draggingNodeType,
             device,
             previewCssByNodeId,
+            previewIxByNodeId,
             onSetPreviewCssForNode,
             formPreviewByNodeId,
             activeSpacingEdit,
@@ -4412,7 +4427,7 @@ function NodeRenderer({
           {...(rowSemanticTag === 'footer' || node.props?.meta?.isFooter || node.props?.meta?.role === 'footer'
             ? { 'data-site-footer': 'true' }
             : {})}
-          className={`${classNames} ${interactionPresentationClass(deviceStyle, animationPresets)} bld-node ${isSelected ? 'bld-selected' : ''}`.trim()}
+          className={`${classNames} ${interactionPresentationClass(deviceStyleForIx, animationPresets)} bld-node ${isSelected ? 'bld-selected' : ''}`.trim()}
           style={rowInlineStyle}
           onClick={handleSelect}
           onClickCapture={handleSelectCapture}
@@ -4624,10 +4639,13 @@ function NodeRenderer({
                   : {}),
               }
             : {})}
-          className={`${classNames} ${shellCarriesLeafLayout ? interactionPresentationClass(deviceStyle, animationPresets) : leafInteractionShell.ixClass} bld-node bld-node__shell ${isSelected ? 'bld-selected' : ''}`.trim()}
+          className={`${classNames} ${shellCarriesLeafLayout ? interactionPresentationClass(deviceStyleForIx, animationPresets) : leafInteractionShell.ixClass} bld-node bld-node__shell ${isSelected ? 'bld-selected' : ''}`.trim()}
           style={
             isImageLeaf
-              ? imageShellStyle
+              ? sanitizeInlineMarginCss({
+                  ...(imageShellStyle || {}),
+                  ...(leafInteractionShell.ixStyle || {}),
+                })
               : shellCarriesLeafLayout
                 ? inlineStyle
                 : leafInteractionShell.ixStyle || undefined
@@ -5169,6 +5187,7 @@ function NodeRenderer({
                     device={device}
                     tree={tree}
                     previewCssByNodeId={previewCssByNodeId}
+                    previewIxByNodeId={previewIxByNodeId}
                     onSetPreviewCssForNode={onSetPreviewCssForNode}
                     formPreviewByNodeId={formPreviewByNodeId}
                     onReportOverflow={onReportOverflow}
@@ -5382,6 +5401,7 @@ export default function BuilderCanvas({
   onCopyNodeId,
   flashPasteNodeId = null,
   previewCssByNodeId: externalPreviewCssByNodeId,
+  previewIxByNodeId: externalPreviewIxByNodeId,
   onSetPreviewCssForNode: externalOnSetPreviewCssForNode,
   formPreviewByNodeId: externalFormPreviewByNodeId,
   activeSpacingEdit,
@@ -5431,18 +5451,13 @@ export default function BuilderCanvas({
   const dragAltDuplicateRef = useRef(false);
   const hoverLeaveTimerRef = useRef(null);
   const liveDocRef = useRef(null);
+  const [liveDocEl, setLiveDocEl] = useState(null);
+  const attachLiveDocRef = useCallback((el) => {
+    liveDocRef.current = el;
+    setLiveDocEl(el);
+  }, []);
   const HOVER_ENTER_MS = 100;
   const HOVER_LEAVE_MS = 150;
-
-  useEffect(() => {
-    if (!liveDocRef.current) return undefined;
-    const unbindIx = bindInteractionObservers(liveDocRef.current);
-    const unbindHeader = bindHeaderBehaviorScroll(liveDocRef.current);
-    return () => {
-      unbindIx?.();
-      unbindHeader?.();
-    };
-  }, [tree, device]);
 
   const setPreviewCssForNode = useCallback((nodeId, css, opts = {}) => {
     if (opts?.clearAll) {
@@ -5459,8 +5474,19 @@ export default function BuilderCanvas({
   }, []);
 
   const effectivePreviewCssByNodeId = externalPreviewCssByNodeId || previewCssByNodeId;
+  const effectivePreviewIxByNodeId = externalPreviewIxByNodeId || {};
   const effectiveFormPreviewByNodeId = externalFormPreviewByNodeId || {};
   const effectiveSetPreviewCssForNode = externalOnSetPreviewCssForNode || setPreviewCssForNode;
+
+  useEffect(() => {
+    if (!liveDocEl) return undefined;
+    const unbindIx = bindInteractionObservers(liveDocEl);
+    const unbindHeader = bindHeaderBehaviorScroll(liveDocEl);
+    return () => {
+      unbindIx?.();
+      unbindHeader?.();
+    };
+  }, [liveDocEl, tree, device, effectivePreviewCssByNodeId, effectivePreviewIxByNodeId]);
 
   // CMS preview: fetch a single sample item per repeater collection (cached; not per render).
   useEffect(() => {
@@ -6138,7 +6164,7 @@ export default function BuilderCanvas({
                 }}
               >
                 {showGrid ? <GridOverlay containerSelector=".bld-canvas__live-mirror .live-doc" /> : null}
-                <div ref={liveDocRef} className="live-doc" data-bld-device={device}>
+                <div ref={attachLiveDocRef} className="live-doc" data-bld-device={device}>
                   {rootSegments.map((segment) => {
                     const renderRootNode = (node, index) => (
                       <NodeRenderer
@@ -6165,6 +6191,7 @@ export default function BuilderCanvas({
                         device={device}
                         tree={tree}
                         previewCssByNodeId={effectivePreviewCssByNodeId}
+                        previewIxByNodeId={effectivePreviewIxByNodeId}
                         onSetPreviewCssForNode={effectiveSetPreviewCssForNode}
                         formPreviewByNodeId={effectiveFormPreviewByNodeId}
                         activeSpacingEdit={activeSpacingEdit}

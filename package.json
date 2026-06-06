@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "db:up": "docker compose up -d",
+    "db:xampp": "node scripts/ensure-mysql.mjs",
     "db:down": "docker compose down",
     "db:reset": "node --env-file=.env scripts/reset-db.mjs",
     "db:migrate": "node --env-file=.env scripts/migrate.mjs",

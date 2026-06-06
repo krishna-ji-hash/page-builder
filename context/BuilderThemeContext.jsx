@@ -412,9 +412,13 @@ export function BuilderThemeProvider({ children, persistence = null, persistFlus
     lastSavedPresetsJsonRef.current = JSON.stringify(nextPresets);
     setStylePresetsPersist({ status: 'idle', error: '' });
 
-    const nextAnimPresets = normalizeAnimationPresets(fromDbAnimPresets ?? undefined);
+    const rawAnimPresets = normalizeAnimationPresets(fromDbAnimPresets ?? undefined, { pruneRedundant: false });
+    const nextAnimPresets = normalizeAnimationPresets(fromDbAnimPresets ?? undefined, {
+      pruneRedundant: true,
+      bumpRevisionOnPrune: true,
+    });
     setAnimationPresetsState(nextAnimPresets);
-    lastSavedAnimPresetsJsonRef.current = JSON.stringify(nextAnimPresets);
+    lastSavedAnimPresetsJsonRef.current = JSON.stringify(rawAnimPresets);
     setAnimationPresetsPersist({ status: 'idle', error: '' });
   }, [
     projectId,

@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useBuilderTheme } from '@/context/BuilderThemeContext';
 import { InspectorField, InspectorSection } from './InspectorUi';
 import {
+  customAnimationPresets,
   duplicateAnimationPreset,
   deleteAnimationPreset,
   normalizeAnimationPresets,
@@ -16,6 +17,7 @@ export default function ProjectAnimationPresetsPanel({ disabled }) {
   const { animationPresets, setAnimationPresets, animationPresetsPersist } = useBuilderTheme();
   const normalized = useMemo(() => normalizeAnimationPresets(animationPresets), [animationPresets]);
   const presets = normalized.presets || [];
+  const customPresets = useMemo(() => customAnimationPresets(normalized), [normalized]);
   const [activeId, setActiveId] = useState('');
   const active = presets.find((p) => p.id === activeId) || presets[0] || null;
 
@@ -53,8 +55,9 @@ export default function ProjectAnimationPresetsPanel({ disabled }) {
   return (
     <InspectorSection title="Project animation presets" keywords="global preset library">
       <p className="bld-field-note" style={{ marginTop: 0 }}>
-        Stored on <strong>projects.config_json.animationPresets</strong>. Nodes can reference a preset via{' '}
-        <code>presetRef</code> and override duration/delay per device.
+        Stored on <strong>projects.config_json.animationPresets</strong>. Built-in presets are in the{' '}
+        <strong>Animation preset</strong> field below — create custom presets here for reuse via{' '}
+        <code>presetRef</code>.
       </p>
       {animationPresetsPersist?.status === 'error' ? (
         <p className="bld-field-note" style={{ color: '#ef4444' }}>
@@ -68,9 +71,10 @@ export default function ProjectAnimationPresetsPanel({ disabled }) {
         <button
           type="button"
           className="bld-chip"
-          disabled={disabled || !active}
+          disabled={disabled || !active || active.builtin}
+          title={active?.builtin ? 'Built-in presets use the Animation preset field on each node' : undefined}
           onClick={() => {
-            if (!active) return;
+            if (!active || active.builtin) return;
             setAnimationPresets((prev) => duplicateAnimationPreset(prev, active.id));
           }}
         >
@@ -96,12 +100,28 @@ export default function ProjectAnimationPresetsPanel({ disabled }) {
           disabled={disabled}
           onChange={(e) => setActiveId(e.target.value)}
         >
-          {presets.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-              {p.builtin ? ' (built-in)' : ''}
-            </option>
-          ))}
+          <optgroup label="Built-in">
+            {presets
+              .filter((p) => p.builtin)
+              .map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+          </optgroup>
+          <optgroup label={`Custom (${customPresets.length})`}>
+            {customPresets.length ? (
+              customPresets.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))
+            ) : (
+              <option value="" disabled>
+                No custom presets
+              </option>
+            )}
+          </optgroup>
         </select>
       </InspectorField>
       {active ? (

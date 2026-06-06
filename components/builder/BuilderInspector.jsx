@@ -130,10 +130,17 @@ import { getNodeCapabilities, inspectorTabsForNode } from '@/lib/nodeCapabilitie
 import { getInspectorExtensions } from '@/lib/pluginInspectorRegistry';
 import {
   clearInteractionGroup,
+  enableEntranceAnimation,
   interactionsForForm,
+  mergeInteractionsPatch,
   patchInteractionGroup,
   pruneInteractions,
 } from '@/lib/interactionInspectorUtils';
+import {
+  countRootPageSections,
+  interactionTemplateFromSourceInteractions,
+  planPageSectionInteractionUpdates,
+} from '@/lib/applyPageSectionInteractions';
 
 const IX_PREVIEW_MS = 48;
 const IX_SAVE_MS = 420;
@@ -141,12 +148,24 @@ const IX_SAVE_IMMEDIATE_KEYS = new Set([
   'preset',
   'trigger',
   'loop',
+  'enabled',
   'background',
   'textColor',
   'borderColor',
   'ringColor',
 ]);
-const IX_PREVIEW_IMMEDIATE_KEYS = new Set(['background', 'textColor', 'borderColor', 'ringColor', 'scale', 'translateY', 'opacity']);
+const IX_PREVIEW_IMMEDIATE_KEYS = new Set([
+  'background',
+  'textColor',
+  'borderColor',
+  'ringColor',
+  'scale',
+  'translateY',
+  'opacity',
+  'preset',
+  'trigger',
+  'enabled',
+]);
 
 function inspectorRoleLabel(node) {
   if (!node?.nodeType) return '';
@@ -459,6 +478,7 @@ export default function BuilderInspector({
   const ixPreviewTimerRef = useRef(null);
   const ixSaveTimerRef = useRef(null);
   const ixPendingIxRef = useRef(null);
+  const inspectorFormSyncKeyRef = useRef('');
   const selectedNodeRef = useRef(selectedNode);
   const deviceRef = useRef(device);
   const siteThemeRef = useRef(siteTheme);
@@ -467,6 +487,9 @@ export default function BuilderInspector({
   deviceRef.current = device;
   siteThemeRef.current = siteTheme;
   onUpdateNodeRef.current = onUpdateNode;
+
+  const [isApplyingPageInteractions, setIsApplyingPageInteractions] = useState(false);
+  const pageSectionCount = useMemo(() => countRootPageSections(pageTree), [pageTree]);
 
   const nestedFeatureTabsNode = useMemo(() => {
     if (!selectedNode || selectedNode.nodeType === 'tabs') return null;
@@ -972,7 +995,16 @@ export default function BuilderInspector({
   }, [selectedNode, selectedNode?.style_json, siteTheme]);
 
   useEffect(() => {
-    if (!selectedNode) return;
+    if (!selectedNode) {
+      inspectorFormSyncKeyRef.current = '';
+      return;
+    }
+    const styleJsonKey = JSON.stringify(selectedNode.style_json ?? {});
+    const syncKey = `${selectedNode.id}|${device}|${styleJsonKey}`;
+    if (inspectorFormSyncKeyRef.current === syncKey) return;
+    inspectorFormSyncKeyRef.current = syncKey;
+    ixPendingIxRef.current = null;
+
     const style = getInspectorResolvedStyle(selectedNode, device, siteTheme);
     const storedSp = getStoredSpacingShorthands(selectedNode.style_json, device);
     const marginSides = boxSidesFromStoredOrResolved(storedSp.margin, style?.spacing?.margin);
@@ -1704,18 +1736,31 @@ export default function BuilderInspector({
     const nextIx = ixPendingIxRef.current;
     const node = selectedNodeRef.current;
     if (!nextIx || !node?.id || !onUpdateNodeRef.current) return;
-    ixPendingIxRef.current = null;
-    await onUpdateNodeRef.current({
-      nodeId: node.id,
-      payload: {
-        style_json: mergeStyleForDevice(
-          node,
-          deviceRef.current,
-          { interactions: nextIx },
-          siteThemeRef.current
-        ),
-      },
-    });
+    const saveIx = nextIx;
+    try {
+      await onUpdateNodeRef.current({
+        nodeId: node.id,
+        allowInteractionsOnLockedSection: true,
+        skipHistorySnapshot: true,
+        payload: {
+          style_json: mergeStyleForDevice(
+            node,
+            deviceRef.current,
+            { interactions: pruneInteractions(saveIx) },
+            siteThemeRef.current
+          ),
+        },
+      });
+      if (ixPendingIxRef.current === saveIx) {
+        ixPendingIxRef.current = null;
+      } else if (ixPendingIxRef.current) {
+        void flushInteractionSave();
+      }
+    } catch {
+      if (!ixPendingIxRef.current) {
+        ixPendingIxRef.current = saveIx;
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -3221,20 +3266,20 @@ export default function BuilderInspector({
 
   const clearPreviewCss = useCallback(() => {
     if (!selectedNode?.id) return;
-    onSetPreviewCssForNode?.(selectedNode.id, null);
+    onSetPreviewCssForNode?.(selectedNode.id, null, { interactions: null });
   }, [selectedNode?.id, onSetPreviewCssForNode]);
 
   const previewStylePatch = useCallback(
     (patch) => {
-      if (editingDisabledBySectionLock) return;
       if (!selectedNode?.id) return;
+      if (isLinkedGlobalPlaceholder(selectedNode)) return;
       const nextStyleJson = mergeStyleForDevice(selectedNode, device, patch, siteTheme);
       const tmpNode = { ...selectedNode, style_json: nextStyleJson };
       const resolved = getInspectorResolvedStyle(tmpNode, device, siteTheme);
       const css = resolved ? styleToCss(resolved, siteTheme, { animationPresets }) : null;
-      onSetPreviewCssForNode?.(selectedNode.id, css);
+      onSetPreviewCssForNode?.(selectedNode.id, css, { interactions: resolved?.interactions || null });
     },
-    [selectedNode, device, siteTheme, animationPresets, onSetPreviewCssForNode, editingDisabledBySectionLock]
+    [selectedNode, device, siteTheme, animationPresets, onSetPreviewCssForNode]
   );
 
   const scheduleInteractionPreview = useCallback(
@@ -3248,22 +3293,47 @@ export default function BuilderInspector({
     [previewStylePatch]
   );
 
+  const commitInteractionState = useCallback(
+    (nextIx, { previewNow = true } = {}) => {
+      setForm((f) => ({ ...f, interactions: nextIx }));
+      ixPendingIxRef.current = nextIx;
+      if (previewNow) {
+        if (ixPreviewTimerRef.current) clearTimeout(ixPreviewTimerRef.current);
+        previewStylePatch({ interactions: nextIx });
+      }
+      if (ixSaveTimerRef.current) clearTimeout(ixSaveTimerRef.current);
+      ixSaveTimerRef.current = setTimeout(() => {
+        ixSaveTimerRef.current = null;
+        void flushInteractionSave();
+      }, IX_SAVE_MS);
+    },
+    [previewStylePatch, flushInteractionSave]
+  );
+
   const handleInteractionChange = useCallback(
     (group, key, value) => {
       const node = selectedNodeRef.current;
       if (!node) return;
-      if (editingDisabledBySectionLock) return;
-      const currentStyle = getDeviceStyle(node.style_json || {}, deviceRef.current) || {};
-      const nextIx = patchInteractionGroup(currentStyle.interactions, group, key, value);
+      if (isLinkedGlobalPlaceholder(node)) return;
+      const deviceStyle = getDeviceStyle(node.style_json || {}, deviceRef.current) || {};
+      const baseIx =
+        ixPendingIxRef.current ||
+        interactionsForForm(deviceStyle.interactions) ||
+        interactionsForForm(form?.interactions) ||
+        {};
+      const nextIx = patchInteractionGroup(baseIx, group, key, value);
+      const previewNow = IX_PREVIEW_IMMEDIATE_KEYS.has(key);
+      if (previewNow && ixPreviewTimerRef.current) clearTimeout(ixPreviewTimerRef.current);
+      if (!previewNow) {
+        if (ixPreviewTimerRef.current) clearTimeout(ixPreviewTimerRef.current);
+        ixPreviewTimerRef.current = setTimeout(() => {
+          ixPreviewTimerRef.current = null;
+          previewStylePatch({ interactions: nextIx });
+        }, IX_PREVIEW_MS);
+      }
       setForm((f) => ({ ...f, interactions: nextIx }));
       ixPendingIxRef.current = nextIx;
-      if (IX_PREVIEW_IMMEDIATE_KEYS.has(key)) {
-        if (ixPreviewTimerRef.current) clearTimeout(ixPreviewTimerRef.current);
-        previewStylePatch({ interactions: nextIx });
-      } else {
-        scheduleInteractionPreview(nextIx);
-      }
-
+      if (previewNow) previewStylePatch({ interactions: nextIx });
       if (ixSaveTimerRef.current) clearTimeout(ixSaveTimerRef.current);
       const saveDelay = IX_SAVE_IMMEDIATE_KEYS.has(key) ? 80 : IX_SAVE_MS;
       ixSaveTimerRef.current = setTimeout(() => {
@@ -3271,15 +3341,56 @@ export default function BuilderInspector({
         void flushInteractionSave();
       }, saveDelay);
     },
-    [editingDisabledBySectionLock, scheduleInteractionPreview, flushInteractionSave]
+    [previewStylePatch, flushInteractionSave, form?.interactions]
+  );
+
+  const handleApplyInteractionsToAllSections = useCallback(async () => {
+    if (!onUpdateNode || !Array.isArray(pageTree) || pageTree.length === 0) return;
+    await flushInteractionSave();
+    const templateIx = interactionTemplateFromSourceInteractions(form?.interactions, { includeParallax: true });
+    if (!templateIx.animation) return;
+    const planned = planPageSectionInteractionUpdates(pageTree, templateIx, {
+      device,
+      siteTheme,
+    });
+    if (!planned.length) return;
+    setIsApplyingPageInteractions(true);
+    try {
+      for (const { nodeId, mergedInteractions } of planned) {
+        const node = findNodeInTree(pageTree, nodeId);
+        if (!node) continue;
+        await onUpdateNode({
+          nodeId,
+          allowInteractionsOnLockedSection: true,
+          skipHistorySnapshot: true,
+          payload: {
+            style_json: mergeStyleForDevice(node, device, { interactions: mergedInteractions }, siteTheme),
+          },
+        });
+      }
+    } finally {
+      setIsApplyingPageInteractions(false);
+    }
+  }, [device, form?.interactions, onUpdateNode, pageTree, siteTheme, flushInteractionSave]);
+
+  const handleInteractionReplace = useCallback(
+    (nextIx) => {
+      const node = selectedNodeRef.current;
+      if (!node || isLinkedGlobalPlaceholder(node)) return;
+      commitInteractionState(pruneInteractions(nextIx), { previewNow: true });
+    },
+    [commitInteractionState]
   );
 
   const handleInteractionClearGroup = useCallback(
     (group) => {
       const node = selectedNodeRef.current;
-      if (!node || editingDisabledBySectionLock) return;
-      const currentStyle = getDeviceStyle(node.style_json || {}, deviceRef.current) || {};
-      const nextIx = clearInteractionGroup(currentStyle.interactions, group);
+      if (!node || isLinkedGlobalPlaceholder(node)) return;
+      const baseIx =
+        ixPendingIxRef.current ||
+        interactionsForForm(getDeviceStyle(node.style_json || {}, deviceRef.current)?.interactions) ||
+        {};
+      const nextIx = clearInteractionGroup(baseIx, group);
       setForm((f) => ({ ...f, interactions: nextIx }));
       ixPendingIxRef.current = nextIx;
       if (ixPreviewTimerRef.current) clearTimeout(ixPreviewTimerRef.current);
@@ -3287,7 +3398,7 @@ export default function BuilderInspector({
       if (ixSaveTimerRef.current) clearTimeout(ixSaveTimerRef.current);
       void flushInteractionSave();
     },
-    [editingDisabledBySectionLock, previewStylePatch, flushInteractionSave]
+    [previewStylePatch, flushInteractionSave]
   );
 
   const commitStylePatch = async (patch) => {
@@ -3454,7 +3565,7 @@ export default function BuilderInspector({
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
         style={
-          freezeInspectorPanels
+          freezeInspectorPanels && activeTab !== 'interactions'
             ? { opacity: 0.5, pointerEvents: 'none', userSelect: 'none' }
             : undefined
         }
@@ -3556,9 +3667,15 @@ export default function BuilderInspector({
         <InteractionsPanel
           form={form}
           onInteractionChange={handleInteractionChange}
+          onInteractionReplace={handleInteractionReplace}
           onInteractionClearGroup={handleInteractionClearGroup}
-          disabled={editingDisabledBySectionLock}
+          onApplyToAllPageSections={handleApplyInteractionsToAllSections}
+          isApplyingToAllPageSections={isApplyingPageInteractions}
+          pageSectionCount={pageSectionCount}
+          disabled={Boolean(selectedNode && isLinkedGlobalPlaceholder(selectedNode))}
+          sectionLocked={editingDisabledBySectionLock}
           selectedNodeId={selectedNode?.id}
+          nodeType={selectedNode?.nodeType}
           device={device}
         />
       ) : null}

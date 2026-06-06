@@ -17,6 +17,7 @@ import { freezeGlobalSectionsForPublish } from '@/lib/globalSectionSnapshot';
 import { applyResponsiveDefaultsToTree } from '@/lib/applyPageResponsiveDefaults';
 import { isBrandFontNormalizeStyleJson } from '@/lib/projectBrand.js';
 import { normalizeSiteTheme } from '@/lib/siteDesignTheme';
+import { isInteractionsOnlyStyleJsonUpdate, isStyleJsonOnlyNodePayload } from '@/lib/interactionsStyleJsonUpdate';
 import {
   mergeCarouselPropsForBulkPersist,
   mergeFeatureTabsPropsForBulkPersist,
@@ -853,6 +854,7 @@ export async function updateNode(nodeId, payload) {
     const brandFontNormalize = Boolean(payload?.brandFontNormalize);
     const body = { ...payload };
     delete body.brandFontNormalize;
+    delete body.allowInteractionsOnLockedSection;
 
     const existingProps = normalizeNodeProps(parseSnapshot(existing.props_json) || {}, existing.node_type);
     const mergedProps = body.props ? mergeNodePropsJsonPatch(existingProps, body.props) : existingProps;
@@ -871,8 +873,13 @@ export async function updateNode(nodeId, payload) {
         throw new Error('Invalid brand font normalize payload');
       }
     } else {
-      await assertDbNodeNotUnderLockedSectionRow(connection, existing);
-      await assertLockedRowUpdateAllowsUnlockOnly(existing, mergedProps);
+      const interactionsOnlyUpdate =
+        isStyleJsonOnlyNodePayload(body) &&
+        isInteractionsOnlyStyleJsonUpdate(existingProps.style_json, body.style_json, existing.node_type);
+      if (!interactionsOnlyUpdate) {
+        await assertDbNodeNotUnderLockedSectionRow(connection, existing);
+        await assertLockedRowUpdateAllowsUnlockOnly(existing, mergedProps);
+      }
     }
 
     const nextProps = JSON.stringify(normalizeNodeProps(mergedProps, existing.node_type));

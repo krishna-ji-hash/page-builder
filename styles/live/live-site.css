@@ -2973,7 +2973,7 @@
 /* Scroll-triggered motion: transform/opacity only (no height/width animation). */
 .live-node--ix-trigger-on-scroll:not(.live-node--ix-inview) {
   opacity: 0;
-  transform: translate3d(0, 10px, 0);
+  transform: translate3d(0, 10px, 0) !important;
   will-change: transform, opacity;
 }
 
@@ -3008,11 +3008,22 @@
   .live-node--ix-anim-shimmer {
     animation: none !important;
   }
+
+  .live-node--ix-parallax {
+    transform: none !important;
+    will-change: auto;
+  }
 }
 
 .live-node--ix:focus-visible {
   outline: var(--node-focus-outline, 2px solid var(--node-focus-ring, #6366f1));
   outline-offset: 2px;
+}
+
+/* Parallax — transform-only via CSS variables (runtime updates --node-parallax-x/y). */
+.live-node--ix-parallax {
+  transform: translate3d(var(--node-parallax-x, 0px), var(--node-parallax-y, 0px), 0);
+  will-change: transform;
 }
 
 @keyframes bld-ix-fade {
@@ -3025,6 +3036,47 @@
   to { opacity: 1; }
 }
 
+@keyframes bld-ix-fade-in-up {
+  from { opacity: 0; transform: translate3d(0, 20px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes bld-ix-fade-in-down {
+  from { opacity: 0; transform: translate3d(0, -20px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes bld-ix-fade-in-left {
+  from { opacity: 0; transform: translate3d(-16px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes bld-ix-fade-in-right {
+  from { opacity: 0; transform: translate3d(16px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes bld-ix-slide-in-up {
+  from { opacity: 0; transform: translate3d(0, 48px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes bld-ix-slide-in-down {
+  from { opacity: 0; transform: translate3d(0, -48px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes bld-ix-slide-in-left {
+  from { opacity: 0; transform: translate3d(-48px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes bld-ix-slide-in-right {
+  from { opacity: 0; transform: translate3d(48px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+/* Legacy aliases (published snapshots) */
 @keyframes bld-ix-fade-up {
   from { opacity: 0; transform: translate3d(0, 20px, 0); }
   to { opacity: 1; transform: translate3d(0, 0, 0); }

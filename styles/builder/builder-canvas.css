@@ -551,6 +551,17 @@
   transform: translateY(-1px);
 }
 
+/* Scroll entrance: builder hover nudge must not override ix scroll/hidden transforms */
+.bld-canvas__page .live-node.live-node--ix-trigger-on-scroll:not(.live-node--ix-inview):hover,
+.bld-canvas__page .bld-node__shell.live-node--ix-trigger-on-scroll:not(.live-node--ix-inview):hover {
+  transform: translate3d(0, 10px, 0) !important;
+}
+
+.bld-canvas__page .live-node.live-node--ix-trigger-on-scroll.live-node--ix-inview:not(.bld-selected):hover,
+.bld-canvas__page .bld-node__shell.live-node--ix-trigger-on-scroll.live-node--ix-inview:not(.bld-selected):hover {
+  transform: none;
+}
+
 .bld-start {
   width: 100%;
   max-width: min(980px, 100%);

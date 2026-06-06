@@ -18,6 +18,14 @@ const envFile = path.join(root, '.env');
 const nextDir = path.join(root, '.next');
 const PORT = Number(process.env.PORT || 3000);
 
+const ensureMysqlArgs = fs.existsSync(envFile)
+  ? ['--env-file=.env', path.join(root, 'scripts', 'ensure-mysql.mjs')]
+  : [path.join(root, 'scripts', 'ensure-mysql.mjs')];
+const ensureDb = spawnSync(process.execPath, ensureMysqlArgs, { cwd: root, stdio: 'inherit' });
+if (ensureDb.status !== 0) {
+  process.exit(ensureDb.status ?? 1);
+}
+
 const migrateArgs = fs.existsSync(envFile)
   ? ['--env-file=.env', path.join(root, 'scripts', 'migrate.mjs')]
   : [path.join(root, 'scripts', 'migrate.mjs')];
@@ -25,7 +33,7 @@ const migrateArgs = fs.existsSync(envFile)
 const mig = spawnSync(process.execPath, migrateArgs, { cwd: root, stdio: 'inherit' });
 if (mig.status !== 0) {
   process.stderr.write(
-    '\n[dev] Migration step failed. Start DB (e.g. npm run db:up), fix .env (see .env.example), or skip migrate with: npm run dev:simple\n\n'
+    '\n[dev] Migration step failed. Start DB (npm run db:xampp or XAMPP MySQL), fix .env (see .env.example), or skip migrate with: npm run dev:simple\n\n'
   );
   process.exit(mig.status ?? 1);
 }

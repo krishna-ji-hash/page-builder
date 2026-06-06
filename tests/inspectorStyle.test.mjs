@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { clearInteractionGroup, patchInteractionGroup, pruneInteractions } from '../lib/interactionInspectorUtils.js';
+import {
+  clearInteractionGroup,
+  enableEntranceAnimation,
+  mergeInteractionsPatch,
+  patchInteractionGroup,
+  pruneInteractions,
+} from '../lib/interactionInspectorUtils.js';
 import { normalizeResponsiveStyle } from '../lib/styleNormalizer.js';
 import {
   animationCssFromInteractions,
@@ -67,7 +73,7 @@ test('pruneInteractions drops empty animation and keeps valid presets', () => {
   assert.deepEqual(pruneInteractions({ animation: { preset: 'none', trigger: 'on-load' } }), {});
   assert.deepEqual(
     pruneInteractions({ hover: { scale: '1.05' }, animation: { preset: 'fade', duration: 0.5 } }),
-    { hover: { scale: '1.05' }, animation: { preset: 'fade-in', duration: 0.5, trigger: 'on-load' } }
+    { hover: { scale: '1.05' }, animation: { preset: 'fade-in', duration: 0.5, trigger: 'on-enter-viewport' } }
   );
 });
 
@@ -102,11 +108,11 @@ test('interactionInlineStyleVars maps hover + animation tokens', () => {
 });
 
 test('normalizeAnimationPreset maps legacy ids to canonical presets', () => {
-  assert.equal(normalizeAnimationPreset('slide-up'), 'fade-up');
+  assert.equal(normalizeAnimationPreset('slide-up'), 'slide-in-up');
   assert.equal(normalizeAnimationPreset('zoom'), 'zoom-in');
-  assert.equal(normalizeAnimationPreset('slide-from-left'), 'slide-left');
+  assert.equal(normalizeAnimationPreset('slide-from-left'), 'slide-in-left');
   assert.equal(animationKeyframeName('zoom'), 'bld-ix-zoom-in');
-  assert.equal(animationKeyframeName('slide-from-top'), 'bld-ix-fade-down');
+  assert.equal(animationKeyframeName('slide-from-top'), 'bld-ix-fade-in-down');
 });
 
 test('interactionPresentationClass adds ix + animation + trigger class', () => {
@@ -114,7 +120,7 @@ test('interactionPresentationClass adds ix + animation + trigger class', () => {
     interactions: { animation: { preset: 'slide-up', trigger: 'on-scroll' } },
   });
   assert.match(cls, /live-node--ix/);
-  assert.match(cls, /live-node--ix-anim-fade-up/);
+  assert.match(cls, /live-node--ix-anim-slide-in-up/);
   assert.match(cls, /live-node--ix-trigger-on-scroll/);
 });
 
@@ -172,6 +178,31 @@ test('styleToCss merges interaction vars and transform', () => {
   assert.equal(css['--node-hover-bg'], '#000');
   assert.equal(css.transform, 'rotate(5deg) scale(1.02)');
   assert.equal(css.filter, 'blur(4px)');
+});
+
+test('enableEntranceAnimation sets preset trigger and duration atomically', () => {
+  const next = enableEntranceAnimation({ hover: { scale: '1.02' } }, 'fade-in-up');
+  assert.equal(next.hover.scale, '1.02');
+  assert.equal(next.animation.preset, 'fade-in-up');
+  assert.equal(next.animation.trigger, 'on-enter-viewport');
+  assert.equal(next.animation.duration, 0.6);
+});
+
+test('mergeInteractionsPatch applies animation without wiping hover', () => {
+  const next = mergeInteractionsPatch(
+    { hover: { scale: '1.05' } },
+    { animation: { preset: 'slide-in-left', trigger: 'on-scroll', duration: 0.8 } }
+  );
+  assert.equal(next.hover.scale, '1.05');
+  assert.equal(next.animation.preset, 'slide-in-left');
+  assert.equal(next.animation.trigger, 'on-scroll');
+});
+
+test('mergeInteractionsPatch enables parallax with defaults in one step', () => {
+  const next = mergeInteractionsPatch({}, { parallax: { enabled: true } });
+  assert.equal(next.parallax.enabled, true);
+  assert.equal(next.parallax.speed, 0.35);
+  assert.equal(next.parallax.direction, 'vertical-up');
 });
 
 test('presetPatchForNodeType returns button primary patch', () => {

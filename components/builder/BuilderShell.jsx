@@ -475,6 +475,7 @@ export default function BuilderShell({ pageId }) {
   const globalComponentCacheRef = useRef(new Map());
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [previewCssByNodeId, setPreviewCssByNodeId] = useState({});
+  const [previewIxByNodeId, setPreviewIxByNodeId] = useState({});
   const [formPreviewByNodeId, setFormPreviewByNodeId] = useState({});
   const [activeSpacingEdit, setActiveSpacingEdit] = useState(null);
   const [overflowByNodeId, setOverflowByNodeId] = useState({});
@@ -621,6 +622,7 @@ export default function BuilderShell({ pageId }) {
   const setPreviewCssForNode = useCallback((nodeId, css, opts = {}) => {
     if (opts?.clearAll) {
       setPreviewCssByNodeId({});
+      setPreviewIxByNodeId({});
       return;
     }
     if (!nodeId) return;
@@ -630,6 +632,20 @@ export default function BuilderShell({ pageId }) {
       else next[nodeId] = css;
       return next;
     });
+    if (Object.prototype.hasOwnProperty.call(opts, 'interactions')) {
+      setPreviewIxByNodeId((prev) => {
+        const next = { ...(prev || {}) };
+        if (!opts.interactions) delete next[nodeId];
+        else next[nodeId] = opts.interactions;
+        return next;
+      });
+    } else if (!css) {
+      setPreviewIxByNodeId((prev) => {
+        const next = { ...(prev || {}) };
+        delete next[nodeId];
+        return next;
+      });
+    }
   }, []);
 
   const handleOverflowDiagnostics = useCallback((nextMap) => {
@@ -939,7 +955,12 @@ export default function BuilderShell({ pageId }) {
     setInspectorTab(styleFirst ? 'style' : 'content');
   };
 
-  const handleNodeUpdate = async ({ nodeId, payload, skipHistorySnapshot = false }) => {
+  const handleNodeUpdate = async ({
+    nodeId,
+    payload,
+    skipHistorySnapshot = false,
+    allowInteractionsOnLockedSection = false,
+  }) => {
     const normalizeNodeId = (raw) => {
       const s = String(raw ?? '').trim();
       if (!s) return null;
@@ -957,6 +978,7 @@ export default function BuilderShell({ pageId }) {
     }
     const brandFontNormalize = Boolean(payload?.brandFontNormalize);
     const apiPayload = { ...payload };
+    delete apiPayload.allowInteractionsOnLockedSection;
     const targetNode = findNodeInTree(tree, normalizedNodeId);
     if (!targetNode) {
       if (deleteInFlightRef.current) return;
@@ -967,11 +989,20 @@ export default function BuilderShell({ pageId }) {
       }
       return;
     }
-    if (!brandFontNormalize && isStrictAncestorSectionLocked(tree, normalizedNodeId)) {
+    if (
+      !brandFontNormalize &&
+      !allowInteractionsOnLockedSection &&
+      isStrictAncestorSectionLocked(tree, normalizedNodeId)
+    ) {
       setErrorMessage('This layer is inside a locked section. Unlock the section in the left panel to edit.');
       return;
     }
-    if (!brandFontNormalize && targetNode?.nodeType === 'row' && isSectionLockedRow(targetNode)) {
+    if (
+      !brandFontNormalize &&
+      !allowInteractionsOnLockedSection &&
+      targetNode?.nodeType === 'row' &&
+      isSectionLockedRow(targetNode)
+    ) {
       const mergedMeta = { ...(targetNode.props?.meta || {}), ...(payload.props?.meta || {}) };
       if (!metaRepresentsExplicitSectionUnlock(mergedMeta)) {
         setErrorMessage('This section is locked. Click the lock icon in Sections or Layers to unlock.');
@@ -1015,7 +1046,7 @@ export default function BuilderShell({ pageId }) {
           }
           return;
         }
-        throw new Error(data.error || 'Failed to update node');
+        throw new Error(data.details || data.error || 'Failed to update node');
       }
       setTree(data.tree || beforeTree);
       setHasUnpublishedEdits(true);
@@ -4749,6 +4780,7 @@ export default function BuilderShell({ pageId }) {
               isLayoutDebug={isLayoutDebug}
               minimalPageChrome
               previewCssByNodeId={previewCssByNodeId}
+              previewIxByNodeId={previewIxByNodeId}
               onSetPreviewCssForNode={setPreviewCssForNode}
               formPreviewByNodeId={formPreviewByNodeId}
               activeSpacingEdit={activeSpacingEdit}
