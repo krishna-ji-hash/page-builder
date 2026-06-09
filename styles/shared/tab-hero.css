@@ -258,11 +258,45 @@
   cursor: text;
   border-radius: 4px;
   -webkit-text-fill-color: currentColor;
+  user-select: text;
+  pointer-events: auto;
+  position: relative;
+  z-index: 1;
 }
 
 .live-tab-hero__editable:focus {
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35);
   background: rgba(255, 255, 255, 0.96);
+}
+
+/* Builder canvas — pointer passthrough + chrome overlay (parity with feature-tabs) */
+:is(.live-doc, .bld-canvas__live-mirror, .bld-canvas__page) .bld-node__shell.bld-block--tab-hero {
+  align-self: stretch !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.live-tab-hero--builder,
+.live-tab-hero--builder .live-tab-hero__tab,
+.live-tab-hero--builder .live-tab-hero__tab-label,
+.live-tab-hero--builder .live-tab-hero__editable,
+.live-tab-hero--editable .live-tab-hero__card--editable {
+  pointer-events: auto;
+}
+
+.live-tab-hero__tab-label {
+  display: inline-block;
+  pointer-events: none;
+}
+
+.live-tab-hero--editable .live-tab-hero__tab-label.live-tab-hero__editable {
+  pointer-events: auto;
+}
+
+.bld-canvas__page .bld-node__shell.bld-block--tab-hero > .bld-node__chrome--overlay {
+  pointer-events: none;
 }
 
 @media (max-width: 767px) {

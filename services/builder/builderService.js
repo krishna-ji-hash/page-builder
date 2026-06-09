@@ -22,6 +22,7 @@ import {
   mergeCarouselPropsForBulkPersist,
   mergeFeatureTabsPropsForBulkPersist,
   mergeImageNodePropsForBulkPersist,
+  mergeTabHeroPropsForBulkPersist,
 } from '@/lib/inlineImagePersist.js';
 
 function parseSnapshot(value) {
@@ -1189,6 +1190,11 @@ async function persistClientTreeOntoDraft(connection, draftVersionId, clientRoot
     if (existing.node_type === 'tabs' && raw.props) {
       merged = normalizeNodeProps(
         mergeFeatureTabsPropsForBulkPersist(raw.props, existingProps),
+        existing.node_type
+      );
+    } else if (existing.node_type === 'tab_hero' && raw.props) {
+      merged = normalizeNodeProps(
+        mergeTabHeroPropsForBulkPersist(raw.props, existingProps),
         existing.node_type
       );
     } else if (existing.node_type === 'carousel' && raw.props) {

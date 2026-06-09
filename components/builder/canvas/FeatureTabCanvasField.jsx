@@ -83,6 +83,17 @@ export default function FeatureTabCanvasField({
     stopBubble(event);
   };
 
+  const handlePaste = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const el = ref.current;
+    if (!el) return;
+    const text = event.clipboardData?.getData('text/plain') || '';
+    if (!text) return;
+    document.execCommand('insertText', false, text);
+    saveRichTextSelection(el);
+  };
+
   const commitFromElement = (el) => {
     if (!el || el.getAttribute(BLD_FORMATTING_LOCK_ATTR) === '1') return;
     const raw = htmlMode ? el.innerHTML : el.innerText;
@@ -121,6 +132,10 @@ export default function FeatureTabCanvasField({
         if (ref.current) saveRichTextSelection(ref.current);
       }}
       onMouseUp={() => {
+        if (ref.current) saveRichTextSelection(ref.current);
+      }}
+      onPaste={handlePaste}
+      onInput={() => {
         if (ref.current) saveRichTextSelection(ref.current);
       }}
       onKeyDown={(event) => {

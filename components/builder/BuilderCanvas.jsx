@@ -1214,6 +1214,7 @@ function NodeRenderer({
   const featureTabsElementsMode =
     node.nodeType === 'tabs' && isFeatureTabsElementPanelMode(node.props);
   const supportsStatsInlineEdit = node.nodeType === 'stats_counter';
+  const supportsTabHeroCompoundEdit = node.nodeType === 'tab_hero';
   const supportsFloatingTextToolbar =
     supportsInlineTextEdit ||
     node.nodeType === 'rich_text' ||
@@ -1630,7 +1631,12 @@ function NodeRenderer({
     flashPasteNodeId === node.id ? 'bld-node--paste-flash' : '',
     flashReorderNodeId === node.id ? 'bld-node--reorder-flash' : '',
     deletingNodeId === node.id ? 'bld-node--deleting' : '',
-    isInlineEditing || isRichTextEditing ? 'bld-node--editing-focus' : '',
+    isInlineEditing ||
+    isRichTextEditing ||
+    ((node.nodeType === 'tabs' || node.nodeType === 'tab_hero' || node.nodeType === 'stats_counter') &&
+      isFeatureTabFieldEditing)
+      ? 'bld-node--editing-focus'
+      : '',
     sectionEditLocked ? 'bld-node--section-locked' : '',
     node.nodeType === 'image' ? 'bld-block--image' : '',
     node.nodeType === 'image' && nodeLooksLikeBrandLogo(node) ? 'bld-block--brand-logo' : '',
@@ -2409,7 +2415,7 @@ function NodeRenderer({
       }
     }
     const interactiveSelector =
-      'button,input,textarea,select,a,[role="button"],[role="tab"],.live-feature-tabs__tab,.live-feature-tabs__image-btn,.live-faq-accordion__chevron-btn,.live-faq-accordion__add-btn,.live-faq-accordion__editable,.bld-demo-feature-tabs .live-feature-tabs__copy--editable,[data-bld-feature-tab-field],[contenteditable="true"],[contenteditable=""],.bld-transform-handle,.bld-node-controls,.bld-canvas-toolbar,.bld-canvas-toolbar__dropdown,.live-carousel__split-nav,.live-carousel__split-arrow,.live-carousel__split-dot,.live-carousel__arrow,.live-carousel__dot';
+      'button,input,textarea,select,a,[role="button"],[role="tab"],.live-feature-tabs__tab,.live-feature-tabs__image-btn,.live-faq-accordion__chevron-btn,.live-faq-accordion__add-btn,.live-faq-accordion__editable,.bld-demo-feature-tabs .live-feature-tabs__copy--editable,.live-tab-hero__tab,.live-tab-hero__image-btn,.live-tab-hero__editable,[data-bld-feature-tab-field],[contenteditable="true"],[contenteditable=""],.bld-transform-handle,.bld-node-controls,.bld-canvas-toolbar,.bld-canvas-toolbar__dropdown,.live-carousel__split-nav,.live-carousel__split-arrow,.live-carousel__split-dot,.live-carousel__arrow,.live-carousel__dot';
     if (target.closest(interactiveSelector)) return;
     startMoveWithMouse(event);
   };
@@ -2560,9 +2566,18 @@ function NodeRenderer({
         }
         setIsFeatureTabFieldEditing(true);
         scheduleAfterCanvasSelection(() => {
-          focusActiveTextEditRoot({ pointerEvent: event });
-          const root = syncActiveTextEditRoot();
-          if (root) setToolbarFontSizeLive(readFontSizePxFromRoot(root, 16));
+          const root = activeTextEditRootRef.current || syncActiveTextEditRoot();
+          if (
+            root &&
+            document.activeElement === root &&
+            selectionIsInsideRoot(root)
+          ) {
+            preserveTextEditSelectionForToolbar(root);
+          } else {
+            focusActiveTextEditRoot({ pointerEvent: event });
+          }
+          const liveRoot = syncActiveTextEditRoot();
+          if (liveRoot) setToolbarFontSizeLive(readFontSizePxFromRoot(liveRoot, 16));
         });
         return;
       }
@@ -2633,6 +2648,34 @@ function NodeRenderer({
       if (!isSelected) onSelectNode(node.id);
     },
     [sectionEditLocked, isSelected, node.id, onSelectNode]
+  );
+
+  const handleTabHeroFieldPointerDownCapture = useCallback(
+    (event) => {
+      if (event.button !== 0 || sectionEditLocked) return;
+      if (!shouldStartFeatureTabTextEdit(event)) return;
+      if (!isSelected) {
+        onSelectNode(node.id);
+        return;
+      }
+      beginTextEditSession(event);
+    },
+    [sectionEditLocked, isSelected, node.id, onSelectNode, beginTextEditSession]
+  );
+
+  const isTabHeroSectionRow =
+    node.nodeType === 'row' && String(node.props?.meta?.sectionTemplate || '').trim() === 'tabHero';
+
+  const handleNestedCompoundFieldPointerDownCapture = useCallback(
+    (event) => {
+      if (event.button !== 0 || sectionEditLocked) return;
+      if (!shouldStartFeatureTabTextEdit(event)) return;
+      const selectTarget = resolveBuilderCanvasSelectTarget(event, node.id);
+      if (selectTarget === 'nav') return;
+      if (String(selectTarget) === String(node.id)) return;
+      onSelectNode(selectTarget);
+    },
+    [sectionEditLocked, node.id, onSelectNode]
   );
 
   useEffect(() => {
@@ -2802,6 +2845,7 @@ function NodeRenderer({
       }
       activeTextEditRootRef.current = field;
       setIsFeatureTabFieldEditing(true);
+      setTextEditToolbarOpen(true);
       scheduleAfterCanvasSelection(() => {
         const root = syncActiveTextEditRoot();
         if (root) setToolbarFontSizeLive(readFontSizePxFromRoot(root, 16));
@@ -2810,6 +2854,27 @@ function NodeRenderer({
     shell.addEventListener('focusin', onFocusIn, true);
     return () => shell.removeEventListener('focusin', onFocusIn, true);
   }, [node.nodeType, isSelected, sectionEditLocked, node.id, syncActiveTextEditRoot]);
+
+  useEffect(() => {
+    if (
+      (node.nodeType !== 'tabs' && node.nodeType !== 'tab_hero') ||
+      !isSelected ||
+      sectionEditLocked
+    ) {
+      return;
+    }
+    const shell = nodeElementRef.current;
+    if (!shell) return;
+    const focused =
+      shell.querySelector(`${FEATURE_TAB_FIELD_SELECTOR}:focus`) ||
+      (shell.contains(document.activeElement) &&
+      document.activeElement?.closest?.(FEATURE_TAB_FIELD_SELECTOR));
+    if (!focused) return;
+    activeTextEditRootRef.current = focused;
+    setIsFeatureTabFieldEditing(true);
+    setTextEditToolbarOpen(true);
+    setToolbarFontSizeLive(readFontSizePxFromRoot(focused, 16));
+  }, [isSelected, node.nodeType, node.id, sectionEditLocked]);
 
   useEffect(() => {
     if (!showFloatingTextToolbar) return undefined;
@@ -3023,7 +3088,12 @@ function NodeRenderer({
       `${FEATURE_TAB_FIELD_SELECTOR}:focus, [contenteditable="true"]:focus, [contenteditable=""]:focus`
     );
     activeTextEditRootRef.current = null;
-    if (root && typeof root.blur === 'function') root.blur();
+    const shouldBlurFocusedRoot =
+      textEditToolbarOpen ||
+      isInlineEditing ||
+      isRichTextEditing ||
+      isFeatureTabFieldEditing;
+    if (root && typeof root.blur === 'function' && shouldBlurFocusedRoot) root.blur();
     if (isInlineEditing) {
       await handleInlineEditCommit(node);
     } else {
@@ -3039,14 +3109,30 @@ function NodeRenderer({
     isInlineEditing,
     isRichTextEditing,
     isFeatureTabFieldEditing,
+    textEditToolbarOpen,
     handleInlineEditCommit,
     persistCompoundFieldFromRoot,
   ]);
 
   useEffect(() => {
-    const hadSelection = wasSelectedRef.current;
     wasSelectedRef.current = isSelected;
     if (isSelected) return;
+    const shell = nodeElementRef.current;
+    const active = typeof document !== 'undefined' ? document.activeElement : null;
+    const focusedField =
+      shell && active && shell.contains(active)
+        ? active.closest?.(FEATURE_TAB_FIELD_SELECTOR)
+        : null;
+    if (focusedField) {
+      if (
+        node.nodeType === 'tabs' ||
+        node.nodeType === 'tab_hero' ||
+        node.nodeType === 'stats_counter'
+      ) {
+        void persistCompoundFieldFromRoot(focusedField);
+      }
+      return;
+    }
     void endTextEditSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- close toolbar when selection leaves this node
   }, [isSelected, node.id]);
@@ -4840,7 +4926,9 @@ function NodeRenderer({
               ? handleTextEditPointerDownCapture
               : supportsStatsInlineEdit
                 ? handleStatsFieldPointerDownCapture
-                : undefined
+                : isTabHeroSectionRow
+                  ? handleNestedCompoundFieldPointerDownCapture
+                  : undefined
           }
           onMouseDown={maybeStartDirectMove}
           onKeyDown={handleKeyDown}
@@ -5061,11 +5149,13 @@ function NodeRenderer({
           onClick={handleSelect}
           onClickCapture={handleSelectCapture}
           onPointerDownCapture={
-            supportsFloatingTextToolbar
-              ? handleTextEditPointerDownCapture
-              : supportsStatsInlineEdit
-                ? handleStatsFieldPointerDownCapture
-                : undefined
+            supportsTabHeroCompoundEdit
+              ? handleTabHeroFieldPointerDownCapture
+              : supportsFloatingTextToolbar
+                ? handleTextEditPointerDownCapture
+                : supportsStatsInlineEdit
+                  ? handleStatsFieldPointerDownCapture
+                  : undefined
           }
           onMouseDown={maybeStartDirectMove}
           onKeyDown={handleKeyDown}

@@ -14,6 +14,7 @@ import {
   sameBuilderNodeId,
   validateTree,
 } from '@/lib/builderTree';
+import { flushActiveCanvasInlineEdits } from '@/lib/canvasInlineEditFlush.js';
 import { prepareTreeForBulkSave } from '@/lib/inlineImagePersist.js';
 import { adminBuilderPagePath, previewPagePath } from '@/lib/builder/adminBuilderRoutes';
 import { publicPagePath } from '@/lib/publicSiteUrls';
@@ -2971,6 +2972,7 @@ export default function BuilderShell({ pageId }) {
     setIsSyncingDraft(true);
     setErrorMessage('');
     try {
+      await flushActiveCanvasInlineEdits();
       await siteThemePersistFlushRef.current?.();
       const fixedTree = prepareTreeForBulkSave(autoFixTree(reconcileStructuralParents(tree)));
       validateTree(fixedTree);
@@ -3002,6 +3004,7 @@ export default function BuilderShell({ pageId }) {
     setIsPublishing(true);
     setErrorMessage('');
     try {
+      await flushActiveCanvasInlineEdits();
       await siteThemePersistFlushRef.current?.();
       // Always publish from authoritative draft nodes in DB to avoid
       // client-tree snapshot drift, duplicate blocks, or style conflicts.
