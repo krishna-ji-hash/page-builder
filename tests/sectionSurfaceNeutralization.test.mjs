@@ -35,7 +35,7 @@ test('styleToCss remaps row background in dark content mode', () => {
 
 test('neutralizeLeafTextCssObject remaps pasted white text in dark content mode', () => {
   const out = neutralizeLeafTextCssObject({ color: '#ffffff' }, { darkContentMode: true });
-  assert.match(String(out.color), /live-section-fg/);
+  assert.match(String(out.color), /color-text/);
 });
 
 test('remapLegacyPlatformHeroFeatureCardBg maps template pastels to dark card fills', async () => {

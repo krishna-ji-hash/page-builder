@@ -21,7 +21,7 @@ import {
   normalizeAnimationPreset,
 } from '../lib/interactionAnimations.js';
 import { presetPatchForNodeType } from '../lib/stylePresets.js';
-import { styleToCss } from '../lib/styleToCss.js';
+import { sanitizeGradientPaintCss, styleToCss } from '../lib/styleToCss.js';
 
 test('normalizeResponsiveStyle preserves interactions through normalize pipeline', () => {
   const json = {
@@ -167,6 +167,38 @@ test('animationCssFromInteractions only inlines animation for on-load', () => {
 test('hasNodeInteractions detects hover overrides', () => {
   assert.equal(hasNodeInteractions({ interactions: { hover: { textColor: '#fff' } } }), true);
   assert.equal(hasNodeInteractions({}), false);
+});
+
+test('styleToCss strips glass white fill and dark text when gradient preset is merged on buttons', () => {
+  const css = styleToCss(
+    {
+      colors: { textColor: '#0f172a', backgroundColor: 'rgba(255,255,255,0.55)' },
+      background: {
+        backgroundColor: 'rgba(255,255,255,0.55)',
+        backgroundImage: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%)',
+      },
+      typography: { fontFamily: '"Courier New", Courier, monospace', fontWeight: '700' },
+    },
+    null,
+    { nodeType: 'button' }
+  );
+  assert.equal(css.backgroundColor, 'transparent');
+  assert.match(String(css.color), /token-button-text|#ffffff/i);
+  assert.match(String(css['--node-text']), /token-button-text|#ffffff/i);
+  assert.match(String(css.backgroundImage), /gradient/i);
+});
+
+test('sanitizeGradientPaintCss leaves authored brand text on gradient buttons', () => {
+  const css = sanitizeGradientPaintCss(
+    {
+      color: '#f97316',
+      backgroundColor: 'rgba(255,255,255,0.55)',
+      backgroundImage: 'linear-gradient(135deg, #6366f1 0%, #ec4899 100%)',
+    },
+    { nodeType: 'button' }
+  );
+  assert.equal(css.color, '#f97316');
+  assert.equal(css.backgroundColor, 'transparent');
 });
 
 test('styleToCss merges interaction vars and transform', () => {

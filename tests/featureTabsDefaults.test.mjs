@@ -23,6 +23,31 @@ test('resolveFeatureTabsProps picks valid activeTabId', () => {
   assert.equal(activeTabId, 'a');
 });
 
+test('resolveFeatureTabsProps defaults to first tab when defaultTabExplicit is false', () => {
+  const tabs = [
+    { id: 'delivery-success', label: 'Tab 1', heading: 'H1', paragraph: 'P1', bullets: [], imageSrc: '/a.png' },
+    { id: 'enterprise-tech', label: 'Tab 3', heading: 'H3', paragraph: 'P3', bullets: [], imageSrc: '/c.png' },
+  ];
+  const { activeTabId } = resolveFeatureTabsProps({
+    tabs,
+    activeTabId: 'enterprise-tech',
+  });
+  assert.equal(activeTabId, 'delivery-success');
+});
+
+test('resolveFeatureTabsProps honors inspector default when defaultTabExplicit is true', () => {
+  const tabs = [
+    { id: 'delivery-success', label: 'Tab 1', heading: 'H1', paragraph: 'P1', bullets: [], imageSrc: '/a.png' },
+    { id: 'enterprise-tech', label: 'Tab 3', heading: 'H3', paragraph: 'P3', bullets: [], imageSrc: '/c.png' },
+  ];
+  const { activeTabId } = resolveFeatureTabsProps({
+    tabs,
+    activeTabId: 'enterprise-tech',
+    defaultTabExplicit: true,
+  });
+  assert.equal(activeTabId, 'enterprise-tech');
+});
+
 test('patchFeatureTabs updates image and bullets from textarea', () => {
   const base = normalizeFeatureTabs([{ id: 't1', label: 'One', heading: 'H', paragraph: 'P', bullets: [], imageSrc: '/a.png' }]);
   const next = patchFeatureTabs(base, 0, {

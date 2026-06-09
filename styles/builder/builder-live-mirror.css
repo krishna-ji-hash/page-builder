@@ -4,6 +4,7 @@
  */
 @import '../shared/live-header-stack.css';
 @import '../shared/rich-text-controls.css';
+@import '../shared/tab-hero.css';
 
 .bld-builder-root .bld-canvas__live-mirror.live-site {
   /* Grow with sections; do not shrink below content (min-height:0 caused clipped/tight artboard vs scroll parent). */
@@ -132,20 +133,21 @@
  * Section tone: only target the painted container — never sweep all descendants under a light row
  * (that forced dark copy inside platform hero pitch cards on light site mode).
  */
-.bld-builder-root .bld-canvas__live-mirror .live-node:is(.bld-row, .bld-column, .bld-stack)[data-section-tone='dark'] .live-leaf-wrap :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text),
-.live-site .live-node:is(.bld-row, .bld-column, .bld-stack)[data-section-tone='dark'] .live-leaf-wrap :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text),
-.bld-builder-root .bld-canvas__live-mirror .live-leaf-wrap[data-section-tone='dark'] > :is(h1, h2, h3, h4, h5, h6, p),
-.bld-builder-root .bld-canvas__live-mirror .live-leaf-wrap[data-section-tone='dark'] > .live-rich-text,
-.live-site .live-leaf-wrap[data-section-tone='dark'] > :is(h1, h2, h3, h4, h5, h6, p),
-.live-site .live-leaf-wrap[data-section-tone='dark'] > .live-rich-text {
-  color: var(--node-text, var(--live-section-fg-on-dark));
+/* Live/preview parity: styles/shared/dark-surface-copy.css (.live-site rules) */
+.bld-builder-root .bld-canvas__live-mirror .live-node:is(.bld-row, .bld-column, .bld-stack)[data-section-tone='dark'] .live-leaf-wrap :is(h1, h2, h3, h4, h5, h6, .live-rich-text),
+.bld-builder-root .bld-canvas__live-mirror .live-leaf-wrap[data-section-tone='dark'] > :is(h1, h2, h3, h4, h5, h6),
+.bld-builder-root .bld-canvas__live-mirror .live-leaf-wrap[data-section-tone='dark'] > .live-rich-text {
+  color: var(--live-section-fg-on-dark);
+}
+
+.bld-builder-root .bld-canvas__live-mirror .live-node:is(.bld-row, .bld-column, .bld-stack)[data-section-tone='dark'] .live-leaf-wrap > p.bld-rich-text,
+.bld-builder-root .bld-canvas__live-mirror .live-leaf-wrap[data-section-tone='dark'] > p.bld-rich-text {
+  color: var(--live-section-muted-on-dark, rgba(248, 250, 252, 0.82)) !important;
 }
 
 .bld-builder-root .bld-canvas__live-mirror .live-leaf-wrap[data-section-tone='light'] > :is(h1, h2, h3, h4, h5, h6, p),
-.bld-builder-root .bld-canvas__live-mirror .live-leaf-wrap[data-section-tone='light'] > .live-rich-text,
-.live-site .live-leaf-wrap[data-section-tone='light'] > :is(h1, h2, h3, h4, h5, h6, p),
-.live-site .live-leaf-wrap[data-section-tone='light'] > .live-rich-text {
-  color: var(--node-text, var(--live-section-fg));
+.bld-builder-root .bld-canvas__live-mirror .live-leaf-wrap[data-section-tone='light'] > .live-rich-text {
+  color: var(--live-section-fg);
 }
 
 /* Template sections (get in touch contact column + platform hero pitch) */
@@ -161,21 +163,18 @@
     .live-node[data-section-tone='dark']
   )
   .live-leaf-wrap
-  :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text),
-.live-site [data-section-template='getInTouch'] :is(
-    > .live-node.bld-column:first-child,
-    .bld-node-children > .live-node.bld-column:first-child
-  )
-  .live-leaf-wrap
-  :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text),
-.live-site [data-section-template='platformHero'] :is(
+  :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text) {
+  color: var(--live-section-fg-on-dark);
+}
+
+.bld-builder-root .bld-canvas__live-mirror [data-section-template='platformHero'] :is(
     > .live-node.bld-column:first-child,
     .bld-node-children > .live-node.bld-column:first-child,
     .live-node[data-section-tone='dark']
   )
   .live-leaf-wrap
-  :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text) {
-  color: var(--node-text, var(--live-section-fg-on-dark));
+  > p.bld-rich-text {
+  color: var(--live-section-muted-on-dark, rgba(248, 250, 252, 0.82)) !important;
 }
 
 /* style_json hover/click must win over editor-only row lift in builder-canvas.css */

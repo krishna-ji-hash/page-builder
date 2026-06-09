@@ -40,6 +40,7 @@ const ELEMENT_CARDS = [
   { id: 'table', label: 'Table', icon: 'TBL', supported: true },
   { id: 'carousel', label: 'Carousel', icon: 'CAR', supported: true },
   { id: 'tabs', label: 'Feature tabs', icon: 'TAB', supported: true },
+  { id: 'tab_hero', label: 'Tab Hero', icon: 'TH', supported: true },
   // PDP blocks (ecommerce)
   ...PDP_ELEMENT_CARDS,
 ];
@@ -687,6 +688,10 @@ export default function BuilderSidebar({
                   <span className="bld-block-card__icon">TAB</span>
                   <span className="bld-block-card__label">Feature Tabs</span>
                 </button>
+                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('tabHero')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">TH</span>
+                  <span className="bld-block-card__label">Tab Hero</span>
+                </button>
                 <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('resourcesBlogs')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">BLG</span>
                   <span className="bld-block-card__label">Resources Blogs</span>
@@ -694,6 +699,10 @@ export default function BuilderSidebar({
                 <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('trustLogos')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">SP</span>
                   <span className="bld-block-card__label">Social Proof</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('stats')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">ST</span>
+                  <span className="bld-block-card__label">Stats Counter</span>
                 </button>
                 <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('features')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">≡</span>
@@ -726,10 +735,6 @@ export default function BuilderSidebar({
                 <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('pricing')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">PRC</span>
                   <span className="bld-block-card__label">Pricing</span>
-                </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('stats')} disabled={isCreatingNode}>
-                  <span className="bld-block-card__icon">ST</span>
-                  <span className="bld-block-card__label">Stats Counter</span>
                 </button>
                 <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('contactForm')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">CF</span>

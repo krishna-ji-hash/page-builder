@@ -37,11 +37,11 @@ test('stack selection appends at end', () => {
   assert.equal(r.insertIndex, 2);
 });
 
-test('widget after sibling in same stack', () => {
+test('widget after sibling in same stack appends at stack bottom', () => {
   const r = resolveEditableInsertTarget(tree, 4);
   assert.equal(r.ok, true);
   assert.equal(r.parentId, 3);
-  assert.equal(r.insertIndex, 1);
+  assert.equal(r.insertIndex, 2);
 });
 
 test('compound widget inserts after sibling in parent stack', () => {
@@ -93,4 +93,38 @@ test('locked section returns locked', () => {
 test('canQuickAddFromSelection for heading inside stack', () => {
   const node = { id: 4, nodeType: 'heading' };
   assert.equal(canQuickAddFromSelection(tree, node), true);
+});
+
+const statsTree = [
+  {
+    id: 100,
+    nodeType: 'row',
+    props: { meta: { sectionTemplate: 'stats' } },
+    children: [
+      {
+        id: 101,
+        nodeType: 'column',
+        children: [
+          {
+            id: 102,
+            nodeType: 'stack',
+            children: [{ id: 103, nodeType: 'stats_counter', props: { items: [] } }],
+          },
+        ],
+      },
+    ],
+  },
+];
+
+test('stats section row inserts heading at stack bottom', () => {
+  const r = resolveEditableInsertTarget(statsTree, 100, { widgetNodeType: 'heading' });
+  assert.equal(r.ok, true);
+  assert.equal(r.parentId, 102);
+  assert.equal(r.insertIndex, 1);
+});
+
+test('stats_counter blocks non-content widgets with guidance', () => {
+  const r = resolveEditableInsertTarget(statsTree, 103, { widgetNodeType: 'carousel' });
+  assert.equal(r.ok, false);
+  assert.match(r.message, /Section title block/i);
 });

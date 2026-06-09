@@ -35,9 +35,36 @@ test('applySectionToneToLeafCss forces light text on dark sections for neutral d
   assert.equal(out['--node-text'], LIVE_SECTION_FG_ON_DARK);
 });
 
+test('applySectionToneToLeafCss uses muted copy for body leaves on dark sections', () => {
+  const out = applySectionToneToLeafCss(
+    { color: '#64748b', '--node-text': '#64748b' },
+    'dark',
+    { nodeType: 'paragraph' }
+  );
+  assert.match(String(out.color), /live-section-muted/);
+  assert.match(String(out['--node-text']), /live-section-muted/);
+});
+
 test('applySectionToneToLeafCss preserves authored brand color on dark sections', () => {
   const out = applySectionToneToLeafCss({ color: '#2841a4' }, 'dark');
   assert.equal(out.color, '#2841a4');
+});
+
+test('applySectionToneToLeafCss remaps section-muted token on dark site preset', () => {
+  const out = applySectionToneToLeafCss(
+    { color: 'var(--live-section-muted, var(--color-muted))' },
+    null,
+    { nodeType: 'paragraph', darkContentMode: true }
+  );
+  assert.match(String(out.color), /live-section-muted/);
+});
+
+test('neutralizeLeafTextCssObject remaps section-muted token on dark site preset', () => {
+  const out = neutralizeLeafTextCssObject(
+    { color: 'var(--live-section-muted, var(--color-muted))' },
+    { darkContentMode: true, sectionTone: null }
+  );
+  assert.match(String(out.color), /--color-text/);
 });
 
 test('resolveSectionToneForNode forces dark on get in touch row', () => {

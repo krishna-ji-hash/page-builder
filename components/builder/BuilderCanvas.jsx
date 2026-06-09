@@ -13,7 +13,14 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import { isValidNodeHierarchy } from '@/lib/builderHierarchy';
-import { computeReorderFromDrop, findNodeInTree } from '@/lib/builderTree';
+import {
+  canonicalNodeId,
+  computeMoveDown,
+  computeMoveUp,
+  computeReorderFromDrop,
+  findNodeInTree,
+  getSiblingContext,
+} from '@/lib/builderTree';
 import { isFooterRowNode, isHeaderRowNode, isNodeEditsDisabledBySectionLock } from '@/lib/rowLayoutMeta';
 import { resolveBuilderCanvasSelectTarget, isSplitHeroCarouselNode } from '@/lib/builderCanvasSelect.js';
 import {
@@ -31,6 +38,14 @@ import { normalizeResponsiveStyle } from '@/lib/styleNormalizer';
 import { withResolvedLayoutGap } from '@/lib/layoutGapUtils';
 import { mergeDeviceStyleWithTypeDefaults, mergeMenuDeviceStyle } from '@/lib/nodeLayoutDefaults';
 import { SECTION_TEMPLATES } from '@/lib/sectionTemplates';
+import {
+  buildStatsContentStackLayoutUpdate,
+  buildStatsCounterLayoutUpdate,
+  ensureStatsContentStackColumnPayload,
+  findStatsContentStack,
+  findStatsCounterNode,
+  isStatsSectionRow,
+} from '@/lib/statsCounterSection';
 import {
   applyTemplateSectionContrast,
   findParentRowForNode,
@@ -93,6 +108,16 @@ import {
   resolveFeatureTabsProps,
 } from '@/lib/featureTabsDefaults';
 import {
+  parseStatDisplayValue,
+  patchStatsCounterItemFields,
+  resolveStatsCounterProps,
+} from '@/lib/statsCounterDefaults';
+import {
+  patchTabHeroPanel,
+  resolveActiveTabHeroPanelIdFromDom,
+  resolveTabHeroProps,
+} from '@/lib/tabHeroDefaults';
+import {
   findFeatureTabPanelStack,
   isFeatureTabsElementPanelMode,
   resolveActiveFeatureTabPanelIdFromDom,
@@ -130,7 +155,10 @@ import {
   FLOATING_TOOLBAR_SELECTOR,
   isFocusInFloatingToolbar,
 } from '@/lib/inlineEditBlurGuard';
-import { isSiteContentDarkMode } from '@/lib/bodyTextNeutralization';
+import {
+  isSiteContentDarkMode,
+  shouldNeutralizeHardcodedBodyTextColors,
+} from '@/lib/bodyTextNeutralization';
 import { sectionToneDataAttrForCss } from '@/lib/liveSectionContrastVars.js';
 import { applySectionToneToLeafCss, resolveSectionToneForNode } from '@/lib/sectionToneContext.js';
 import { neutralizeLightSurfaceDeviceStyle } from '@/lib/sectionSurfaceNeutralization.js';
@@ -294,7 +322,10 @@ function getRichTextCommandRoot({
   }
   const shell = nodeElementRef?.current;
   if (!shell) return null;
-  if (nodeType === 'tabs' && isFeatureTabFieldEditing) {
+  if (
+    (nodeType === 'tabs' || nodeType === 'tab_hero' || nodeType === 'stats_counter') &&
+    isFeatureTabFieldEditing
+  ) {
     const focused = shell.querySelector(`${FEATURE_TAB_FIELD_SELECTOR}:focus`);
     if (focused) return focused;
     if (pinnedTextEditRoot && shell.contains(pinnedTextEditRoot)) return pinnedTextEditRoot;
@@ -472,6 +503,10 @@ function renderNodeContent(node, renderOpts = {}) {
     onTabsActiveChange = null,
     onFeatureTabsPatch = null,
     onFeatureTabsImageFile = null,
+    onStatsCounterPatch = null,
+    onTabHeroPatch = null,
+    onTabHeroImageFile = null,
+    onTabHeroActiveChange = null,
     onFaqOpenChange = null,
     onFaqAccordionPatch = null,
     onFaqAccordionAddItem = null,
@@ -497,6 +532,10 @@ function renderNodeContent(node, renderOpts = {}) {
     onTabsActiveChange ||
     onFeatureTabsPatch ||
     onFeatureTabsImageFile ||
+    onStatsCounterPatch ||
+    onTabHeroPatch ||
+    onTabHeroImageFile ||
+    onTabHeroActiveChange ||
     onFaqOpenChange ||
     onSplitHeroSlidePatch ||
     sectionEditLocked ||
@@ -516,6 +555,22 @@ function renderNodeContent(node, renderOpts = {}) {
                   ...(onFeatureTabsPatch ? { onPatchTab: onFeatureTabsPatch } : {}),
                   ...(onFeatureTabsImageFile ? { onTabImageFile: onFeatureTabsImageFile } : {}),
                   ...(typeof renderFeatureTabPanel === 'function' ? { renderPanel: renderFeatureTabPanel } : {}),
+                },
+              }
+            : {}),
+          ...(onStatsCounterPatch
+            ? {
+                statsCounter: {
+                  onPatchItem: onStatsCounterPatch,
+                },
+              }
+            : {}),
+          ...(onTabHeroPatch || onTabHeroImageFile || onTabHeroActiveChange
+            ? {
+                tabHero: {
+                  ...(onTabHeroPatch ? { onPatchPanel: onTabHeroPatch } : {}),
+                  ...(onTabHeroImageFile ? { onPanelImageFile: onTabHeroImageFile } : {}),
+                  ...(onTabHeroActiveChange ? { onActivePanelChange: onTabHeroActiveChange } : {}),
                 },
               }
             : {}),
@@ -1158,9 +1213,11 @@ function NodeRenderer({
     node.nodeType === 'button';
   const featureTabsElementsMode =
     node.nodeType === 'tabs' && isFeatureTabsElementPanelMode(node.props);
+  const supportsStatsInlineEdit = node.nodeType === 'stats_counter';
   const supportsFloatingTextToolbar =
     supportsInlineTextEdit ||
     node.nodeType === 'rich_text' ||
+    node.nodeType === 'tab_hero' ||
     (node.nodeType === 'tabs' && !featureTabsElementsMode);
 
   const repeatCfg =
@@ -1249,16 +1306,6 @@ function NodeRenderer({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset queue state only when tabs node changes
   }, [node.id]);
 
-  const handleTabsActiveChange = useCallback(
-    async (tabId) => {
-      if (sectionEditLocked || !onUpdateNode || node.nodeType !== 'tabs') return;
-      const nextId = String(tabId || '').trim();
-      if (!nextId) return;
-      const nextProps = { ...(nodePropsRef.current || {}), activeTabId: nextId };
-      queueFeatureTabsPersist(nextProps, { immediate: true });
-    },
-    [node.nodeType, onUpdateNode, queueFeatureTabsPersist, sectionEditLocked]
-  );
   const handleFeatureTabsPatch = useCallback(
     async (tabId, patch, options = {}) => {
       if (sectionEditLocked || !onUpdateNode || node.nodeType !== 'tabs' || !patch) return;
@@ -1316,6 +1363,75 @@ function NodeRenderer({
   );
   const featureTabsPatchHandler = node.nodeType === 'tabs' ? handleFeatureTabsPatch : null;
   const featureTabsImageHandler = node.nodeType === 'tabs' ? handleFeatureTabsImageFile : null;
+  const handleStatsCounterPatch = useCallback(
+    async (index, patch) => {
+      if (sectionEditLocked || !onUpdateNode || node.nodeType !== 'stats_counter' || !patch) return;
+      const { items } = resolveStatsCounterProps(node.props);
+      const nextItems = patchStatsCounterItemFields(items, index, patch);
+      await onUpdateNode({
+        nodeId: node.id,
+        payload: { props: { ...(node.props || {}), items: nextItems } },
+      });
+    },
+    [node.id, node.nodeType, node.props, onUpdateNode, sectionEditLocked]
+  );
+  const statsCounterPatchHandler = node.nodeType === 'stats_counter' ? handleStatsCounterPatch : null;
+  const handleTabHeroPatch = useCallback(
+    async (panelId, patch) => {
+      if (sectionEditLocked || !onUpdateNode || node.nodeType !== 'tab_hero' || !patch) return;
+      const { panels } = resolveTabHeroProps(node.props);
+      const index = panels.findIndex((p) => p.id === panelId);
+      if (index < 0) return;
+      const nextPanels = patchTabHeroPanel(panels, index, patch);
+      await onUpdateNode({
+        nodeId: node.id,
+        payload: { props: { ...(node.props || {}), panels: nextPanels } },
+      });
+    },
+    [node.id, node.nodeType, node.props, onUpdateNode, sectionEditLocked]
+  );
+  const handleTabHeroImageFile = useCallback(
+    async (panelId, file) => {
+      if (sectionEditLocked || !onUpdateNode || node.nodeType !== 'tab_hero' || !file?.type?.startsWith?.('image/')) return;
+      const applyImagePatch = async (patch) => {
+        const { panels } = resolveTabHeroProps(node.props);
+        const index = panels.findIndex((p) => p.id === panelId);
+        if (index < 0) return;
+        const nextPanels = patchTabHeroPanel(panels, index, patch);
+        await onUpdateNode({
+          nodeId: node.id,
+          payload: { props: { ...(node.props || {}), panels: nextPanels } },
+        });
+      };
+      if (Number(builderProjectId) > 0) {
+        try {
+          const { uploadFeatureTabPanelImage } = await import('@/lib/featureTabMedia.js');
+          const patch = await uploadFeatureTabPanelImage(builderProjectId, file);
+          await applyImagePatch(patch);
+          return;
+        } catch {
+          // fall through to data URL preview
+        }
+      }
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const src = typeof reader.result === 'string' ? reader.result : '';
+        if (!src) return;
+        await applyImagePatch({
+          imageSrc: src,
+          image: src,
+          imageAlt: String(file.name || '').replace(/\.[^.]+$/, '') || 'Hero background',
+        });
+      };
+      reader.readAsDataURL(file);
+    },
+    [builderProjectId, node.id, node.nodeType, node.props, onUpdateNode, sectionEditLocked]
+  );
+  /** Builder tab switch is session-local; live opens first tab until Inspector sets default. */
+  const handleTabHeroActiveChange = useCallback(async () => {}, []);
+  const tabHeroPatchHandler = node.nodeType === 'tab_hero' ? handleTabHeroPatch : null;
+  const tabHeroImageHandler = node.nodeType === 'tab_hero' ? handleTabHeroImageFile : null;
+  const tabHeroActiveChangeHandler = node.nodeType === 'tab_hero' ? handleTabHeroActiveChange : null;
   const handleFaqOpenChange = useCallback(
     async (itemId) => {
       if (sectionEditLocked || !onUpdateNode || node.nodeType !== 'accordion') return;
@@ -1469,6 +1585,9 @@ function NodeRenderer({
     node.nodeType === 'carousel';
   const isDividerLeaf = node.nodeType === 'divider';
   const shellCarriesLeafLayout = isContainer || isDividerLeaf;
+  const compoundFullWidthShell =
+    !shellCarriesLeafLayout &&
+    (node.nodeType === 'stats_counter' || node.nodeType === 'tab_hero' || node.nodeType === 'tabs');
   const selKind =
     isSelected && node.nodeType === 'row'
       ? 'bld-sel-section'
@@ -1516,6 +1635,8 @@ function NodeRenderer({
     node.nodeType === 'image' ? 'bld-block--image' : '',
     node.nodeType === 'image' && nodeLooksLikeBrandLogo(node) ? 'bld-block--brand-logo' : '',
     node.nodeType === 'carousel' ? 'bld-block--carousel' : '',
+    node.nodeType === 'stats_counter' ? 'bld-block--stats-counter' : '',
+    node.nodeType === 'tab_hero' ? 'bld-block--tab-hero' : '',
     isSplitHeroCarouselNode(node) ? 'bld-block--split-hero-carousel' : '',
     isDividerLeaf ? 'live-divider bld-divider-shell' : '',
   ]
@@ -1558,7 +1679,10 @@ function NodeRenderer({
     [tree, node?.id, device, siteTheme, alignedContentTokens]
   );
   const darkContentMode = isSiteContentDarkMode(siteTheme, alignedContentTokens);
-  const neutralizeBodyColors = darkContentMode;
+  const neutralizeBodyColors = shouldNeutralizeHardcodedBodyTextColors({
+    darkContentMode,
+    sectionTone: ancestorSectionTone,
+  });
   const neutralizeBodyColorsPreview = neutralizeBodyColors;
   const neutralizeBodyColorsPersist = neutralizeBodyColors;
 
@@ -1662,6 +1786,7 @@ function NodeRenderer({
       nodeType: node.nodeType,
       animationPresets,
       darkContentMode,
+      sectionTone: ancestorSectionTone,
     }) || undefined;
   if (compactHeaderBar && siteHeaderRow) {
     nodeCss = {
@@ -1784,7 +1909,10 @@ function NodeRenderer({
       darkContentMode,
       sectionTone: ancestorSectionTone,
     });
-    nodeCss = applySectionToneToLeafCss(nodeCss, ancestorSectionTone);
+    nodeCss = applySectionToneToLeafCss(nodeCss, ancestorSectionTone, {
+      nodeType: node.nodeType,
+      darkContentMode,
+    });
   }
   /** Match liveRenderer: any direct `.live-doc` child row gets spacing vars (not only when semantic tag resolves). */
   const isRootLiveDocRow = node.nodeType === 'row' && Array.isArray(tree) && isRootPageRow(tree, node);
@@ -1905,6 +2033,21 @@ function NodeRenderer({
         animationPresets,
       })
     : { ixStyle: null, ixClass: '' };
+  const leafWidgetShellStyle = (() => {
+    if (shellCarriesLeafLayout) return inlineStyle;
+    const ixStyle = leafInteractionShell.ixStyle || {};
+    if (!compoundFullWidthShell) {
+      return Object.keys(ixStyle).length ? ixStyle : undefined;
+    }
+    return sanitizeInlineMarginCss({
+      width: '100%',
+      maxWidth: '100%',
+      alignSelf: 'stretch',
+      minWidth: 0,
+      boxSizing: 'border-box',
+      ...ixStyle,
+    });
+  })();
   const isImageLeaf = node.nodeType === 'image';
   const imageCssSplit = isImageLeaf ? splitImageNodeCss(inlineStyle) : null;
   const imageShellAlignLive = resolveImageShellAlignFromProps(node.props || {}, imageParentFlexDirection);
@@ -1916,6 +2059,14 @@ function NodeRenderer({
   })();
   const imageFigureStyle = imageCssSplit?.figure;
   const isRow = node.nodeType === 'row';
+  const ancestorRowForBuilderAttrs = isRow ? node : findParentRowForNode(tree, node.id);
+  const builderSectionTemplateAttrs = ancestorRowForBuilderAttrs
+    ? sectionTemplateDataAttrsForRow(ancestorRowForBuilderAttrs)
+    : {};
+  const tplRoleAttrs =
+    node.props?.meta?.tplRole != null && String(node.props.meta.tplRole).trim()
+      ? { 'data-tpl-role': String(node.props.meta.tplRole).trim() }
+      : {};
   let sectionToneAttrs =
     node.nodeType === 'row' || node.nodeType === 'column' || node.nodeType === 'stack'
       ? {
@@ -2287,13 +2438,17 @@ function NodeRenderer({
   const deleteThisNode = (event) => {
     event?.stopPropagation?.();
     if (sectionEditLocked) return;
-    onDeleteNode?.(Number(node.id));
+    const nid = canonicalNodeId(node.id);
+    if (nid == null) return;
+    onDeleteNode?.(nid);
   };
 
   const duplicateThisNode = (event) => {
     event?.stopPropagation?.();
     if (sectionEditLocked) return;
-    onDuplicateNode?.(Number(node.id));
+    const nid = canonicalNodeId(node.id);
+    if (nid == null) return;
+    onDuplicateNode?.(nid);
   };
 
   const handleRichTextEditStart = () => {
@@ -2395,7 +2550,10 @@ function NodeRenderer({
     (event) => {
       if (sectionEditLocked) return;
       setTextEditToolbarOpen(true);
-      if (node.nodeType === 'tabs' && shouldStartFeatureTabTextEdit(event)) {
+      if (
+        (node.nodeType === 'tabs' || node.nodeType === 'tab_hero' || node.nodeType === 'stats_counter') &&
+        shouldStartFeatureTabTextEdit(event)
+      ) {
         const field = event?.target?.closest?.(FEATURE_TAB_FIELD_SELECTOR);
         if (field) {
           activeTextEditRootRef.current = field;
@@ -2445,9 +2603,11 @@ function NodeRenderer({
   const queueTextEditSession = useCallback(
     (event) => {
       if (!event || sectionEditLocked) return;
-      const wantsTabs = node.nodeType === 'tabs' && shouldStartFeatureTabTextEdit(event);
+      const wantsCompoundField =
+        (node.nodeType === 'tabs' || node.nodeType === 'tab_hero' || node.nodeType === 'stats_counter') &&
+        shouldStartFeatureTabTextEdit(event);
       const wantsLeaf = shouldStartTextEditFromCanvasClick(event, node.nodeType);
-      if (!wantsTabs && !wantsLeaf) return;
+      if (!wantsCompoundField && !wantsLeaf) return;
       if (isSelected) {
         beginTextEditSession(event);
         return;
@@ -2464,6 +2624,15 @@ function NodeRenderer({
       queueTextEditSession(event);
     },
     [queueTextEditSession]
+  );
+
+  const handleStatsFieldPointerDownCapture = useCallback(
+    (event) => {
+      if (event.button !== 0 || sectionEditLocked) return;
+      if (!shouldStartFeatureTabTextEdit(event)) return;
+      if (!isSelected) onSelectNode(node.id);
+    },
+    [sectionEditLocked, isSelected, node.id, onSelectNode]
   );
 
   useEffect(() => {
@@ -2483,10 +2652,20 @@ function NodeRenderer({
         nodeElementRef.current
       );
     }
-    if (node.nodeType === 'tabs' && isFeatureTabFieldEditing && nodeElementRef.current) {
+    if (
+      (node.nodeType === 'tabs' || node.nodeType === 'tab_hero' || node.nodeType === 'stats_counter') &&
+      isFeatureTabFieldEditing &&
+      nodeElementRef.current
+    ) {
+      const anchorSel =
+        node.nodeType === 'tab_hero'
+          ? '.live-tab-hero__card'
+          : node.nodeType === 'stats_counter'
+            ? '.live-stats-counter'
+            : '.live-feature-tabs__copy';
       return (
         nodeElementRef.current.querySelector(`${FEATURE_TAB_FIELD_SELECTOR}:focus`) ||
-        nodeElementRef.current.querySelector('.live-feature-tabs__copy') ||
+        nodeElementRef.current.querySelector(anchorSel) ||
         nodeElementRef.current
       );
     }
@@ -2533,6 +2712,57 @@ function NodeRenderer({
     return true;
   };
 
+  const persistTabHeroFieldFromRoot = async (root, htmlOverride = null) => {
+    if (!root || node.nodeType !== 'tab_hero' || !tabHeroPatchHandler) return false;
+    const { panels } = resolveTabHeroProps(node.props);
+    const activePanelId = resolveActiveTabHeroPanelIdFromDom(nodeElementRef.current, node.props);
+    const panel = panels.find((p) => p.id === activePanelId) || panels[0];
+    if (!panel?.id) return false;
+    const sanitizeOpts = { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist };
+    const rawHtml =
+      typeof htmlOverride === 'string' ? htmlOverride : ensureFontSizeMarkupInRoot(root);
+    let patch = null;
+    if (root.classList.contains('live-tab-hero__heading')) {
+      patch = { heading: sanitizeFeatureTabFieldHtml(rawHtml, sanitizeOpts) };
+    } else if (root.classList.contains('live-tab-hero__eyebrow')) {
+      patch = { eyebrow: sanitizeFeatureTabFieldHtml(rawHtml, sanitizeOpts) };
+    } else if (root.classList.contains('live-tab-hero__paragraph')) {
+      patch = { paragraph: sanitizeFeatureTabFieldHtml(rawHtml, sanitizeOpts) };
+    } else if (root.classList.contains('live-tab-hero__cta')) {
+      patch = { ctaLabel: String(root.innerText || '').trim() };
+    } else if (root.classList.contains('live-tab-hero__tab-label')) {
+      patch = { label: String(root.innerText || '').trim() };
+    }
+    if (!patch) return false;
+    await tabHeroPatchHandler(panel.id, patch);
+    return true;
+  };
+
+  const persistStatsCounterFieldFromRoot = async (root, htmlOverride = null) => {
+    if (!root || node.nodeType !== 'stats_counter' || !statsCounterPatchHandler) return false;
+    const itemEl = root.closest?.('.live-stats-counter__item');
+    const index = Number(itemEl?.getAttribute?.('data-stat-index'));
+    if (!Number.isInteger(index) || index < 0) return false;
+    const rawText =
+      typeof htmlOverride === 'string' ? htmlOverride : String(root.innerText || '').trim();
+    if (root.classList.contains('live-stats-counter__value')) {
+      await statsCounterPatchHandler(index, parseStatDisplayValue(rawText));
+      return true;
+    }
+    if (root.classList.contains('live-stats-counter__label')) {
+      await statsCounterPatchHandler(index, { label: rawText });
+      return true;
+    }
+    return false;
+  };
+
+  const persistCompoundFieldFromRoot = async (root, htmlOverride = null) => {
+    if (node.nodeType === 'tabs') return persistFeatureTabFieldFromRoot(root, htmlOverride);
+    if (node.nodeType === 'tab_hero') return persistTabHeroFieldFromRoot(root, htmlOverride);
+    if (node.nodeType === 'stats_counter') return persistStatsCounterFieldFromRoot(root, htmlOverride);
+    return false;
+  };
+
   useEffect(() => {
     if (!supportsInlineTextEdit || !isInlineEditing) return;
     if (textEditToolbarOpen) return;
@@ -2554,7 +2784,13 @@ function NodeRenderer({
   }, [showFloatingTextToolbar, isFeatureTabFieldEditing, isInlineEditing]);
 
   useEffect(() => {
-    if (node.nodeType !== 'tabs' || !isSelected || sectionEditLocked) return undefined;
+    if (
+      (node.nodeType !== 'tabs' && node.nodeType !== 'tab_hero') ||
+      !isSelected ||
+      sectionEditLocked
+    ) {
+      return undefined;
+    }
     const shell = nodeElementRef.current;
     if (!shell) return undefined;
     const onFocusIn = (event) => {
@@ -2562,7 +2798,7 @@ function NodeRenderer({
       if (!field) return;
       const prevRoot = activeTextEditRootRef.current;
       if (prevRoot && prevRoot !== field && shell.contains(prevRoot)) {
-        void persistFeatureTabFieldFromRoot(prevRoot);
+        void persistCompoundFieldFromRoot(prevRoot);
       }
       activeTextEditRootRef.current = field;
       setIsFeatureTabFieldEditing(true);
@@ -2771,12 +3007,15 @@ function NodeRenderer({
   };
 
   const endTextEditSession = useCallback(async () => {
-    if (node.nodeType === 'tabs' && (isFeatureTabFieldEditing || activeTextEditRootRef.current)) {
+    if (
+      (node.nodeType === 'tabs' || node.nodeType === 'tab_hero' || node.nodeType === 'stats_counter') &&
+      (isFeatureTabFieldEditing || activeTextEditRootRef.current)
+    ) {
       const tabRoot =
         activeTextEditRootRef.current ||
         nodeElementRef.current?.querySelector(`${FEATURE_TAB_FIELD_SELECTOR}:focus`) ||
         nodeElementRef.current?.querySelector(FEATURE_TAB_FIELD_SELECTOR);
-      if (tabRoot) await persistFeatureTabFieldFromRoot(tabRoot);
+      if (tabRoot) await persistCompoundFieldFromRoot(tabRoot);
     }
     setTextEditToolbarOpen(false);
     setToolbarFontSizeLive(null);
@@ -2801,7 +3040,7 @@ function NodeRenderer({
     isRichTextEditing,
     isFeatureTabFieldEditing,
     handleInlineEditCommit,
-    persistFeatureTabFieldFromRoot,
+    persistCompoundFieldFromRoot,
   ]);
 
   useEffect(() => {
@@ -3055,7 +3294,9 @@ function NodeRenderer({
       node.nodeType !== 'text' &&
       node.nodeType !== 'paragraph' &&
       node.nodeType !== 'rich_text' &&
-      node.nodeType !== 'tabs'
+      node.nodeType !== 'tabs' &&
+      node.nodeType !== 'tab_hero' &&
+      node.nodeType !== 'stats_counter'
     ) {
       return false;
     }
@@ -3065,8 +3306,8 @@ function NodeRenderer({
     const result = execFormatOnTextRoot(root, command, value);
     if (!result) return false;
     const { before, after } = result;
-    if (node.nodeType === 'tabs') {
-      await persistFeatureTabFieldFromRoot(root);
+    if (node.nodeType === 'tabs' || node.nodeType === 'tab_hero' || node.nodeType === 'stats_counter') {
+      await persistCompoundFieldFromRoot(root);
       return true;
     }
     if (node.nodeType === 'rich_text') {
@@ -3126,7 +3367,8 @@ function NodeRenderer({
       node.nodeType !== 'text' &&
       node.nodeType !== 'paragraph' &&
       node.nodeType !== 'rich_text' &&
-      node.nodeType !== 'tabs'
+      node.nodeType !== 'tabs' &&
+      node.nodeType !== 'tab_hero'
     )
       return;
     const applied = await persistRichHtmlFromCommand('bold');
@@ -3144,7 +3386,8 @@ function NodeRenderer({
       node.nodeType !== 'text' &&
       node.nodeType !== 'paragraph' &&
       node.nodeType !== 'rich_text' &&
-      node.nodeType !== 'tabs'
+      node.nodeType !== 'tabs' &&
+      node.nodeType !== 'tab_hero'
     )
       return;
     await persistRichHtmlFromCommand(command, value);
@@ -3157,7 +3400,8 @@ function NodeRenderer({
       node.nodeType !== 'text' &&
       node.nodeType !== 'paragraph' &&
       node.nodeType !== 'rich_text' &&
-      node.nodeType !== 'tabs'
+      node.nodeType !== 'tabs' &&
+      node.nodeType !== 'tab_hero'
     )
       return;
     const root =
@@ -3173,8 +3417,8 @@ function NodeRenderer({
     if (root.innerHTML && /<[a-z]/i.test(root.innerHTML)) {
       root.innerHTML = stripToolbarFontSizeFromHtml(root.innerHTML);
     }
-    if (node.nodeType === 'tabs') {
-      await persistFeatureTabFieldFromRoot(root);
+    if (node.nodeType === 'tabs' || node.nodeType === 'tab_hero' || node.nodeType === 'stats_counter') {
+      await persistCompoundFieldFromRoot(root);
       return;
     }
     if (node.nodeType === 'rich_text') {
@@ -3432,8 +3676,8 @@ function NodeRenderer({
         ? sanitizeRichHtml(before, sanitizeOpts) === sanitizeRichHtml(after, sanitizeOpts)
         : sanitizeInlineLeafHtml(before, sanitizeOpts) === sanitizeInlineLeafHtml(after, sanitizeOpts);
     if (unchanged) return;
-    if (node.nodeType === 'tabs') {
-      await persistFeatureTabFieldFromRoot(root, after);
+    if (node.nodeType === 'tabs' || node.nodeType === 'tab_hero' || node.nodeType === 'stats_counter') {
+      await persistCompoundFieldFromRoot(root, after);
       return;
     }
     await persistInlineRichHtml(after);
@@ -3459,6 +3703,8 @@ function NodeRenderer({
     const useWholeBlock =
       isFeatureTabField ||
       node.nodeType === 'tabs' ||
+      node.nodeType === 'tab_hero' ||
+      node.nodeType === 'stats_counter' ||
       isInlineEditing ||
       node.nodeType === 'rich_text';
     const result = applyFontSizePxInRoot(root, nextPx, {
@@ -3492,7 +3738,8 @@ function NodeRenderer({
       node.nodeType !== 'text' &&
       node.nodeType !== 'paragraph' &&
       node.nodeType !== 'rich_text' &&
-      node.nodeType !== 'tabs'
+      node.nodeType !== 'tabs' &&
+      node.nodeType !== 'tab_hero'
     )
       return;
     const nextPx = clampFontSizePx(px, readToolbarFontSizePx());
@@ -3511,7 +3758,8 @@ function NodeRenderer({
       node.nodeType !== 'text' &&
       node.nodeType !== 'paragraph' &&
       node.nodeType !== 'rich_text' &&
-      node.nodeType !== 'tabs'
+      node.nodeType !== 'tabs' &&
+      node.nodeType !== 'tab_hero'
     )
       return;
     const step = Number(delta) || 0;
@@ -3556,7 +3804,7 @@ function NodeRenderer({
     node.nodeType === 'text' ||
     node.nodeType === 'paragraph' ||
     node.nodeType === 'rich_text' ||
-    (node.nodeType === 'tabs' && isFeatureTabFieldEditing);
+    ((node.nodeType === 'tabs' || node.nodeType === 'tab_hero') && isFeatureTabFieldEditing);
 
   const inlineRichToolbarControls = supportsFloatingTextToolbar ? (
     <div className="bld-wp-toolbar bld-wp-toolbar--floating" role="toolbar" aria-label="Text formatting">
@@ -3846,15 +4094,48 @@ function NodeRenderer({
     const n = Number.parseFloat(String(first).replace('px', ''));
     return Number.isFinite(n) ? n : 0;
   };
+  const statsCounterChild =
+    isStatsSectionRow(node) && Array.isArray(tree) ? findStatsCounterNode(tree, node.id) : null;
+  const statsContentStackChild =
+    isStatsSectionRow(node) && Array.isArray(tree) ? findStatsContentStack(tree, node.id) : null;
+
   const applyQuickFlexPatch = async (patch) => {
-    await commitStylePatch({
-      layout: {
-        display: 'flex',
-        flexWrap: 'nowrap',
-        ...(patch.layout || {}),
-      },
-      spacing: patch.spacing || {},
-    });
+    const layoutPart = patch.layout
+      ? {
+          display: 'flex',
+          flexWrap: 'nowrap',
+          ...(patch.layout || {}),
+        }
+      : null;
+    const spacingPart = patch.spacing && Object.keys(patch.spacing).length ? patch.spacing : null;
+
+    if (spacingPart) {
+      await commitStylePatch({ spacing: spacingPart });
+    }
+
+    if (!layoutPart) return;
+
+    if (statsCounterChild && onUpdateNode) {
+      const flexDir = String(layoutPart.flexDirection || '').trim();
+      const targetsContentStack =
+        statsContentStackChild &&
+        (flexDir === 'column' || flexDir === 'column-reverse');
+      if (targetsContentStack) {
+        const payload = buildStatsContentStackLayoutUpdate(
+          statsContentStackChild,
+          device,
+          layoutPart,
+          siteTheme
+        );
+        await onUpdateNode({ nodeId: statsContentStackChild.id, payload });
+        return;
+      }
+      const payload = buildStatsCounterLayoutUpdate(statsCounterChild, device, layoutPart, siteTheme);
+      await onUpdateNode({ nodeId: statsCounterChild.id, payload });
+      return;
+    }
+
+    await commitStylePatch({ layout: layoutPart });
   };
   const quickSetDirection = async (direction) => {
     await applyQuickFlexPatch({
@@ -3946,30 +4227,102 @@ function NodeRenderer({
     });
   };
 
+  /** Inner stack under a row/column (e.g. stats heading + counter) for vertical reorder from section chrome. */
+  const resolveVerticalFlipTarget = () => {
+    if (isStatsSectionRow(node) && Array.isArray(tree)) {
+      const statsStack = findStatsContentStack(tree, node.id);
+      if (statsStack && (statsStack.children?.length || 0) >= 2) return statsStack;
+    }
+    if (isColumnMainAxis) return node;
+    const kids = Array.isArray(node.children) ? node.children : [];
+    if (node.nodeType === 'row' && kids.length === 1 && kids[0]?.nodeType === 'column') {
+      const colKids = kids[0].children || [];
+      const stack = colKids.find((c) => c.nodeType === 'stack' && (c.children?.length || 0) >= 2);
+      if (stack) return stack;
+    }
+    if (node.nodeType === 'column') {
+      const stack = kids.find((c) => c.nodeType === 'stack' && (c.children?.length || 0) >= 2);
+      if (stack) return stack;
+    }
+    if (node.nodeType === 'stack' && (kids.length || 0) >= 2) return node;
+    return null;
+  };
+
+  const verticalFlipTarget = resolveVerticalFlipTarget();
+
+  const ensureVerticalStackColumn = async (stackNode) => {
+    if (!stackNode?.id || !onUpdateNode) return;
+    const columnPayload = ensureStatsContentStackColumnPayload(stackNode, device, siteTheme);
+    if (columnPayload) {
+      await onUpdateNode({ nodeId: stackNode.id, payload: columnPayload });
+      return;
+    }
+    const stackDir = String(
+      getDeviceStyle(stackNode.style_json, device)?.layout?.flexDirection || 'column'
+    ).trim();
+    if (stackDir === 'row' || stackDir === 'row-reverse') {
+      const payload = buildStatsContentStackLayoutUpdate(
+        stackNode,
+        device,
+        {
+          flexDirection: 'column',
+          alignItems: getDeviceStyle(stackNode.style_json, device)?.layout?.alignItems || 'stretch',
+        },
+        siteTheme
+      );
+      await onUpdateNode({ nodeId: stackNode.id, payload });
+    }
+  };
+
   /** Swap vertical order: exactly two children → reorder (safe); else column ↔ column-reverse. */
   const quickFlipVertical = async () => {
-    if (!isColumnMainAxis) return;
-    const kids = Array.isArray(node.children) ? node.children : [];
-    const swapTwoChildren =
-      typeof onReorderNode === 'function' &&
-      (node.nodeType === 'row' || node.nodeType === 'column' || node.nodeType === 'stack') &&
-      kids.length === 2;
+    const targetNode = verticalFlipTarget;
+    if (!targetNode) return;
+    if (targetNode.nodeType === 'stack') {
+      await ensureVerticalStackColumn(targetNode);
+    }
+    const kids = Array.isArray(targetNode.children) ? targetNode.children : [];
+    const swapTwoChildren = typeof onReorderNode === 'function' && kids.length === 2;
     if (swapTwoChildren) {
       await onReorderNode({
         nodeId: kids[1].id,
-        newParentId: node.id,
+        newParentId: targetNode.id,
         newIndex: 0,
       });
       return;
     }
-    const nextDir = flexDirForFlip === 'column-reverse' ? 'column' : 'column-reverse';
-    await applyQuickFlexPatch({
-      layout: {
-        flexDirection: nextDir,
-        justifyContent: deviceStyle?.layout?.justifyContent || 'flex-start',
-        alignItems: deviceStyle?.layout?.alignItems || 'stretch',
-      },
-    });
+    if (targetNode.id !== node.id) return;
+    const targetDir = String(
+      targetNode.id === node.id
+        ? flexDirForFlip
+        : getDeviceStyle(targetNode.style_json, device)?.layout?.flexDirection || 'column'
+    ).trim();
+    const nextDir = targetDir === 'column-reverse' ? 'column' : 'column-reverse';
+    if (targetNode.id === node.id) {
+      await applyQuickFlexPatch({
+        layout: {
+          flexDirection: nextDir,
+          justifyContent: deviceStyle?.layout?.justifyContent || 'flex-start',
+          alignItems: deviceStyle?.layout?.alignItems || 'stretch',
+        },
+      });
+      return;
+    }
+    if (onUpdateNode) {
+      const payload = buildStatsContentStackLayoutUpdate(
+        targetNode,
+        device,
+        {
+          flexDirection: nextDir,
+          justifyContent:
+            getDeviceStyle(targetNode.style_json, device)?.layout?.justifyContent || 'flex-start',
+          alignItems:
+            getDeviceStyle(targetNode.style_json, device)?.layout?.alignItems || 'stretch',
+        },
+        siteTheme
+      );
+      await onUpdateNode({ nodeId: targetNode.id, payload });
+    }
   };
 
   const quickLayoutControls =
@@ -3996,7 +4349,7 @@ function NodeRenderer({
             L↔R
           </button>
         ) : null}
-        {isColumnMainAxis ? (
+        {verticalFlipTarget ? (
           <button
             type="button"
             className="bld-quick-layout-controls__btn"
@@ -4046,6 +4399,57 @@ function NodeRenderer({
         </button>
       </div>
     ) : null;
+
+  const siblingReorderCtx = getSiblingContext(tree, node.id);
+  const siblingReorderParent =
+    siblingReorderCtx?.parentId != null ? findNodeInTree(tree, siblingReorderCtx.parentId) : null;
+  const siblingReorderCount = siblingReorderCtx?.siblingIds?.length || 0;
+  const canSiblingReorder =
+    !isLayoutContainer &&
+    isSelected &&
+    !sectionEditLocked &&
+    typeof onReorderNode === 'function' &&
+    siblingReorderCount > 1 &&
+    siblingReorderParent &&
+    ['row', 'column', 'stack'].includes(siblingReorderParent.nodeType);
+  const moveUpAmongSiblings = canSiblingReorder ? computeMoveUp(tree, node.id) : null;
+  const moveDownAmongSiblings = canSiblingReorder ? computeMoveDown(tree, node.id) : null;
+  const runSiblingReorder = async (patch) => {
+    if (!patch || !onReorderNode) return;
+    if (siblingReorderParent?.nodeType === 'stack') {
+      await ensureVerticalStackColumn(siblingReorderParent);
+    }
+    await onReorderNode(patch);
+  };
+
+  const quickSiblingReorderControls = canSiblingReorder ? (
+    <div
+      className="bld-quick-layout-controls bld-quick-layout-controls--sibling"
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <button
+        type="button"
+        className="bld-quick-layout-controls__btn"
+        onClick={() => moveUpAmongSiblings && void runSiblingReorder(moveUpAmongSiblings)}
+        disabled={isSavingNode || isReorderingNode || !moveUpAmongSiblings}
+        title="Move one step up among siblings"
+      >
+        ↑ Top
+      </button>
+      <button
+        type="button"
+        className="bld-quick-layout-controls__btn"
+        onClick={() => moveDownAmongSiblings && void runSiblingReorder(moveDownAmongSiblings)}
+        disabled={isSavingNode || isReorderingNode || !moveDownAmongSiblings}
+        title="Move one step down among siblings"
+      >
+        ↓ Bottom
+      </button>
+    </div>
+  ) : null;
+
+  const quickChromeLayoutControls = quickLayoutControls || quickSiblingReorderControls;
 
   const renderFeatureTabPanel = featureTabsElementsMode
     ? (tabsNode, activeTabId) => (
@@ -4225,7 +4629,7 @@ function NodeRenderer({
   const showFloatingToolbar =
     supportsDirectManipulation && !dragLocked && (isNodeActive || isHoveredHere);
   const needsShellChromeOverlay =
-    (showFloatingToolbar || quickLayoutControls != null) && !showImageMediaToolbar;
+    (showFloatingToolbar || quickChromeLayoutControls != null) && !showImageMediaToolbar;
   const layerBadgeSuppressed =
     (isRow && showRowChrome) ||
     ((node.nodeType === 'column' || node.nodeType === 'stack') && needsShellChromeOverlay);
@@ -4432,7 +4836,11 @@ function NodeRenderer({
           onClick={handleSelect}
           onClickCapture={handleSelectCapture}
           onPointerDownCapture={
-            supportsFloatingTextToolbar ? handleTextEditPointerDownCapture : undefined
+            supportsFloatingTextToolbar
+              ? handleTextEditPointerDownCapture
+              : supportsStatsInlineEdit
+                ? handleStatsFieldPointerDownCapture
+                : undefined
           }
           onMouseDown={maybeStartDirectMove}
           onKeyDown={handleKeyDown}
@@ -4486,8 +4894,8 @@ function NodeRenderer({
                   menuItems={rowMoreMenuItems}
                 />
               </div>
-              {quickLayoutControls ? (
-                <div className="bld-node__chrome-layout">{quickLayoutControls}</div>
+              {quickChromeLayoutControls ? (
+                <div className="bld-node__chrome-layout">{quickChromeLayoutControls}</div>
               ) : null}
             </div>
           ) : null}
@@ -4629,6 +5037,8 @@ function NodeRenderer({
           {...attributes}
           data-bld-node={node.id}
           {...sectionToneAttrs}
+          {...builderSectionTemplateAttrs}
+          {...tplRoleAttrs}
           {...(isImageLeaf && (imageAlignAxes.horizontal || imageAlignAxes.vertical)
             ? {
                 ...(imageAlignAxes.horizontal
@@ -4646,21 +5056,27 @@ function NodeRenderer({
                   ...(imageShellStyle || {}),
                   ...(leafInteractionShell.ixStyle || {}),
                 })
-              : shellCarriesLeafLayout
-                ? inlineStyle
-                : leafInteractionShell.ixStyle || undefined
+              : leafWidgetShellStyle
           }
           onClick={handleSelect}
           onClickCapture={handleSelectCapture}
           onPointerDownCapture={
-            supportsFloatingTextToolbar ? handleTextEditPointerDownCapture : undefined
+            supportsFloatingTextToolbar
+              ? handleTextEditPointerDownCapture
+              : supportsStatsInlineEdit
+                ? handleStatsFieldPointerDownCapture
+                : undefined
           }
           onMouseDown={maybeStartDirectMove}
           onKeyDown={handleKeyDown}
           role={
             isDividerLeaf
               ? 'separator'
-              : node.nodeType === 'tabs' || node.nodeType === 'accordion' || node.nodeType === 'carousel'
+              : node.nodeType === 'tabs' ||
+                  node.nodeType === 'accordion' ||
+                  node.nodeType === 'stats_counter' ||
+                  node.nodeType === 'tab_hero' ||
+                  node.nodeType === 'carousel'
                 ? 'group'
                 : 'button'
           }
@@ -4724,7 +5140,9 @@ function NodeRenderer({
                     />
                   ) : null}
                 </div>
-                {quickLayoutControls ? <div className="bld-node__chrome-layout">{quickLayoutControls}</div> : null}
+                {quickChromeLayoutControls ? (
+                  <div className="bld-node__chrome-layout">{quickChromeLayoutControls}</div>
+                ) : null}
               </div>
             ) : null}
             {miniNodeToolbar}
@@ -4824,6 +5242,10 @@ function NodeRenderer({
                   onTabsActiveChange: tabsActiveChangeHandler,
                   onFeatureTabsPatch: featureTabsPatchHandler,
                   onFeatureTabsImageFile: featureTabsImageHandler,
+                  onStatsCounterPatch: statsCounterPatchHandler,
+                  onTabHeroPatch: tabHeroPatchHandler,
+                  onTabHeroImageFile: tabHeroImageHandler,
+                  onTabHeroActiveChange: tabHeroActiveChangeHandler,
                   onFaqOpenChange: faqOpenChangeHandler,
                   onFaqAccordionPatch: faqAccordionPatchHandler,
                   onFaqAccordionAddItem: faqAccordionAddItemHandler,
@@ -4870,6 +5292,10 @@ function NodeRenderer({
                 onTabsActiveChange: tabsActiveChangeHandler,
                 onFeatureTabsPatch: featureTabsPatchHandler,
                 onFeatureTabsImageFile: featureTabsImageHandler,
+                onStatsCounterPatch: statsCounterPatchHandler,
+                onTabHeroPatch: tabHeroPatchHandler,
+                onTabHeroImageFile: tabHeroImageHandler,
+                onTabHeroActiveChange: tabHeroActiveChangeHandler,
                 onFaqOpenChange: faqOpenChangeHandler,
                 onFaqAccordionPatch: faqAccordionPatchHandler,
                 onFaqAccordionAddItem: faqAccordionAddItemHandler,
@@ -5200,6 +5626,8 @@ function NodeRenderer({
                     onCreateNode={onCreateNode}
                     onQuickAddNode={onQuickAddNode}
                     onDuplicateNode={onDuplicateNode}
+                    onReorderNode={onReorderNode}
+                    isReorderingNode={isReorderingNode}
                     isCreatingNode={isCreatingNode}
                     isSavingNode={isSavingNode}
                     isDeletingNode={isDeletingNode}
@@ -5318,6 +5746,8 @@ function breadcrumbDisplayLabel(n) {
   if (n.nodeType === 'stack') return n.displayName || 'Stack';
   if (n.nodeType === 'tabs') return 'Feature tabs';
   if (n.nodeType === 'accordion') return 'FAQ accordion';
+  if (n.nodeType === 'stats_counter') return 'Stats Counter';
+  if (n.nodeType === 'tab_hero') return 'Tab Hero';
   if (n.nodeType === 'icon') return 'Icon';
   if (n.nodeType === 'icon_box') return 'Icon box';
   if (n.nodeType === 'content_card') return 'Card';
@@ -5882,15 +6312,15 @@ export default function BuilderCanvas({
       return;
     }
     if (card.id === 'hero' && onInsertSectionTemplate) {
-      await onInsertSectionTemplate('hero', { insertIndex: 0 });
+      await onInsertSectionTemplate('hero');
       return;
     }
     if (card.id === 'features' && onInsertSectionTemplate) {
-      await onInsertSectionTemplate('features', { insertIndex: tree?.length ?? 0 });
+      await onInsertSectionTemplate('features');
       return;
     }
     if (card.fallback === 'header' && onInsertSectionTemplate) {
-      await onInsertSectionTemplate('header', { insertIndex: 0 });
+      await onInsertSectionTemplate('header');
       return;
     }
     if (card.fallback === 'starter') {
@@ -5898,7 +6328,7 @@ export default function BuilderCanvas({
       return;
     }
     if (card.id === 'footer' && onInsertSectionTemplate) {
-      await onInsertSectionTemplate('footer', { insertIndex: tree?.length ?? 0 });
+      await onInsertSectionTemplate('footer');
     }
   };
 

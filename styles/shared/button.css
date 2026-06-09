@@ -7,7 +7,12 @@
   border-radius: var(--node-radius, 10px);
   border: var(--node-border-width, 0px) solid
     var(--node-border-color, color-mix(in srgb, currentColor 18%, transparent));
-  background: var(--btn-bg, var(--node-bg, transparent));
+  /* Longhands only — `background` shorthand wipes inline / var gradients on gradient presets. */
+  background-color: var(--btn-bg, var(--node-bg, transparent));
+  background-image: var(--btn-bg-image, none);
+  background-size: var(--btn-bg-size, cover);
+  background-position: var(--btn-bg-position, center);
+  background-repeat: var(--btn-bg-repeat, no-repeat);
   color: var(--btn-text, var(--node-text, inherit));
   text-decoration: none;
   cursor: pointer;
@@ -35,7 +40,8 @@
 }
 
 .bld-btn:hover {
-  background: var(--btn-bg-hover, color-mix(in srgb, var(--btn-bg, var(--node-bg, var(--token-bg-surface))) 92%, #000 8%));
+  background-color: var(--btn-bg-hover, color-mix(in srgb, var(--btn-bg, var(--node-bg, var(--token-bg-surface))) 92%, #000 8%));
+  background-image: var(--btn-bg-image, none);
   color: var(--btn-text-hover, var(--btn-text, var(--node-text, inherit)));
   border-color: var(--btn-border-hover, var(--node-border-color, color-mix(in srgb, currentColor 24%, transparent)));
   transform: translateY(var(--lift-y));
@@ -44,7 +50,8 @@
 }
 
 .bld-btn:active {
-  background: var(--btn-bg-press, var(--btn-bg-hover, var(--btn-bg, var(--node-bg, transparent))));
+  background-color: var(--btn-bg-press, var(--btn-bg-hover, var(--btn-bg, var(--node-bg, transparent))));
+  background-image: var(--btn-bg-image, none);
   color: var(--btn-text-press, var(--btn-text-hover, var(--btn-text, var(--node-text, inherit))));
   border-color: var(--btn-border-press, var(--btn-border-hover, var(--node-border-color, color-mix(in srgb, currentColor 24%, transparent))));
   transform: translateY(var(--press-y));
@@ -122,4 +129,19 @@
 .bld-btn--danger {
   --btn-bg: color-mix(in srgb, #ef4444 92%, var(--token-button-text) 8%);
   --btn-text: var(--token-button-text);
+}
+
+/* Flex stacks use align-items:stretch — shrink-wrap buttons (builder shell vs live parity). */
+:is(.live-doc, .bld-canvas__live-mirror) .live-leaf-wrap--button {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  .live-node:is(.bld-stack, .bld-column)
+  > :is(.bld-btn, a.bld-btn, .live-action-button-wrap) {
+  width: fit-content;
+  max-width: 100%;
+  align-self: flex-start;
 }

@@ -28,6 +28,8 @@ export default function StylePanel({
   onClearPreviewStyle,
   onActiveSpacingEdit,
   onApplyPreset,
+  onResetButtonStyle,
+  disabled = false,
   nestedFeatureTabsNode = null,
   onSelectFeatureTabs = null,
   jsonErrors = {},
@@ -63,7 +65,12 @@ export default function StylePanel({
 
   return (
     <InspectorPanel title="Style">
-      <StylePresetsPanel selectedNode={selectedNode} onApplyPreset={onApplyPreset} />
+      <StylePresetsPanel
+        selectedNode={selectedNode}
+        onApplyPreset={onApplyPreset}
+        onResetButtonStyle={onResetButtonStyle}
+        disabled={disabled}
+      />
 
       {isCompoundChrome ? (
         <p className="bld-field-note" style={{ margin: '0 0 12px' }}>

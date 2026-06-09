@@ -38,3 +38,12 @@ test('dark-surface-copy.css uses live-section-fg-on-dark for copy', () => {
   assert.match(css, /color:\s*var\(--live-section-fg-on-dark\)/);
   assert.doesNotMatch(css, /color:\s*var\(--live-section-fg\)\s*!important/);
 });
+
+test('dark-surface-copy.css targets dark site from .live-site root (published/preview DOM)', () => {
+  const css = fs.readFileSync(path.join(ROOT, 'styles/shared/dark-surface-copy.css'), 'utf8');
+  assert.match(css, /\.live-site\[data-site-preset='dark'\]\s+\.live-leaf-wrap/);
+  assert.doesNotMatch(
+    css,
+    /:is\(\.live-doc,\s*\.bld-canvas__live-mirror\)\s+\.live-site\[data-site-preset='dark'\]/
+  );
+});

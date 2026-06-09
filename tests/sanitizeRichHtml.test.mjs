@@ -38,6 +38,15 @@ test('shouldStripNeutralDarkCssColor detects pasted slate body colors', () => {
   assert.equal(shouldStripNeutralDarkCssColor('var(--color-text)'), false);
 });
 
+test('sanitizeRichHtml strips pasted white background highlights on paragraphs', () => {
+  const html =
+    '<p style="background-color:#ffffff;color:#334155">Line one</p><ul><li style="background: white">Item</li></ul>';
+  const out = sanitizeRichHtml(html);
+  assert.ok(!/background/i.test(out));
+  assert.ok(out.includes('Line one'));
+  assert.ok(out.includes('Item'));
+});
+
 test('sanitizeRichHtml neutralizeHardcodedBodyTextColors strips inline slate on dark preset path', () => {
   const html = '<p style="color: #0f172a">Dispatch copy</p>';
   const plain = sanitizeRichHtml(html);
@@ -47,15 +56,15 @@ test('sanitizeRichHtml neutralizeHardcodedBodyTextColors strips inline slate on 
   assert.ok(fixed.includes('Dispatch'));
 });
 
-test('neutralizeLeafTextCssObject maps neutral dark color and --node-text to section fg', () => {
+test('neutralizeLeafTextCssObject maps neutral dark color and --node-text to readable tokens', () => {
   const a = neutralizeLeafTextCssObject({ color: '#0f172a', fontSize: '18px' }, { darkContentMode: true });
-  assert.match(String(a.color), /live-section-fg/);
+  assert.match(String(a.color), /color-text/);
   assert.equal(a.fontSize, '18px');
   const b = neutralizeLeafTextCssObject(
     { '--node-text': 'rgb(15, 23, 42)', width: '100%' },
     { darkContentMode: true }
   );
-  assert.match(String(b['--node-text']), /live-section-fg/);
+  assert.match(String(b['--node-text']), /color-text/);
   assert.equal(b.width, '100%');
   const c = neutralizeLeafTextCssObject({ color: '#f97316' }, { darkContentMode: true });
   assert.equal(c.color, '#f97316');

@@ -84,6 +84,26 @@
   overflow-wrap: anywhere;
 }
 
+/* Pasted Word/Docs white highlight per line — force transparent (builder + live parity). */
+:is(.live-doc, .bld-canvas__live-mirror)
+  :is(
+    .live-rich-text,
+    .bld-rich-content,
+    .live-feature-tabs__paragraph,
+    .live-feature-tabs__bullets,
+    .live-feature-tabs__heading,
+    .bld-btn
+  )
+  :is(p, span, div, li, font):not(.bld-text-highlight) {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* Glass preset fill under gradient buttons — keep gradient-only paint (builder + preview parity). */
+:is(.live-doc, .bld-canvas__live-mirror) .bld-btn[style*='background-image'] {
+  background-color: transparent !important;
+}
+
 .bld-rich-content strong,
 .bld-rich-content b {
   font-weight: 700;

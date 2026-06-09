@@ -16,6 +16,8 @@ import FeatureTabsControls from '@/components/builder/inspector/FeatureTabsContr
 import SectionHeadingControls from '@/components/builder/inspector/SectionHeadingControls';
 import ColumnHeadingControls from '@/components/builder/inspector/ColumnHeadingControls';
 import FaqAccordionControls from '@/components/builder/inspector/FaqAccordionControls';
+import StatsCounterControls from '@/components/builder/inspector/StatsCounterControls';
+import TabHeroControls from '@/components/builder/inspector/TabHeroControls';
 import AdvancedElementControls, { isAdvancedElementNodeType } from '@/components/builder/inspector/AdvancedElementControls';
 import LogoBrandControls from '@/components/builder/inspector/LogoBrandControls';
 import InlineTextFormattingPanel from '@/components/builder/inspector/InlineTextFormattingPanel';
@@ -317,6 +319,8 @@ export default function ContentPanel({
   const isCarousel = selectedNode.nodeType === 'carousel';
   const isTabs = Boolean(featureTabsEditNode);
   const isAccordion = selectedNode.nodeType === 'accordion';
+  const isStatsCounter = selectedNode.nodeType === 'stats_counter';
+  const isTabHero = selectedNode.nodeType === 'tab_hero';
   const isDivider = selectedNode.nodeType === 'divider';
   const isAdvancedElement = isAdvancedElementNodeType(selectedNode.nodeType);
   const carouselVariantKey =
@@ -1733,6 +1737,8 @@ export default function ContentPanel({
           jsonErrors={jsonErrors}
         />
       ) : null}
+      {isStatsCounter ? <StatsCounterControls selectedNode={selectedNode} onChange={onChange} /> : null}
+      {isTabHero ? <TabHeroControls selectedNode={selectedNode} form={form} onChange={onChange} /> : null}
       {isAdvancedElement ? (
         <AdvancedElementControls
           selectedNode={selectedNode}

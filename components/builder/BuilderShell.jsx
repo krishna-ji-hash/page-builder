@@ -44,7 +44,6 @@ import { buildDividerCreatePayload } from '@/lib/dividerDefaults';
 import { payloadForWidgetCreate } from '@/lib/nodeCreatePayload';
 import { resolveDividerInsertPlan } from '@/lib/dividerInsert';
 import {
-  findFirstUnlockedStackId,
   INSERT_TARGET_MESSAGES,
   isStackLeafWidgetType,
   resolveEditableInsertTarget,
@@ -85,6 +84,14 @@ function cloneTreeSnapshot(snapshot) {
 
 function countRootRows(nodes) {
   return Array.isArray(nodes) ? nodes.filter((n) => n?.nodeType === 'row').length : 0;
+}
+
+/** null/undefined → append at page bottom; explicit 0 still inserts at top (canvas slot). */
+function resolvePageRootInsertIndex(insertIndex, nodes) {
+  if (insertIndex != null && Number.isFinite(Number(insertIndex))) {
+    return Math.max(0, Math.trunc(Number(insertIndex)));
+  }
+  return countRootRows(nodes);
 }
 
 function updateNodeInTree(nodes, nodeId, updater) {
@@ -1666,7 +1673,7 @@ export default function BuilderShell({ pageId }) {
   const bulkInsertTemplateRootsAtIndex = async ({ roots, insertIndex }) => {
     const flattened = flattenTemplateToBulkNodes(roots, 0);
     // Offset ONLY root positionIndex values (rows without parentRef).
-    const offset = Number.isInteger(Number(insertIndex)) ? Number(insertIndex) : 0;
+    const offset = resolvePageRootInsertIndex(insertIndex, tree || []);
     const nodes = flattened.map((n) => (n.parentRef ? n : { ...n, positionIndex: Number(n.positionIndex) + offset }));
     return await bulkCreateNodesRequest(nodes);
   };
@@ -1746,35 +1753,36 @@ export default function BuilderShell({ pageId }) {
   const dividerPayloadForCreate = (nodeType, dividerOrientation) =>
     payloadForWidgetCreate(nodeType, page?.projectType || 'website', { dividerOrientation });
 
-  const unlockSectionRowForQuickAdd = async (rowId, currentTree) => {
-    const row = findNodeInTree(currentTree, rowId);
-    if (!row || row.nodeType !== 'row' || !isSectionLockedRow(row)) return;
+  const tryAutoUnlockSectionForInsert = async (targetNodeId, currentTree) => {
+    if (targetNodeId == null || !Array.isArray(currentTree) || !currentTree.length) {
+      return currentTree;
+    }
+    if (!isNodeEditsDisabledBySectionLock(currentTree, targetNodeId)) {
+      return currentTree;
+    }
+    const target = findNodeInTree(currentTree, targetNodeId);
+    const row =
+      target?.nodeType === 'row' && isSectionLockedRow(target)
+        ? target
+        : findAncestorRowNode(currentTree, targetNodeId);
+    if (!row?.id || !isSectionLockedRow(row)) {
+      return currentTree;
+    }
     const meta = { ...(row.props?.meta || {}), sectionLocked: false };
     await handleNodeUpdate({
       nodeId: row.id,
       payload: { props: { ...row.props, meta } },
+      skipHistorySnapshot: true,
     });
+    return updateNodeInTree(currentTree, row.id, (node) => ({
+      ...node,
+      props: mergeNodePropsJsonPatch(node.props || {}, { meta }),
+    }));
   };
 
-  const ensureUnlockedQuickAddParent = async (parentId, currentTree) => {
-    if (parentId == null) return parentId;
-    const pid = Number(parentId);
-    if (!Number.isFinite(pid)) return parentId;
-    if (!isNodeEditsDisabledBySectionLock(currentTree, pid)) return pid;
-    const unlocked = findFirstUnlockedStackId(currentTree);
-    if (unlocked != null && !isNodeEditsDisabledBySectionLock(currentTree, unlocked)) {
-      return unlocked;
-    }
-    const row = findAncestorRowNode(currentTree, pid);
-    if (row?.id) {
-      await unlockSectionRowForQuickAdd(row.id, currentTree);
-      return pid;
-    }
-    return pid;
-  };
-
-  const resolveAndFulfillInsertTarget = async ({ targetNodeId, nodeType }) => {
-    const resolved = resolveEditableInsertTarget(tree, targetNodeId, { widgetNodeType: nodeType });
+  const resolveAndFulfillInsertTarget = async ({ targetNodeId, nodeType, treeSnapshot = tree }) => {
+    const treeForInsert = await tryAutoUnlockSectionForInsert(targetNodeId, treeSnapshot);
+    const resolved = resolveEditableInsertTarget(treeForInsert, targetNodeId, { widgetNodeType: nodeType });
     if (!resolved.ok) {
       return { ok: false, message: resolved.message || INSERT_TARGET_MESSAGES[resolved.reason] };
     }
@@ -1906,9 +1914,7 @@ export default function BuilderShell({ pageId }) {
         effectiveParentId = resolved.parentId;
         positionIndex = resolved.insertIndex;
       } else if (parentNodeId && isNodeEditsDisabledBySectionLock(beforeTree, parentNodeId)) {
-        setUndoStack((prev) => prev.slice(0, -1));
-        setErrorMessage(INSERT_TARGET_MESSAGES.locked);
-        return;
+        await tryAutoUnlockSectionForInsert(parentNodeId, beforeTree);
       }
       const dividerExtra = dividerPayloadForCreate(nodeType, dividerOrientation);
       const node = await createNodeRequest({
@@ -1970,8 +1976,9 @@ export default function BuilderShell({ pageId }) {
   };
 
   const handleQuickAddNode = async ({ targetNodeId, nodeType, dividerOrientation }) => {
+    const treeForInsert = await tryAutoUnlockSectionForInsert(targetNodeId, tree);
     if (nodeType !== 'row' && isStackLeafWidgetType(nodeType)) {
-      const preview = resolveEditableInsertTarget(tree, targetNodeId, { widgetNodeType: nodeType });
+      const preview = resolveEditableInsertTarget(treeForInsert, targetNodeId, { widgetNodeType: nodeType });
       if (!preview.ok) {
         setErrorMessage(preview.message || INSERT_TARGET_MESSAGES[preview.reason]);
         return;
@@ -1987,7 +1994,11 @@ export default function BuilderShell({ pageId }) {
       if (nodeType === 'row') {
         resolvedParentNodeId = null;
       } else if (isStackLeafWidgetType(nodeType)) {
-        const resolved = await resolveAndFulfillInsertTarget({ targetNodeId, nodeType });
+        const resolved = await resolveAndFulfillInsertTarget({
+          targetNodeId,
+          nodeType,
+          treeSnapshot: treeForInsert,
+        });
         if (!resolved.ok) {
           setUndoStack((prev) => prev.slice(0, -1));
           setErrorMessage(resolved.message);
@@ -2026,6 +2037,7 @@ export default function BuilderShell({ pageId }) {
       (columnCount != null ? getBlankSectionLayoutForColumnCount(columnCount) : null);
     const nextColumnCount = layout?.columns ?? Number(columnCount);
     if (!Number.isInteger(nextColumnCount) || nextColumnCount < 1) return;
+    const resolvedInsertIndex = resolvePageRootInsertIndex(insertIndex, tree || []);
     const beforeTree = tree;
     pushHistorySnapshot(beforeTree);
     setIsCreatingNode(true);
@@ -2036,7 +2048,7 @@ export default function BuilderShell({ pageId }) {
         parentNodeId: null,
         displayName: 'Section',
         ...(layout?.rowStyle_json ? { style_json: layout.rowStyle_json } : {}),
-        ...(Number.isInteger(insertIndex) ? { positionIndex: insertIndex } : {}),
+        positionIndex: resolvedInsertIndex,
       });
       if (!row?.id) throw new Error('Failed to create section');
 
@@ -2071,7 +2083,7 @@ export default function BuilderShell({ pageId }) {
     }
   };
 
-  const handleInsertHeaderStarter = async (starterId, { insertIndex = 0 } = {}) => {
+  const handleInsertHeaderStarter = async (starterId, { insertIndex = null } = {}) => {
     const roots = buildHeaderStarterSectionRoots(starterId);
     if (!roots?.length) return;
     if (isCreatingNode) return;
@@ -2083,7 +2095,7 @@ export default function BuilderShell({ pageId }) {
       const rootIds = await materializeSectionTemplate(roots, {
         bulkCreateNodesRequest: (nodes) => bulkCreateNodesRequest(nodes),
         createNodeRequest: (payload) => createNodeRequest(payload),
-        positionIndex: Number.isInteger(Number(insertIndex)) ? Number(insertIndex) : 0,
+        positionIndex: resolvePageRootInsertIndex(insertIndex, tree || []),
       });
       await reloadBuilder();
       if (rootIds?.length) {
@@ -2103,6 +2115,7 @@ export default function BuilderShell({ pageId }) {
     const roots = SECTION_TEMPLATES[key];
     if (!roots?.length) return;
     if (isCreatingNode) return;
+    const resolvedInsertIndex = resolvePageRootInsertIndex(insertIndex, tree || []);
     const beforeTree = tree;
     pushHistorySnapshot(beforeTree);
     setIsCreatingNode(true);
@@ -2111,7 +2124,7 @@ export default function BuilderShell({ pageId }) {
       const rootIds = await materializeSectionTemplate(roots, {
         bulkCreateNodesRequest: (nodes) => bulkCreateNodesRequest(nodes),
         createNodeRequest: (payload) => createNodeRequest(payload),
-        positionIndex: Number.isInteger(Number(insertIndex)) ? Number(insertIndex) : null,
+        positionIndex: resolvedInsertIndex,
       });
       await reloadBuilder();
       if (rootIds?.length) {
@@ -2715,6 +2728,17 @@ export default function BuilderShell({ pageId }) {
     deleteInFlightRef.current = true;
     const beforeTree = tree;
     const doomedNode = findNodeInTree(beforeTree, normalizedNodeId);
+    if (!doomedNode) {
+      setErrorMessage('');
+      setSelectedNodeId((current) => (current === normalizedNodeId ? null : current));
+      try {
+        await reloadBuilder();
+      } catch {
+        // ignore sync errors
+      }
+      deleteInFlightRef.current = false;
+      return;
+    }
     for (const id of collectSubtreeNodeIds(doomedNode)) {
       blockedNodeUpdateIdsRef.current.add(id);
     }
@@ -2723,14 +2747,28 @@ export default function BuilderShell({ pageId }) {
     const DELETE_ANIM_MS = 230;
     setDeletingNodeId(normalizedNodeId);
     setIsDeletingNode(true);
+    let treeAfterLocalRemove = beforeTree;
     try {
       await new Promise((r) => setTimeout(r, DELETE_ANIM_MS));
-      const treeAfterLocalRemove = removeNodeFromTree(beforeTree, normalizedNodeId);
+      treeAfterLocalRemove = removeNodeFromTree(beforeTree, normalizedNodeId);
       setTree(treeAfterLocalRemove);
       setDeletingNodeId(null);
       setSelectedNodeId((current) => (current === normalizedNodeId ? null : current));
 
-      const data = await deleteNodeRequest(normalizedNodeId);
+      const response = await fetch(`/api/nodes/${normalizedNodeId}`, { method: 'DELETE' });
+      const data = await readJsonSafe(response);
+      if (!response.ok) {
+        if (response.status === 404) {
+          setHasUnpublishedEdits(true);
+          try {
+            await reloadBuilder();
+          } catch {
+            // keep optimistic remove when server tree is already gone
+          }
+          return;
+        }
+        throw new Error(data.error || 'Failed to delete node');
+      }
       const nextTree = data.tree ?? treeAfterLocalRemove;
       setTree(nextTree);
       setSelectedNodeId((current) => {
@@ -2740,12 +2778,22 @@ export default function BuilderShell({ pageId }) {
       });
       setHasUnpublishedEdits(true);
     } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg === 'Node not found') {
+        setHasUnpublishedEdits(true);
+        try {
+          await reloadBuilder();
+        } catch {
+          // keep optimistic remove
+        }
+        return;
+      }
       for (const id of collectSubtreeNodeIds(doomedNode)) {
         blockedNodeUpdateIdsRef.current.delete(id);
       }
       setTree(beforeTree);
       setUndoStack((prev) => prev.slice(0, -1));
-      setErrorMessage(error.message);
+      setErrorMessage(msg);
     } finally {
       deleteInFlightRef.current = false;
       setIsDeletingNode(false);
@@ -4548,7 +4596,7 @@ export default function BuilderShell({ pageId }) {
                     type="button"
                     className="bld-btn"
                     disabled={isCreatingNode}
-                    onClick={() => handleCreateSection({ columnCount: 1, insertIndex: 0 })}
+                    onClick={() => handleCreateSection({ columnCount: 1 })}
                   >
                     + 1-col
                   </button>
@@ -4556,7 +4604,7 @@ export default function BuilderShell({ pageId }) {
                     type="button"
                     className="bld-btn"
                     disabled={isCreatingNode}
-                    onClick={() => handleCreateSection({ columnCount: 2, insertIndex: 0 })}
+                    onClick={() => handleCreateSection({ columnCount: 2 })}
                   >
                     + 2-col
                   </button>
@@ -4564,7 +4612,7 @@ export default function BuilderShell({ pageId }) {
                     type="button"
                     className="bld-btn"
                     disabled={isCreatingNode}
-                    onClick={() => handleCreateSection({ columnCount: 3, insertIndex: 0 })}
+                    onClick={() => handleCreateSection({ columnCount: 3 })}
                   >
                     + 3-col
                   </button>

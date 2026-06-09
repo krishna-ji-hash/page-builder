@@ -17,6 +17,10 @@
   .live-leaf-wrap
   :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text),
 :is(.live-doc, .bld-canvas__live-mirror)
+  .live-node[data-section-tone='dark']
+  .live-leaf-wrap
+  :is(h1, h2, h3, h4, h5, h6, .live-rich-text),
+:is(.live-doc, .bld-canvas__live-mirror)
   .live-node.bld-column[style*='0a0a0a']
   .live-leaf-wrap
   :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text),
@@ -24,7 +28,98 @@
   .live-node.bld-column[style*='10, 10, 10']
   .live-leaf-wrap
   :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text) {
-  color: var(--node-text, var(--live-section-fg-on-dark));
+  color: var(--live-section-fg-on-dark);
+}
+
+/* Dark site preset — .live-site wraps .live-doc on published/preview (not the other way around). */
+.live-site[data-site-preset='dark'] {
+  --live-section-fg-on-dark: #f8fafc;
+  --live-section-muted-on-dark: rgba(248, 250, 252, 0.82);
+}
+
+.live-site .live-node:is(.bld-row, .bld-column, .bld-stack)[data-section-tone='dark'] .live-leaf-wrap :is(h1, h2, h3, h4, h5, h6, .live-rich-text),
+.live-site .live-leaf-wrap[data-section-tone='dark'] > :is(h1, h2, h3, h4, h5, h6),
+.live-site .live-leaf-wrap[data-section-tone='dark'] > .live-rich-text,
+.live-site[data-site-preset='dark'] .live-leaf-wrap:not([data-section-tone='light']) > :is(h1, h2, h3, h4, h5, h6),
+.live-site[data-site-preset='dark'] .live-leaf-wrap:not([data-section-tone='light']) > .live-rich-text {
+  color: var(--live-section-fg-on-dark);
+}
+
+.live-site .live-node:is(.bld-row, .bld-column, .bld-stack)[data-section-tone='dark'] .live-leaf-wrap > p.bld-rich-text,
+.live-site .live-leaf-wrap[data-section-tone='dark'] > p.bld-rich-text,
+.live-site[data-site-preset='dark'] .live-leaf-wrap > :is(p.bld-rich-text, p.bld-paragraph, p.live-rich-text),
+.live-site[data-site-preset='dark'] .live-leaf-wrap > .live-rich-text.bld-rich-content,
+.live-site[data-site-preset='dark'] .live-leaf-wrap .bld-rich-content > p {
+  color: var(--live-section-muted-on-dark, rgba(248, 250, 252, 0.82)) !important;
+}
+
+.live-site[data-site-preset='dark'] .live-leaf-wrap .bld-rich-content :is(span, font, p):not(.bld-text-highlight),
+.live-site .live-leaf-wrap[data-section-tone='dark'] .bld-rich-content :is(span, font, p):not(.bld-text-highlight) {
+  color: inherit !important;
+}
+
+.live-site .live-leaf-wrap[data-section-tone='light'] > :is(h1, h2, h3, h4, h5, h6, p),
+.live-site .live-leaf-wrap[data-section-tone='light'] > .live-rich-text {
+  color: var(--live-section-fg);
+}
+
+.live-site [data-section-template='getInTouch'] :is(
+    > .live-node.bld-column:first-child,
+    .bld-node-children > .live-node.bld-column:first-child
+  )
+  .live-leaf-wrap
+  :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text),
+.live-site [data-section-template='platformHero'] :is(
+    > .live-node.bld-column:first-child,
+    .bld-node-children > .live-node.bld-column:first-child,
+    .live-node[data-section-tone='dark']
+  )
+  .live-leaf-wrap
+  :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text) {
+  color: var(--live-section-fg-on-dark);
+}
+
+.live-site [data-section-template='platformHero'] :is(
+    > .live-node.bld-column:first-child,
+    .bld-node-children > .live-node.bld-column:first-child,
+    .live-node[data-section-tone='dark']
+  )
+  .live-leaf-wrap
+  > p.bld-rich-text {
+  color: var(--live-section-muted-on-dark, rgba(248, 250, 252, 0.82)) !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  :is(
+    .live-leaf-wrap[data-section-tone='dark'],
+    .live-node[data-section-tone='dark'] .live-leaf-wrap,
+    [data-dark-surface='true'] .live-leaf-wrap
+  )
+  > :is(p.bld-rich-text, p.bld-paragraph, p.live-rich-text) {
+  color: var(--live-section-muted-on-dark, rgba(248, 250, 252, 0.82)) !important;
+}
+
+/* Pasted Word/Docs spans with hardcoded dark color — inherit section foreground */
+:is(.live-doc, .bld-canvas__live-mirror)
+  .live-leaf-wrap[data-section-tone='dark']
+  .bld-rich-content
+  :is(span, font):not(.bld-text-highlight),
+:is(.live-doc, .bld-canvas__live-mirror)
+  .live-node[data-section-tone='dark']
+  .live-leaf-wrap
+  .bld-rich-content
+  :is(span, font):not(.bld-text-highlight),
+.live-site[data-site-preset='dark'] .live-leaf-wrap .bld-rich-content :is(span, font):not(.bld-text-highlight),
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-dark-surface='true']
+  .live-leaf-wrap
+  .bld-rich-content
+  :is(span, font):not(.bld-text-highlight),
+:is(.live-doc, .bld-canvas__live-mirror)
+  .live-leaf-wrap[data-section-tone='dark']
+  > :is(p, .live-rich-text)
+  :is(span, font):not(.bld-text-highlight) {
+  color: inherit;
 }
 
 /* Feature tabs panel copy — outside .live-leaf-wrap */
@@ -46,6 +141,18 @@
   .live-feature-tabs
   :is(.live-feature-tabs__paragraph, .live-feature-tabs__bullets li) {
   color: var(--live-section-muted-on-dark, rgba(248, 250, 252, 0.82)) !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  .live-feature-tabs[data-section-tone='dark']
+  :is(.live-feature-tabs__paragraph, .live-feature-tabs__bullets li)
+  :is(span, font):not(.bld-text-highlight),
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='featureTabs'][data-section-tone='dark']
+  .live-feature-tabs
+  :is(.live-feature-tabs__paragraph, .live-feature-tabs__bullets li)
+  :is(span, font):not(.bld-text-highlight) {
+  color: inherit !important;
 }
 
 /* Platform hero feature cards — dark elevated surfaces inside pitch column */

@@ -180,7 +180,7 @@ test('styleToCss still remaps button text without explicit contrasting backgroun
     darkSite,
     { nodeType: 'button', darkContentMode: true }
   );
-  assert.match(String(css.color), /live-section-fg/);
+  assert.match(String(css.color), /color-text/);
 });
 
 test('resolveSectionBackgroundIsLight resolves remapped token surface in dark mode', () => {

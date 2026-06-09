@@ -14,6 +14,7 @@ import {
   featureTabPanelFigureVars,
   featureTabPanelImageInlineStyle,
 } from '@/lib/featureTabPanelImage';
+import { shouldNeutralizeHardcodedBodyTextColors } from '@/lib/bodyTextNeutralization.js';
 
 /**
  * Dispatch Solutions-style feature tabs: nav bar + two-column panel (copy | image).
@@ -26,6 +27,7 @@ export default function FeatureTabs({
   imageHeightPx: imageHeightPxProp,
   tabAlign: tabAlignProp,
   sectionTone = null,
+  darkContentMode = false,
   onActiveTabChange,
   builderMode = false,
   builderEditable = false,
@@ -67,6 +69,15 @@ export default function FeatureTabs({
   const bulletsListRef = useRef(null);
   const navDragRef = useRef({ active: false, startX: 0, startScrollLeft: 0, didDrag: false, pointerId: null });
   const tabIdsSignature = useMemo(() => tabs.map((t) => t.id).join('|'), [tabs]);
+  const featureTabSanitizeOpts = useMemo(
+    () => ({
+      neutralizeHardcodedBodyTextColors: shouldNeutralizeHardcodedBodyTextColors({
+        darkContentMode,
+        sectionTone,
+      }),
+    }),
+    [darkContentMode, sectionTone]
+  );
 
   /** Tab ids changed (add/remove/reorder) — reset to saved active or first tab. */
   useEffect(() => {
@@ -202,7 +213,7 @@ export default function FeatureTabs({
       .map((el) => {
         const raw = el.innerHTML;
         if (featureTabFieldHasInlineHtml(raw)) {
-          return sanitizeFeatureTabFieldHtml(raw);
+          return sanitizeFeatureTabFieldHtml(raw, featureTabSanitizeOpts);
         }
         return String(el.innerText || '').trim();
       })
@@ -210,7 +221,7 @@ export default function FeatureTabs({
     const prev = JSON.stringify(activePanel.bullets || []);
     const next = JSON.stringify(items);
     if (next !== prev) patchTabById(activePanel.id, { bullets: items });
-  }, [activePanel, patchTabById]);
+  }, [activePanel, patchTabById, featureTabSanitizeOpts]);
 
   const handleImageFile = (event) => {
     const file = event.target.files?.[0];
@@ -340,7 +351,7 @@ export default function FeatureTabs({
               ) : featureTabFieldHasInlineHtml(activePanel.heading) ? (
                 <h3
                   className="live-feature-tabs__heading"
-                  dangerouslySetInnerHTML={{ __html: sanitizeFeatureTabFieldHtml(activePanel.heading) }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeFeatureTabFieldHtml(activePanel.heading, featureTabSanitizeOpts) }}
                 />
               ) : (
                 <h3 className="live-feature-tabs__heading">{activePanel.heading}</h3>
@@ -363,7 +374,7 @@ export default function FeatureTabs({
                 <p
                   className="live-feature-tabs__paragraph"
                   {...inlineFontSizeOverridePropsFromHtml(activePanel.paragraph)}
-                  dangerouslySetInnerHTML={{ __html: sanitizeFeatureTabFieldHtml(activePanel.paragraph) }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeFeatureTabFieldHtml(activePanel.paragraph, featureTabSanitizeOpts) }}
                 />
               ) : (
                 <p className="live-feature-tabs__paragraph">{activePanel.paragraph}</p>
@@ -393,7 +404,7 @@ export default function FeatureTabs({
                       />
                     ) : featureTabFieldHasInlineHtml(item) ? (
                       <span
-                        dangerouslySetInnerHTML={{ __html: featureTabBulletInnerHtml(item) }}
+                        dangerouslySetInnerHTML={{ __html: featureTabBulletInnerHtml(item, featureTabSanitizeOpts) }}
                       />
                     ) : (
                       item

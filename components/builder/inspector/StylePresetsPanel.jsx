@@ -2,18 +2,21 @@
 
 import { InspectorChipGrid, InspectorSection } from './InspectorUi';
 import {
-  BUTTON_STYLE_PRESETS,
   CARD_STYLE_PRESETS,
   SECTION_STYLE_PRESETS,
   TEXT_STYLE_PRESETS,
   presetPatchForNodeType,
 } from '@/lib/stylePresets';
+import {
+  buttonPresetLabel,
+  listButtonPresetIds,
+} from '@/lib/buttonStylePresets';
 
-export default function StylePresetsPanel({ selectedNode, onApplyPreset }) {
+export default function StylePresetsPanel({ selectedNode, onApplyPreset, onResetButtonStyle, disabled }) {
   if (!selectedNode || typeof onApplyPreset !== 'function') return null;
 
   const nt = selectedNode.nodeType;
-  const buttonPresets = nt === 'button' ? Object.keys(BUTTON_STYLE_PRESETS) : [];
+  const buttonPresets = nt === 'button' ? listButtonPresetIds() : [];
   const cardPresets =
     nt === 'content_card' || nt === 'stack' ? Object.keys(CARD_STYLE_PRESETS) : [];
   const sectionPresets = nt === 'row' ? Object.keys(SECTION_STYLE_PRESETS) : [];
@@ -33,6 +36,8 @@ export default function StylePresetsPanel({ selectedNode, onApplyPreset }) {
   const chip = (category, id, label) => ({
     id: `${category}-${id}`,
     label,
+    disabled,
+    title: label,
     onClick: () => {
       const patch = presetPatchForNodeType(nt, category, id);
       if (patch) onApplyPreset(patch);
@@ -40,14 +45,27 @@ export default function StylePresetsPanel({ selectedNode, onApplyPreset }) {
   });
 
   return (
-    <InspectorSection title="Style presets" defaultOpen keywords="preset primary outline glass">
+    <InspectorSection title="Style presets" defaultOpen keywords="preset primary outline glass gradient reset">
       {buttonPresets.length ? (
         <>
-          <p className="bld-label" style={{ margin: '0 0 6px' }}>
-            Buttons
-          </p>
+          <div className="bld-field-label-row" style={{ marginBottom: 6 }}>
+            <p className="bld-label" style={{ margin: 0 }}>
+              Buttons
+            </p>
+            {typeof onResetButtonStyle === 'function' ? (
+              <button
+                type="button"
+                className="bld-btn-reset bld-inspector-pro__reset"
+                disabled={disabled}
+                title="Reset button colors, background, border, shadow, and padding to theme defaults"
+                onClick={onResetButtonStyle}
+              >
+                ↺ Reset
+              </button>
+            ) : null}
+          </div>
           <InspectorChipGrid
-            items={buttonPresets.map((id) => chip('button', id, id.replace(/([A-Z])/g, ' $1').trim()))}
+            items={buttonPresets.map((id) => chip('button', id, buttonPresetLabel(id)))}
           />
         </>
       ) : null}

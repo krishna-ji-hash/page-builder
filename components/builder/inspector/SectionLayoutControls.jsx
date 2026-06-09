@@ -38,10 +38,19 @@ export default function SectionLayoutControls({ sectionRow, onApplyLayout }) {
   return (
     <div className="bld-section-layout-controls">
       <p className="bld-field-note" style={{ marginTop: 0 }}>
-        Controls the main <strong>cards / items / logos / team</strong> row in this section. Updates preview
-        immediately and saves with the page.
-        {hasColumnLayout ? ' This section also uses a two-column (map + text) split.' : null}
-        {isComparison ? ' Table scrolls horizontally on small screens; use Spacing for wrapper padding.' : null}
+        {templateId === 'stats' ? (
+          <>
+            Controls <strong>gap and alignment</strong> between stat numbers (500+, 75+, 50+). Section{' '}
+            <strong>padding</strong> is still set on the section row (Pad +/− or Spacing).
+          </>
+        ) : (
+          <>
+            Controls the main <strong>cards / items / logos / team</strong> row in this section. Updates preview
+            immediately and saves with the page.
+            {hasColumnLayout ? ' This section also uses a two-column (map + text) split.' : null}
+            {isComparison ? ' Table scrolls horizontally on small screens; use Spacing for wrapper padding.' : null}
+          </>
+        )}
       </p>
       <Field label="Layout direction">
         <select

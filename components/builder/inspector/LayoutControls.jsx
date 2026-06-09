@@ -158,10 +158,14 @@ export default function LayoutControls({
   );
 
   const isRow = selectedNode?.nodeType === 'row';
+  const isStatsSection =
+    selectedNode?.nodeType === 'row' && selectedNode?.props?.meta?.sectionTemplate === 'stats';
   const isFlexContainer =
     selectedNode?.nodeType === 'row' ||
     selectedNode?.nodeType === 'column' ||
-    selectedNode?.nodeType === 'stack';
+    selectedNode?.nodeType === 'stack' ||
+    selectedNode?.nodeType === 'stats_counter' ||
+    isStatsSection;
 
   const canHeaderPreset = isRow || selectedNode?.nodeType === 'stack';
   const canCenterPreset =
@@ -174,6 +178,12 @@ export default function LayoutControls({
 
   return (
     <div className="bld-control-stack">
+      {isStatsSection ? (
+        <p className="bld-field-note" style={{ margin: '0 0 8px' }}>
+          Gap, justify, and wrap apply to the <strong>stats row</strong> (500+ / 75+ / 50+). Use <strong>Pad +/−</strong>{' '}
+          on the section toolbar for outer section padding.
+        </p>
+      ) : null}
       {breakpointLabel ? (
         <p className="bld-field-note" style={{ margin: '0 0 8px' }}>
           Breakpoint: <strong>{breakpointLabel}</strong>

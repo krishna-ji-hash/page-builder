@@ -51,6 +51,24 @@ import {
   tryParseAdvancedElementJson,
 } from '@/lib/advancedElementInspector';
 import { appendFaqItem, normalizeFaqItems, patchFaqItems, removeFaqItemAt } from '@/lib/faqAccordionDefaults';
+import {
+  appendStatsCounterItem,
+  patchStatsCounterItem,
+  removeStatsCounterItemAt,
+} from '@/lib/statsCounterDefaults';
+import {
+  newTabHeroPanelFromList,
+  normalizeTabHeroPanels,
+  patchTabHeroPanel,
+  resolveTabHeroProps,
+} from '@/lib/tabHeroDefaults';
+import {
+  STATS_LAYOUT_FORM_KEYS,
+  applyStatsSectionLayoutToCounter,
+  findStatsCounterNode,
+  isStatsSectionRow,
+  resolveStatsLayoutEditTarget,
+} from '@/lib/statsCounterSection';
 import { finalizeLeafDeviceStyle } from '@/lib/leafStylePipeline';
 import { mergeNodeStyleWithSiteTheme, themeSpacingPx } from '@/lib/siteDesignTheme';
 import { GAP_SCALE_IDS, inferGapScaleFromPx, withResolvedLayoutGap } from '@/lib/layoutGapUtils';
@@ -141,6 +159,7 @@ import {
   interactionTemplateFromSourceInteractions,
   planPageSectionInteractionUpdates,
 } from '@/lib/applyPageSectionInteractions';
+import { applyButtonStylePresetToStyleJson } from '@/lib/buttonStylePresets';
 
 const IX_PREVIEW_MS = 48;
 const IX_SAVE_MS = 420;
@@ -174,6 +193,8 @@ function inspectorRoleLabel(node) {
   if (node.nodeType === 'stack') return 'Stack';
   if (node.nodeType === 'tabs') return 'Feature tabs';
   if (node.nodeType === 'accordion') return 'FAQ accordion';
+  if (node.nodeType === 'stats_counter') return 'Stats Counter';
+  if (node.nodeType === 'tab_hero') return 'Tab Hero';
   if (node.nodeType === 'icon') return 'Icon';
   if (node.nodeType === 'icon_box') return 'Icon box';
   if (node.nodeType === 'content_card') return 'Card';
@@ -634,6 +655,15 @@ export default function BuilderInspector({
           },
         });
       }
+      if (templateId === 'stats') {
+        const statsNode = findStatsCounterNode(pageTree, sectionStripLayoutRow.id);
+        if (statsNode?.id != null) {
+          await onUpdateNode({
+            nodeId: statsNode.id,
+            payload: applyStatsSectionLayoutToCounter(statsNode, nextLayout, templateId),
+          });
+        }
+      }
     },
     [sectionStripLayoutRow, pageTree, editingDisabledBySectionLock, onUpdateNode]
   );
@@ -999,13 +1029,20 @@ export default function BuilderInspector({
       inspectorFormSyncKeyRef.current = '';
       return;
     }
-    const styleJsonKey = JSON.stringify(selectedNode.style_json ?? {});
+    const statsLayoutSource =
+      isStatsSectionRow(selectedNode) && Array.isArray(pageTree)
+        ? findStatsCounterNode(pageTree, selectedNode.id)
+        : null;
+    const styleJsonKey =
+      JSON.stringify(selectedNode.style_json ?? {}) +
+      (statsLayoutSource ? `|${JSON.stringify(statsLayoutSource.style_json ?? {})}` : '');
     const syncKey = `${selectedNode.id}|${device}|${styleJsonKey}`;
     if (inspectorFormSyncKeyRef.current === syncKey) return;
     inspectorFormSyncKeyRef.current = syncKey;
     ixPendingIxRef.current = null;
 
     const style = getInspectorResolvedStyle(selectedNode, device, siteTheme);
+    const layoutStyle = getInspectorResolvedStyle(statsLayoutSource || selectedNode, device, siteTheme);
     const storedSp = getStoredSpacingShorthands(selectedNode.style_json, device);
     const marginSides = boxSidesFromStoredOrResolved(storedSp.margin, style?.spacing?.margin);
     const paddingSides = boxSidesFromStoredOrResolved(storedSp.padding, style?.spacing?.padding);
@@ -1185,20 +1222,36 @@ export default function BuilderInspector({
       buttonIconSpacing: Number(selectedNode.props?.iconSpacing ?? 10),
       buttonId: selectedNode.props?.buttonId || '',
       layoutDirection:
-        style?.layout?.flexDirection || (selectedNode?.nodeType === 'row' ? 'row' : 'column'),
-      layoutFlexWrap: String(style?.layout?.flexWrap || 'nowrap'),
+        layoutStyle?.layout?.flexDirection ||
+        (statsLayoutSource || selectedNode?.nodeType === 'stats_counter'
+          ? 'row'
+          : selectedNode?.nodeType === 'row'
+            ? 'row'
+            : 'column'),
+      layoutFlexWrap: String(layoutStyle?.layout?.flexWrap || 'nowrap'),
       layoutGapScale: pickPending(
         'layoutGapScale',
         (() => {
-          const gs = style?.layout?.gapScale;
+          const gs = layoutStyle?.layout?.gapScale;
           if (typeof gs === 'string' && GAP_SCALE_IDS.includes(gs)) return gs;
-          return inferGapScaleFromPx(style?.layout?.gap, siteTheme) || '';
+          const gapFromProps =
+            statsLayoutSource?.props?.gapPx != null ? Number(statsLayoutSource.props.gapPx) : null;
+          if (Number.isFinite(gapFromProps)) return inferGapScaleFromPx(gapFromProps, siteTheme) || '';
+          return inferGapScaleFromPx(layoutStyle?.layout?.gap, siteTheme) || '';
         })()
       ),
-      layoutGapPx: pickPending('layoutGapPx', parsePxValue(style?.layout?.gap, 0)),
-      layoutAlign: style?.layout?.alignItems || 'stretch',
-      layoutJustify: style?.layout?.justifyContent || 'flex-start',
-      layoutAlignContent: style?.layout?.alignContent || 'stretch',
+      layoutGapPx: pickPending(
+        'layoutGapPx',
+        (() => {
+          const gapFromProps =
+            statsLayoutSource?.props?.gapPx != null ? Number(statsLayoutSource.props.gapPx) : null;
+          if (Number.isFinite(gapFromProps)) return gapFromProps;
+          return parsePxValue(layoutStyle?.layout?.gap, statsLayoutSource ? 32 : 0);
+        })()
+      ),
+      layoutAlign: layoutStyle?.layout?.alignItems || 'stretch',
+      layoutJustify: layoutStyle?.layout?.justifyContent || 'flex-start',
+      layoutAlignContent: layoutStyle?.layout?.alignContent || 'stretch',
       widthMode:
         String(style?.size?.width || '') === '100%'
           ? 'full'
@@ -1773,7 +1826,30 @@ export default function BuilderInspector({
   const handleApplyStylePreset = async (presetPatch) => {
     if (!selectedNode || !presetPatch) return;
     if (editingDisabledBySectionLock) return;
+    if (selectedNode.nodeType === 'button') {
+      const style_json = applyButtonStylePresetToStyleJson(
+        selectedNode.style_json,
+        device,
+        presetPatch,
+        siteTheme
+      );
+      await updateNode(selectedNode.id, { style_json });
+      return;
+    }
     await updateStyle(presetPatch);
+  };
+
+  const handleResetButtonStyle = async () => {
+    if (!selectedNode || selectedNode.nodeType !== 'button') return;
+    if (editingDisabledBySectionLock) return;
+    const style_json = applyButtonStylePresetToStyleJson(
+      selectedNode.style_json,
+      device,
+      null,
+      siteTheme,
+      { reset: true }
+    );
+    await updateNode(selectedNode.id, { style_json });
   };
 
   const handleVisibilityForDevice = async (targetDevice, visible) => {
@@ -2234,7 +2310,7 @@ export default function BuilderInspector({
       }
       if (key === 'featureTabsActiveId') {
         const id = String(value || '').trim();
-        await updateFeatureTabsProps({ activeTabId: id });
+        await updateFeatureTabsProps({ activeTabId: id, defaultTabExplicit: true });
         return;
       }
       if (key === 'featureTabsEnableElementMode') {
@@ -2258,7 +2334,7 @@ export default function BuilderInspector({
         const current = normalizeFeatureTabs(ftProps.tabs);
         const tab = newFeatureTabFromList(current);
         const next = [...current, tab];
-        await updateFeatureTabsProps({ tabs: next, activeTabId: tab.id });
+        await updateFeatureTabsProps({ tabs: next, activeTabId: tab.id, defaultTabExplicit: true });
         setForm((prevForm) => ({
           ...prevForm,
           featureTabsJson: JSON.stringify(next, null, 2),
@@ -2272,7 +2348,7 @@ export default function BuilderInspector({
         if (current.length <= 1) return;
         const next = current.filter((t) => t.id !== activeId);
         const newActive = String(next[0]?.id || '');
-        await updateFeatureTabsProps({ tabs: next, activeTabId: newActive });
+        await updateFeatureTabsProps({ tabs: next, activeTabId: newActive, defaultTabExplicit: true });
         setForm((prevForm) => ({
           ...prevForm,
           featureTabsJson: JSON.stringify(next, null, 2),
@@ -2361,6 +2437,81 @@ export default function BuilderInspector({
       const stillOpen = next.some((it) => it.id === openId);
       await updateProps({ items: next, openItemId: stillOpen ? openId : '' });
       setForm((prevForm) => ({ ...prevForm, faqAccordionJson: JSON.stringify(next, null, 2) }));
+      return;
+    }
+    if (selectedNode.nodeType === 'stats_counter' && key === 'statsCounterAnimate') {
+      await updateProps({ animate: Boolean(value) });
+      return;
+    }
+    if (selectedNode.nodeType === 'stats_counter' && key === 'statsCounterGapPx') {
+      const next = Math.max(0, Math.min(200, Math.round(Number(value) || 0)));
+      await updateProps({ gapPx: next });
+      return;
+    }
+    if (selectedNode.nodeType === 'stats_counter' && key === 'statsCounterPatch') {
+      const payload = value && typeof value === 'object' ? value : null;
+      const idx = Number(payload?.index);
+      const field = String(payload?.field || '').trim();
+      const current = Array.isArray(selectedNode.props?.items) ? selectedNode.props.items : [];
+      if (!Number.isInteger(idx) || idx < 0 || idx >= current.length || !field) return;
+      const next = patchStatsCounterItem(current, idx, field, payload?.value);
+      await updateProps({ items: next });
+      return;
+    }
+    if (selectedNode.nodeType === 'stats_counter' && key === 'statsCounterAddItem') {
+      const current = Array.isArray(selectedNode.props?.items) ? selectedNode.props.items : [];
+      const next = appendStatsCounterItem(current);
+      await updateProps({ items: next });
+      return;
+    }
+    if (selectedNode.nodeType === 'stats_counter' && key === 'statsCounterRemoveItem') {
+      const idx = Number(value);
+      const current = Array.isArray(selectedNode.props?.items) ? selectedNode.props.items : [];
+      const next = removeStatsCounterItemAt(current, idx);
+      await updateProps({ items: next });
+      return;
+    }
+    if (selectedNode.nodeType === 'tab_hero' && key === 'tabHeroActiveId') {
+      const id = String(value || '').trim();
+      await updateProps({ activePanelId: id, defaultTabExplicit: true });
+      setForm((prevForm) => ({ ...prevForm, tabHeroActiveId: id }));
+      return;
+    }
+    if (selectedNode.nodeType === 'tab_hero' && key === 'tabHeroTabAlign') {
+      const raw = String(value || 'center').trim().toLowerCase();
+      const tabAlign = raw === 'left' || raw === 'stretch' ? raw : 'center';
+      await updateProps({ tabAlign });
+      setForm((prevForm) => ({ ...prevForm, tabHeroTabAlign: tabAlign }));
+      return;
+    }
+    if (selectedNode.nodeType === 'tab_hero' && key === 'tabHeroPatch') {
+      const payload = value && typeof value === 'object' ? value : null;
+      const panelId = String(payload?.panelId || '').trim();
+      const field = String(payload?.field || '').trim();
+      if (!panelId || !field) return;
+      const { panels } = resolveTabHeroProps(selectedNode.props);
+      const idx = panels.findIndex((p) => p.id === panelId);
+      if (idx < 0) return;
+      const next = patchTabHeroPanel(panels, idx, { [field]: payload?.value });
+      await updateProps({ panels: next });
+      return;
+    }
+    if (selectedNode.nodeType === 'tab_hero' && key === 'tabHeroAddPanel') {
+      const current = normalizeTabHeroPanels(selectedNode.props?.panels);
+      const panel = newTabHeroPanelFromList(current);
+      const next = [...current, panel];
+      await updateProps({ panels: next, activePanelId: panel.id, defaultTabExplicit: true });
+      setForm((prevForm) => ({ ...prevForm, tabHeroActiveId: panel.id }));
+      return;
+    }
+    if (selectedNode.nodeType === 'tab_hero' && key === 'tabHeroRemovePanel') {
+      const panelId = String(value || selectedNode.props?.activePanelId || '').trim();
+      const current = normalizeTabHeroPanels(selectedNode.props?.panels);
+      if (current.length <= 1) return;
+      const next = current.filter((p) => p.id !== panelId);
+      const newActive = String(next[0]?.id || '');
+      await updateProps({ panels: next, activePanelId: newActive, defaultTabExplicit: true });
+      setForm((prevForm) => ({ ...prevForm, tabHeroActiveId: newActive }));
       return;
     }
 
@@ -3080,8 +3231,13 @@ export default function BuilderInspector({
     setForm(() => nextFormSnapshot);
 
     try {
+      const statsLayoutTarget = STATS_LAYOUT_FORM_KEYS.has(key)
+        ? resolveStatsLayoutEditTarget(pageTree, selectedNode)
+        : null;
+      const styleTarget = statsLayoutTarget || selectedNode;
+
       const built = buildInspectorStylePatch(key, nextFormSnapshot, {
-        selectedNode,
+        selectedNode: styleTarget,
         siteTheme,
         pageTree,
         device,
@@ -3089,26 +3245,32 @@ export default function BuilderInspector({
       if (!built?.patch || Object.keys(built.patch).length === 0) return;
 
       const isFlexLayoutContainer =
-        selectedNode?.nodeType === 'row' ||
-        selectedNode?.nodeType === 'column' ||
-        selectedNode?.nodeType === 'stack';
+        styleTarget?.nodeType === 'row' ||
+        styleTarget?.nodeType === 'column' ||
+        styleTarget?.nodeType === 'stack' ||
+        styleTarget?.nodeType === 'stats_counter';
       const gapScaleSel = String(nextFormSnapshot.layoutGapScale || '').trim();
       const useGapScale = GAP_SCALE_IDS.includes(gapScaleSel);
       let baseJsonOverride = built.baseJsonOverride;
       if (isFlexLayoutContainer && !useGapScale && (key === 'layoutGapPx' || key === 'layoutGapScale')) {
         baseJsonOverride = stripDeviceLayoutKeysInStyleJson(
-          selectedNode.style_json,
+          styleTarget.style_json,
           device,
           ['gapScale'],
-          selectedNode.nodeType,
+          styleTarget.nodeType,
           siteTheme
         );
       }
 
       previewStylePatch(built.patch);
-      const style_json = mergeStyleForDevice(selectedNode, device, built.patch, siteTheme, baseJsonOverride);
+      const style_json = mergeStyleForDevice(styleTarget, device, built.patch, siteTheme, baseJsonOverride);
       const nodePayload = { style_json };
-      if (built.propsMetaPatch) {
+      if (statsLayoutTarget && built.patch?.layout?.gap != null) {
+        nodePayload.props = {
+          ...(styleTarget.props || {}),
+          gapPx: parsePxValue(built.patch.layout.gap, 32),
+        };
+      } else if (built.propsMetaPatch) {
         const prevMeta =
           selectedNode.props?.meta &&
           typeof selectedNode.props.meta === 'object' &&
@@ -3120,7 +3282,9 @@ export default function BuilderInspector({
           meta: { ...prevMeta, ...built.propsMetaPatch },
         };
       }
-      await updateNode(selectedNode.id, nodePayload);
+      await updateNode(styleTarget.id, nodePayload);
+
+      if (statsLayoutTarget) return;
 
       const isRow = selectedNode?.nodeType === 'row';
       const isRootLandmarkRow =
@@ -3197,10 +3361,13 @@ export default function BuilderInspector({
     if (!selectedNode || !layout || typeof layout !== 'object') return;
     if (isLayoutLockedRow(selectedNode)) return;
     if (editingDisabledBySectionLock) return;
+    const statsLayoutTarget = resolveStatsLayoutEditTarget(pageTree, selectedNode);
+    const styleTarget = statsLayoutTarget || selectedNode;
     const isFlex =
-      selectedNode.nodeType === 'row' ||
-      selectedNode.nodeType === 'column' ||
-      selectedNode.nodeType === 'stack';
+      styleTarget.nodeType === 'row' ||
+      styleTarget.nodeType === 'column' ||
+      styleTarget.nodeType === 'stack' ||
+      styleTarget.nodeType === 'stats_counter';
     if (!isFlex) return;
     const gapNum = typeof layout.gap === 'number' ? layout.gap : parsePxValue(layout.gap, 0);
     const gs = typeof layout.gapScale === 'string' && GAP_SCALE_IDS.includes(layout.gapScale) ? layout.gapScale : '';
@@ -3213,15 +3380,23 @@ export default function BuilderInspector({
       layoutGapPx: gapNum,
       layoutGapScale: gs,
     }));
+    const layoutPatch = {
+      flexDirection: layout.flexDirection,
+      justifyContent: layout.justifyContent,
+      alignItems: layout.alignItems,
+      flexWrap: layout.flexWrap != null && layout.flexWrap !== '' ? layout.flexWrap : 'nowrap',
+      gap: gapNum,
+      ...(gs ? { gapScale: gs } : {}),
+    };
+    if (statsLayoutTarget) {
+      await updateNode(statsLayoutTarget.id, {
+        style_json: mergeStyleForDevice(statsLayoutTarget, device, { layout: layoutPatch }, siteTheme),
+        props: { ...(statsLayoutTarget.props || {}), gapPx: gapNum },
+      });
+      return;
+    }
     await updateStyle({
-      layout: {
-        flexDirection: layout.flexDirection,
-        justifyContent: layout.justifyContent,
-        alignItems: layout.alignItems,
-        flexWrap: layout.flexWrap != null && layout.flexWrap !== '' ? layout.flexWrap : 'nowrap',
-        gap: gapNum,
-        ...(gs ? { gapScale: gs } : {}),
-      },
+      layout: layoutPatch,
     });
   };
 
@@ -3641,6 +3816,8 @@ export default function BuilderInspector({
           onClearPreviewStyle={clearPreviewCss}
           onActiveSpacingEdit={onSetActiveSpacingEdit}
           onApplyPreset={handleApplyStylePreset}
+          onResetButtonStyle={handleResetButtonStyle}
+          disabled={editingDisabledBySectionLock}
           nestedFeatureTabsNode={nestedFeatureTabsNode}
           onSelectFeatureTabs={
             nestedFeatureTabsNode && typeof onSelectNode === 'function'

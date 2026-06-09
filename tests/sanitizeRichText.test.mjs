@@ -30,6 +30,13 @@ test('sanitizeRichText keeps safe style properties only', () => {
   assert.match(out, /bld-text-highlight/);
 });
 
+test('sanitizeRichText strips pasted white background highlights', () => {
+  const out = sanitizeRichText('<span style="background-color:#ffffff;color:#111827">copy</span>');
+  assert.ok(!out.includes('background'));
+  assert.match(out, /color/i);
+  assert.ok(!out.includes('bld-text-highlight'));
+});
+
 test('sanitizeRichText keeps font-size in px', () => {
   const out = sanitizeRichText('<span style="font-size:24px">big</span>');
   assert.match(out, /font-size:\s*24px/i);
