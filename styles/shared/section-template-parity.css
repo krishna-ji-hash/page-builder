@@ -3,6 +3,40 @@
  * Parity surface: :is(.live-doc, .bld-canvas__live-mirror) — see lib/paritySurface.js
  */
 
+/* —— hero (split copy + visual) —— */
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='hero'] {
+  align-items: stretch !important;
+  overflow-x: clip;
+  overflow-y: visible;
+  min-width: 0;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='hero']
+  > .live-node.bld-column,
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='hero']
+  .live-node.bld-column {
+  min-width: 0;
+  max-width: 100%;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='hero']
+  figure.live-node
+  img,
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='hero']
+  figure.live-fluid-image
+  img {
+  max-width: 100%;
+  width: 100%;
+  height: auto;
+  object-fit: cover;
+  object-position: center;
+}
+
 /* —— platformHero —— */
 :is(.live-doc, .bld-canvas__live-mirror)
   > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='platformHero'] {
@@ -211,4 +245,149 @@
 
 :is(.live-doc, .bld-canvas__live-mirror) .live-carousel__viewport {
   width: 100%;
+}
+
+/* —— tabHero —— */
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='tabHero'] {
+  align-items: stretch !important;
+  overflow-x: clip;
+  overflow-y: visible;
+  min-width: 0;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='tabHero']
+  > .live-node.bld-column,
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='tabHero']
+  .live-node.bld-column,
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='tabHero']
+  .live-node.bld-stack {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  align-self: stretch !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='tabHero']
+  .live-leaf-wrap
+  :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text) {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+@media (max-width: 767px) {
+  :is(.live-doc, .bld-canvas__live-mirror)
+    > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='hero'] {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    flex-wrap: nowrap !important;
+    gap: 20px !important;
+  }
+
+  :is(.live-doc, .bld-canvas__live-mirror)
+    > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='hero']
+    > .live-node.bld-column {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+  }
+
+  :is(.live-doc, .bld-canvas__live-mirror)
+    [data-section-template='hero']
+    > .live-node.bld-column:first-child,
+  :is(.live-doc, .bld-canvas__live-mirror)
+    [data-section-template='hero']
+    .bld-node-children
+    > .live-node.bld-column:first-child {
+    order: 1;
+  }
+
+  :is(.live-doc, .bld-canvas__live-mirror)
+    [data-section-template='hero']
+    > .live-node.bld-column:last-child,
+  :is(.live-doc, .bld-canvas__live-mirror)
+    [data-section-template='hero']
+    .bld-node-children
+    > .live-node.bld-column:last-child {
+    order: 2;
+  }
+
+  :is(.live-doc, .bld-canvas__live-mirror)
+    [data-section-template='hero']
+    .live-leaf-wrap
+    :is(h1, h2, h3, h4, h5, h6, p) {
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    max-width: 100%;
+  }
+
+  :is(.live-doc, .bld-canvas__live-mirror)
+    > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='platformHero'] {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    flex-wrap: nowrap !important;
+  }
+
+  :is(.live-doc, .bld-canvas__live-mirror)
+    > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='platformHero']
+    > .live-node.bld-column {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+  }
+
+  :is(.live-doc, .bld-canvas__live-mirror)
+    [data-section-template='platformHero']
+    .live-node.bld-stack
+    > .live-node.bld-stack:last-child {
+    flex-direction: column !important;
+    flex-wrap: nowrap !important;
+  }
+
+  :is(.live-doc, .bld-canvas__live-mirror)
+    [data-section-template='platformHero']
+    .live-leaf-wrap
+    :is(h1, h2, h3, h4, h5, h6, p) {
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    max-width: 100%;
+  }
+
+  :is(.live-doc, .bld-canvas__live-mirror)
+    [data-section-template='tabHero']
+    .live-leaf-wrap
+    :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text) {
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  :is(.live-doc, .bld-canvas__live-mirror)
+    figure.live-node:not(.live-brand-logo)
+    img,
+  :is(.live-doc, .bld-canvas__live-mirror)
+    figure.live-fluid-image
+    img {
+    height: auto !important;
+    object-fit: contain !important;
+    object-position: center;
+  }
+
+  :is(.live-doc, .bld-canvas__live-mirror)
+    > :where(section.live-node.bld-row, main.live-node.bld-row, div.live-node.bld-row):not([data-site-header='true']):not(
+      [data-site-footer='true']
+    ) {
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+  }
 }

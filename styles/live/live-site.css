@@ -72,16 +72,18 @@
     --live-content-padding-x: clamp(12px, 4vw, 20px);
   }
 
-  .live-doc > :where(section.live-node.bld-row, main.live-node.bld-row):not([data-site-header='true']):not(
+  .live-doc
+    > :where(section.live-node.bld-row, main.live-node.bld-row, div.live-node.bld-row):not([data-site-header='true']):not(
       [data-site-footer='true']
     ) {
     flex-direction: column !important;
     align-items: stretch !important;
     flex-wrap: nowrap !important;
+    gap: 20px !important;
   }
 
   .live-doc
-    > :where(section.live-node.bld-row, main.live-node.bld-row):not([data-site-header='true']):not(
+    > :where(section.live-node.bld-row, main.live-node.bld-row, div.live-node.bld-row):not([data-site-header='true']):not(
       [data-site-footer='true']
     )
     > .live-node.bld-column {
@@ -255,35 +257,69 @@
   /* Images: inline desktop widths must not overflow the phone viewport. */
   .live-doc:not([data-bld-device]) .live-node.bld-stack,
   .live-doc:not([data-bld-device]) .live-node.bld-column,
-  .live-doc:not([data-bld-device]) .live-leaf-wrap {
+  .live-doc:not([data-bld-device]) .live-leaf-wrap,
+  .live-doc[data-bld-device='mobile'] .live-node.bld-stack,
+  .live-doc[data-bld-device='mobile'] .live-node.bld-column,
+  .live-doc[data-bld-device='mobile'] .live-leaf-wrap,
+  .live-doc[data-bld-device='tablet'] .live-node.bld-stack,
+  .live-doc[data-bld-device='tablet'] .live-node.bld-column,
+  .live-doc[data-bld-device='tablet'] .live-leaf-wrap {
     min-width: 0;
+    max-width: 100%;
+  }
+
+  .live-doc:not([data-bld-device]) .live-leaf-wrap :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text),
+  .live-doc[data-bld-device='mobile'] .live-leaf-wrap :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text),
+  .live-doc[data-bld-device='tablet'] .live-leaf-wrap :is(h1, h2, h3, h4, h5, h6, p, .live-rich-text) {
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    word-break: break-word;
     max-width: 100%;
   }
 
   .live-doc:not([data-bld-device]) figure.live-node,
   .live-doc:not([data-bld-device]) figure.live-fluid-image,
-  .live-doc:not([data-bld-device]) .live-leaf-wrap > figure {
+  .live-doc:not([data-bld-device]) .live-leaf-wrap > figure,
+  .live-doc[data-bld-device='mobile'] figure.live-node,
+  .live-doc[data-bld-device='mobile'] figure.live-fluid-image,
+  .live-doc[data-bld-device='mobile'] .live-leaf-wrap > figure,
+  .live-doc[data-bld-device='tablet'] figure.live-node,
+  .live-doc[data-bld-device='tablet'] figure.live-fluid-image,
+  .live-doc[data-bld-device='tablet'] .live-leaf-wrap > figure {
     max-width: 100% !important;
     min-width: 0 !important;
     box-sizing: border-box;
+    overflow: visible;
   }
 
-  .live-doc:not([data-bld-device]) figure.live-fluid-image {
+  .live-doc:not([data-bld-device]) figure.live-fluid-image,
+  .live-doc[data-bld-device='mobile'] figure.live-fluid-image,
+  .live-doc[data-bld-device='tablet'] figure.live-fluid-image {
     width: 100% !important;
+    max-width: 100% !important;
     align-self: stretch !important;
   }
 
   .live-doc:not([data-bld-device]) figure.live-fluid-image img,
-  .live-doc:not([data-bld-device]) figure.live-node img {
+  .live-doc:not([data-bld-device]) figure.live-node img,
+  .live-doc[data-bld-device='mobile'] figure.live-fluid-image img,
+  .live-doc[data-bld-device='mobile'] figure.live-node img,
+  .live-doc[data-bld-device='tablet'] figure.live-fluid-image img,
+  .live-doc[data-bld-device='tablet'] figure.live-node img {
     max-width: 100% !important;
     width: 100% !important;
-    object-fit: cover;
+    height: auto !important;
+    object-fit: contain !important;
     object-position: center;
   }
 
-  .live-doc:not([data-bld-device]) figure.live-fluid-image img:not([style*='height']),
-  .live-doc:not([data-bld-device]) figure.live-node img:not([style*='height']) {
-    height: auto;
+  .live-site figure.live-image-stable[data-has-fixed-height='true'] {
+    min-height: 0 !important;
+  }
+
+  .live-site figure.live-image-stable[data-has-fixed-height='true'] > img {
+    height: auto !important;
+    object-fit: contain !important;
   }
 }
 

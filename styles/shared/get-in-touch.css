@@ -19,7 +19,7 @@
   color: var(--live-section-fg-on-dark) !important;
 }
 
-.live-doc
+:is(.live-doc, .bld-canvas__live-mirror)
   > :where(section.live-node.bld-row, main.live-node.bld-row, div.live-node.bld-row)[data-section-template='getInTouch']
   .live-form__label {
   font-size: 14px;
@@ -27,7 +27,7 @@
   color: var(--token-text-primary);
 }
 
-.live-doc
+:is(.live-doc, .bld-canvas__live-mirror)
   > :where(section.live-node.bld-row, main.live-node.bld-row, div.live-node.bld-row)[data-section-template='getInTouch']
   .live-form__input {
   border: 1px solid var(--token-border-default);
@@ -38,7 +38,7 @@
   color: var(--token-text-primary);
 }
 
-.live-doc
+:is(.live-doc, .bld-canvas__live-mirror)
   > :where(section.live-node.bld-row, main.live-node.bld-row, div.live-node.bld-row)[data-section-template='getInTouch']
   .live-form__submit {
   width: 100%;
@@ -53,14 +53,38 @@
   cursor: pointer;
 }
 
-.live-doc
+:is(.live-doc, .bld-canvas__live-mirror)
   > :where(section.live-node.bld-row, main.live-node.bld-row, div.live-node.bld-row)[data-section-template='getInTouch']
   .live-form__submit:hover:not(:disabled) {
   background: #2563eb;
 }
 
-.live-doc
+:is(.live-doc, .bld-canvas__live-mirror)
   > :where(section.live-node.bld-row, main.live-node.bld-row, div.live-node.bld-row)[data-section-template='getInTouch']
   .live-divider {
   flex-shrink: 0;
+}
+
+@media (max-width: 767px) {
+  :is(.live-doc, .bld-canvas__live-mirror)
+    > :where(section.live-node.bld-row, main.live-node.bld-row, div.live-node.bld-row)[data-section-template='getInTouch'] {
+    align-items: stretch !important;
+    overflow-x: clip;
+    overflow-y: visible;
+  }
+
+  :is(.live-doc, .bld-canvas__live-mirror)
+    > :where(section.live-node.bld-row, main.live-node.bld-row, div.live-node.bld-row)[data-section-template='getInTouch']
+    > .live-node.bld-column {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    flex: 1 1 auto !important;
+  }
+
+  :is(.live-doc, .bld-canvas__live-mirror)
+    [data-section-template='getInTouch']
+    .live-form__submit {
+    width: 100%;
+  }
 }

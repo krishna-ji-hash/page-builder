@@ -15,6 +15,7 @@ import {
   validateTree,
 } from '@/lib/builderTree';
 import { flushActiveCanvasInlineEdits } from '@/lib/canvasInlineEditFlush.js';
+import { buildReduceAnimationIntensityStyleJson, collectAnimatedNodeIds } from '@/lib/audits/auditQuickFix.js';
 import { prepareTreeForBulkSave } from '@/lib/inlineImagePersist.js';
 import { adminBuilderPagePath, previewPagePath } from '@/lib/builder/adminBuilderRoutes';
 import { publicPagePath } from '@/lib/publicSiteUrls';
@@ -4203,6 +4204,7 @@ export default function BuilderShell({ pageId }) {
           pageSeo={page?.seo || null}
           tree={tree}
           mediaMetaByUrl={mediaMetaByUrl}
+          overflowByNodeId={overflowByNodeId}
           onClose={() => setIsAuditOpen(false)}
           onSelectNode={(nodeId) => {
             if (!nodeId) return;
@@ -4213,7 +4215,23 @@ export default function BuilderShell({ pageId }) {
             setLastAuditIssues(Array.isArray(report?.issues) ? report.issues : []);
           }}
           onQuickFix={async ({ nodeId, fix }) => {
-            if (!nodeId || !fix) return;
+            if (!fix) return;
+
+            if (fix.type === 'reduceAnimationIntensity' && fix.pageLevel) {
+              const ids = collectAnimatedNodeIds(tree);
+              for (const id of ids) {
+                const n = findNodeInTree(tree, Number(id));
+                if (!n) continue;
+                await handleNodeUpdate({
+                  nodeId: n.id,
+                  payload: { style_json: buildReduceAnimationIntensityStyleJson(n.style_json) },
+                  skipHistorySnapshot: true,
+                });
+              }
+              return;
+            }
+
+            if (!nodeId) return;
             const node = findNodeInTree(tree, Number(nodeId));
             if (!node) return;
 
@@ -4275,6 +4293,8 @@ export default function BuilderShell({ pageId }) {
               payload = { style_json: applyStylePatch(fix.device || device, 'size', 'minHeight', `${Math.round(px)}px`) };
             } else if (fix.type === 'reduceCarouselSlidesRendered') {
               payload = { props: { maxSlidesRendered: Number(fix.value || 8) } };
+            } else if (fix.type === 'reduceAnimationIntensity') {
+              payload = { style_json: buildReduceAnimationIntensityStyleJson(node.style_json) };
             }
 
             if (!payload) return;

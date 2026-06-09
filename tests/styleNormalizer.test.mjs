@@ -62,3 +62,26 @@ test('normalizeResponsiveStyle keeps header rows horizontal on mobile', () => {
   assert.equal(mobile.layout.flexDirection, 'row');
   assert.equal(mobile.layout.flexWrap, 'nowrap');
 });
+
+test('normalizeResponsiveStyle auto-scales large headings on mobile', () => {
+  const out = normalizeResponsiveStyle(
+    {
+      desktop: {
+        typography: { fontSize: '54px', fontWeight: '800', lineHeight: '1.05' },
+      },
+    },
+    { nodeType: 'heading' }
+  );
+  const mobile = getDeviceStyle(out, 'mobile');
+  assert.equal(mobile.typography.fontSize, '32px');
+});
+
+test('normalizeResponsiveStyle defaults images to full width on mobile', () => {
+  const out = normalizeResponsiveStyle(
+    { desktop: { size: { width: '720px' } } },
+    { nodeType: 'image' }
+  );
+  const mobile = getDeviceStyle(out, 'mobile');
+  assert.equal(mobile.size.width, '100%');
+  assert.equal(mobile.layout.width, '100%');
+});

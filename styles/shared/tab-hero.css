@@ -304,6 +304,18 @@
     min-height: 420px;
   }
 
+  :is(.live-doc, .bld-canvas__live-mirror) .live-tab-hero__nav-wrap {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    justify-content: flex-start !important;
+  }
+
+  :is(.live-doc, .bld-canvas__live-mirror) .live-tab-hero--align-center .live-tab-hero__nav-wrap,
+  :is(.live-doc, .bld-canvas__live-mirror) .live-tab-hero--align-stretch .live-tab-hero__nav-wrap {
+    display: block;
+  }
+
   .live-tab-hero__stage-inner {
     align-items: flex-end;
     padding: 20px 16px;
@@ -311,10 +323,49 @@
 
   .live-tab-hero__card {
     width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .live-tab-hero__heading,
+  .live-tab-hero__eyebrow,
+  .live-tab-hero__paragraph {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .live-tab-hero__heading {
+    font-size: clamp(1.15rem, 5vw, 1.5rem);
   }
 
   .live-tab-hero__tab {
-    padding: 14px 18px 12px;
-    font-size: 0.95rem;
+    padding: 14px 16px 12px;
+    font-size: 0.9rem;
+    max-width: min(100%, 280px);
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
+
+  .live-tab-hero__tab-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+}
+
+/* Builder mobile artboard (narrow frame, any host viewport width) */
+.bld-canvas--mobile .bld-canvas__live-mirror .live-tab-hero__nav-wrap {
+  justify-content: flex-start !important;
+}
+
+.bld-canvas--mobile .bld-canvas__live-mirror .live-tab-hero__heading,
+.bld-canvas--mobile .bld-canvas__live-mirror .live-tab-hero__paragraph,
+.bld-canvas--mobile .bld-canvas__live-mirror .live-tab-hero__eyebrow {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
 }
