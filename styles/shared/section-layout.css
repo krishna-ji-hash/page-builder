@@ -1,6 +1,10 @@
 /**
  * Section item layout — driven by data attributes from props.meta.sectionLayout.
  * Builder canvas + published live site share these rules.
+ *
+ * Live renderer: item cards are direct children of .bld-section-layout.
+ * Builder canvas: same cards sit under .bld-node-children (display: contents for flex,
+ * but CSS child selectors still need the extra hop).
  */
 
 .bld-section-layout.bld-layout-grid {
@@ -12,8 +16,8 @@
 }
 
 .bld-section-layout.bld-layout-horizontal {
-  flex-direction: row;
-  flex-wrap: wrap;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
 }
 
 .bld-section-layout.bld-layout-vertical {
@@ -22,8 +26,8 @@
 }
 
 .bld-section-layout.bld-layout-auto {
-  flex-direction: row;
-  flex-wrap: wrap;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
 }
 
 .bld-section-layout.bld-layout-reverse.bld-layout-horizontal {
@@ -34,67 +38,138 @@
   flex-direction: column-reverse;
 }
 
-/* Direct item cards (stack shells or leaf wraps) */
-.bld-section-layout > .live-node.bld-stack,
-.bld-section-layout > .live-leaf-wrap,
-.bld-section-layout > .bld-stack,
-.bld-canvas__live-mirror .bld-section-layout > .live-node.bld-stack,
-.bld-canvas__live-mirror .bld-section-layout > .live-leaf-wrap {
+/* Item cards — live direct children + builder .bld-node-children hop */
+.bld-section-layout > :is(
+    .live-node.bld-stack,
+    .bld-node__shell.bld-stack,
+    .live-leaf-wrap,
+    .bld-stack,
+    .bld-node-children > .live-node.bld-stack,
+    .bld-node-children > .bld-node__shell.bld-stack,
+    .bld-node-children > .live-leaf-wrap
+  ),
+.bld-canvas__live-mirror .bld-section-layout > :is(
+    .live-node.bld-stack,
+    .bld-node__shell.bld-stack,
+    .live-leaf-wrap,
+    .bld-node-children > .live-node.bld-stack,
+    .bld-node-children > .bld-node__shell.bld-stack,
+    .bld-node-children > .live-leaf-wrap
+  ) {
   min-width: 0;
   max-width: 100%;
   box-sizing: border-box;
 }
 
-.bld-section-layout.bld-layout-horizontal > .live-node.bld-stack,
-.bld-section-layout.bld-layout-horizontal > .live-leaf-wrap,
-.bld-section-layout.bld-layout-auto > .live-node.bld-stack,
-.bld-section-layout.bld-layout-auto > .live-leaf-wrap {
+.bld-section-layout.bld-layout-horizontal > :is(
+    .live-node.bld-stack,
+    .bld-node__shell.bld-stack,
+    .live-leaf-wrap,
+    .bld-node-children > .live-node.bld-stack,
+    .bld-node-children > .bld-node__shell.bld-stack,
+    .bld-node-children > .live-leaf-wrap
+  ),
+.bld-section-layout.bld-layout-auto > :is(
+    .live-node.bld-stack,
+    .bld-node__shell.bld-stack,
+    .live-leaf-wrap,
+    .bld-node-children > .live-node.bld-stack,
+    .bld-node-children > .bld-node__shell.bld-stack,
+    .bld-node-children > .live-leaf-wrap
+  ) {
   flex: 1 1 auto;
 }
 
-.bld-section-layout.bld-cols-1.bld-layout-horizontal > .live-node.bld-stack,
-.bld-section-layout.bld-cols-1.bld-layout-horizontal > .live-leaf-wrap {
+.bld-section-layout.bld-cols-1.bld-layout-horizontal > :is(
+    .live-node.bld-stack,
+    .bld-node__shell.bld-stack,
+    .live-leaf-wrap,
+    .bld-node-children > .live-node.bld-stack,
+    .bld-node-children > .bld-node__shell.bld-stack,
+    .bld-node-children > .live-leaf-wrap
+  ) {
   flex: 1 1 100%;
   max-width: 100%;
 }
 
-.bld-section-layout.bld-cols-2.bld-layout-horizontal > .live-node.bld-stack,
-.bld-section-layout.bld-cols-2.bld-layout-horizontal > .live-leaf-wrap {
-  flex: 1 1 calc(50% - 12px);
-  max-width: calc(50% - 6px);
+.bld-section-layout.bld-cols-2.bld-layout-horizontal > :is(
+    .live-node.bld-stack,
+    .bld-node__shell.bld-stack,
+    .live-leaf-wrap,
+    .bld-node-children > .live-node.bld-stack,
+    .bld-node-children > .bld-node__shell.bld-stack,
+    .bld-node-children > .live-leaf-wrap
+  ) {
+  flex: 1 1 calc(50% - 12px) !important;
+  max-width: calc(50% - 6px) !important;
+  width: auto !important;
   min-width: min(100%, 260px);
 }
 
-.bld-section-layout.bld-cols-3.bld-layout-horizontal > .live-node.bld-stack,
-.bld-section-layout.bld-cols-3.bld-layout-horizontal > .live-leaf-wrap {
-  flex: 1 1 calc(33.333% - 14px);
-  max-width: calc(33.333% - 10px);
+.bld-section-layout.bld-cols-3.bld-layout-horizontal > :is(
+    .live-node.bld-stack,
+    .bld-node__shell.bld-stack,
+    .live-leaf-wrap,
+    .bld-node-children > .live-node.bld-stack,
+    .bld-node-children > .bld-node__shell.bld-stack,
+    .bld-node-children > .live-leaf-wrap
+  ) {
+  flex: 1 1 calc(33.333% - 14px) !important;
+  max-width: calc(33.333% - 10px) !important;
+  width: auto !important;
   min-width: min(100%, 220px);
 }
 
-.bld-section-layout.bld-cols-4.bld-layout-horizontal > .live-node.bld-stack,
-.bld-section-layout.bld-cols-4.bld-layout-horizontal > .live-leaf-wrap {
-  flex: 1 1 calc(25% - 16px);
-  max-width: calc(25% - 12px);
+.bld-section-layout.bld-cols-4.bld-layout-horizontal > :is(
+    .live-node.bld-stack,
+    .bld-node__shell.bld-stack,
+    .live-leaf-wrap,
+    .bld-node-children > .live-node.bld-stack,
+    .bld-node-children > .bld-node__shell.bld-stack,
+    .bld-node-children > .live-leaf-wrap
+  ) {
+  flex: 1 1 calc(25% - 16px) !important;
+  max-width: calc(25% - 12px) !important;
+  width: auto !important;
   min-width: min(100%, 200px);
 }
 
-.bld-section-layout.bld-cols-5.bld-layout-horizontal > .live-node.bld-stack,
-.bld-section-layout.bld-cols-5.bld-layout-horizontal > .live-leaf-wrap {
-  flex: 1 1 calc(20% - 16px);
-  max-width: calc(20% - 12px);
+.bld-section-layout.bld-cols-5.bld-layout-horizontal > :is(
+    .live-node.bld-stack,
+    .bld-node__shell.bld-stack,
+    .live-leaf-wrap,
+    .bld-node-children > .live-node.bld-stack,
+    .bld-node-children > .bld-node__shell.bld-stack,
+    .bld-node-children > .live-leaf-wrap
+  ) {
+  flex: 1 1 calc(20% - 16px) !important;
+  max-width: calc(20% - 12px) !important;
+  width: auto !important;
   min-width: min(100%, 160px);
 }
 
-.bld-section-layout.bld-cols-6.bld-layout-horizontal > .live-node.bld-stack,
-.bld-section-layout.bld-cols-6.bld-layout-horizontal > .live-leaf-wrap {
-  flex: 1 1 calc(16.666% - 16px);
-  max-width: calc(16.666% - 12px);
+.bld-section-layout.bld-cols-6.bld-layout-horizontal > :is(
+    .live-node.bld-stack,
+    .bld-node__shell.bld-stack,
+    .live-leaf-wrap,
+    .bld-node-children > .live-node.bld-stack,
+    .bld-node-children > .bld-node__shell.bld-stack,
+    .bld-node-children > .live-leaf-wrap
+  ) {
+  flex: 1 1 calc(16.666% - 16px) !important;
+  max-width: calc(16.666% - 12px) !important;
+  width: auto !important;
   min-width: min(100%, 140px);
 }
 
-.bld-section-layout.bld-layout-vertical > .live-node.bld-stack,
-.bld-section-layout.bld-layout-vertical > .live-leaf-wrap {
+.bld-section-layout.bld-layout-vertical > :is(
+    .live-node.bld-stack,
+    .bld-node__shell.bld-stack,
+    .live-leaf-wrap,
+    .bld-node-children > .live-node.bld-stack,
+    .bld-node-children > .bld-node__shell.bld-stack,
+    .bld-node-children > .live-leaf-wrap
+  ) {
   flex: 0 0 auto;
   width: 100%;
   max-width: 100%;
@@ -150,17 +225,40 @@
   -webkit-overflow-scrolling: touch;
 }
 
+/* Builder desktop device: keep horizontal grids row-aligned regardless of narrow viewport. */
+.live-doc[data-bld-device='desktop'] .bld-section-layout.bld-layout-horizontal,
+.live-doc[data-bld-device='desktop'] .bld-section-layout.bld-layout-auto,
+.live-doc[data-bld-device='desktop'] .bld-section-layout[data-bld-layout-direction='horizontal'] {
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+}
+
 @media (max-width: 767px) {
-  .bld-section-layout.bld-layout-mobile-stack,
-  .bld-section-layout[data-bld-layout-mobile-stack='true'] {
+  /* Published live only — builder desktop device preview keeps row via data-bld-device. */
+  .live-doc:not([data-bld-device='desktop']) .bld-section-layout.bld-layout-mobile-stack,
+  .live-doc:not([data-bld-device='desktop']) .bld-section-layout[data-bld-layout-mobile-stack='true'] {
     flex-direction: column !important;
     flex-wrap: nowrap !important;
   }
 
-  .bld-section-layout.bld-layout-mobile-stack > .live-node.bld-stack,
-  .bld-section-layout.bld-layout-mobile-stack > .live-leaf-wrap,
-  .bld-section-layout[data-bld-layout-mobile-stack='true'] > .live-node.bld-stack,
-  .bld-section-layout[data-bld-layout-mobile-stack='true'] > .live-leaf-wrap {
+  .live-doc:not([data-bld-device='desktop']) .bld-section-layout.bld-layout-mobile-stack > :is(
+      .live-node.bld-stack,
+      .bld-node__shell.bld-stack,
+      .live-leaf-wrap,
+      .bld-node-children > .live-node.bld-stack,
+      .bld-node-children > .bld-node__shell.bld-stack,
+      .bld-node-children > .live-leaf-wrap
+    ),
+  .live-doc:not([data-bld-device='desktop'])
+    .bld-section-layout[data-bld-layout-mobile-stack='true']
+    > :is(
+      .live-node.bld-stack,
+      .bld-node__shell.bld-stack,
+      .live-leaf-wrap,
+      .bld-node-children > .live-node.bld-stack,
+      .bld-node-children > .bld-node__shell.bld-stack,
+      .bld-node-children > .live-leaf-wrap
+    ) {
     flex: 0 0 auto !important;
     width: 100% !important;
     max-width: 100% !important;
@@ -170,8 +268,14 @@
     flex-direction: column !important;
   }
 
-  .bld-section-layout.bld-cols-2.bld-layout-mobile-stack > .live-node.bld-stack,
-  .bld-section-layout.bld-cols-2[data-bld-layout-mobile-stack='true'] > .live-node.bld-stack {
+  .bld-section-layout.bld-cols-2.bld-layout-mobile-stack > :is(
+      .live-node.bld-stack,
+      .bld-node-children > .live-node.bld-stack
+    ),
+  .bld-section-layout.bld-cols-2[data-bld-layout-mobile-stack='true'] > :is(
+      .live-node.bld-stack,
+      .bld-node-children > .live-node.bld-stack
+    ) {
     flex: 1 1 calc(50% - 8px) !important;
     max-width: calc(50% - 4px) !important;
     min-width: min(100%, 160px) !important;

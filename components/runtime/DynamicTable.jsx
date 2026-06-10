@@ -30,7 +30,7 @@ export default function DynamicTable(props) {
   );
 }
 
-function DynamicTableInner({ columns = [], dataSource, className, style }) {
+function DynamicTableInner({ columns = [], dataSource, rows, className, style }) {
   const { fetchInternal, dataRefreshKey } = useRuntimeData();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
@@ -39,6 +39,8 @@ function DynamicTableInner({ columns = [], dataSource, className, style }) {
 
   const path = dataSource?.kind === 'internal_api' ? normalizePath(dataSource.path) : null;
   const method = (dataSource?.method || 'GET').toUpperCase();
+  const staticRows = Array.isArray(rows) && rows.length ? rows : null;
+  const useStaticRows = Boolean(staticRows) && !path;
 
   const effectiveColumns = useMemo(() => {
     if (Array.isArray(columns) && columns.length) {
@@ -52,6 +54,12 @@ function DynamicTableInner({ columns = [], dataSource, className, style }) {
   }, [columns, path]);
 
   const load = useCallback(async () => {
+    if (useStaticRows) {
+      setLoading(false);
+      setData(staticRows);
+      setError('');
+      return;
+    }
     if (!path) {
       setLoading(false);
       setData(null);
@@ -75,7 +83,7 @@ function DynamicTableInner({ columns = [], dataSource, className, style }) {
     } finally {
       setLoading(false);
     }
-  }, [dataSource, fetchInternal, method, path]);
+  }, [dataSource, fetchInternal, method, path, staticRows, useStaticRows]);
 
   useEffect(() => {
     load();

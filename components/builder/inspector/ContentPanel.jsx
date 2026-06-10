@@ -23,6 +23,8 @@ import LogoBrandControls from '@/components/builder/inspector/LogoBrandControls'
 import InlineTextFormattingPanel from '@/components/builder/inspector/InlineTextFormattingPanel';
 import TextEffectsControls from '@/components/builder/inspector/TextEffectsControls';
 import SplitHeroImageSizeControls from '@/components/builder/inspector/SplitHeroImageSizeControls';
+import TickerDualRowSlidesEditor from '@/components/builder/inspector/TickerDualRowSlidesEditor';
+import { resolveDualTickerSlides } from '@/lib/carouselTickerRows';
 import { nodeIsInsideSiteHeader, nodeLooksLikeBrandLogo } from '@/lib/headerLogo';
 import { uploadProjectMediaFile } from '@/lib/media/uploadProjectMedia';
 import {
@@ -117,8 +119,11 @@ export default function ContentPanel({
     } else if (typeof target === 'object' && target?.type === 'carouselSlide') {
       const idx = Number(target.index);
       if (!Number.isInteger(idx) || idx < 0) return;
+      const tickerRow =
+        target.tickerRow === 'top' || target.tickerRow === 'bottom' ? target.tickerRow : undefined;
       onChange('carouselSlidePatch', {
         index: idx,
+        ...(tickerRow ? { tickerRow } : {}),
         patch: {
           imageSrc: item.publicUrl,
           image: item.publicUrl,
@@ -172,9 +177,10 @@ export default function ContentPanel({
     reader.readAsDataURL(file);
   };
 
-  const applyCarouselSlideImageSrc = (slideIndex, src, altText = '') => {
+  const applyCarouselSlideImageSrc = (slideIndex, src, altText = '', tickerRow = null) => {
     onChange('carouselSlidePatch', {
       index: slideIndex,
+      ...(tickerRow === 'top' || tickerRow === 'bottom' ? { tickerRow } : {}),
       patch: {
         imageSrc: src,
         image: src,
@@ -222,8 +228,11 @@ export default function ContentPanel({
     reader.readAsDataURL(file);
   };
 
-  const handleCarouselSlideImageUpload = async (slideIndex, event) => {
-    const file = event.target.files?.[0];
+  const handleCarouselSlideImageUpload = async (slideIndex, tickerRowOrEvent, maybeEvent) => {
+    const tickerRow =
+      tickerRowOrEvent === 'top' || tickerRowOrEvent === 'bottom' ? tickerRowOrEvent : null;
+    const event = tickerRow ? maybeEvent : tickerRowOrEvent;
+    const file = event?.target?.files?.[0];
     if (!file) return;
     if (!file.type?.startsWith('image/')) {
       event.target.value = '';
@@ -232,7 +241,7 @@ export default function ContentPanel({
     if (canUseMedia) {
       try {
         const { publicUrl, alt } = await uploadImageFileToMedia(file, 'carousel');
-        applyCarouselSlideImageSrc(slideIndex, publicUrl, alt);
+        applyCarouselSlideImageSrc(slideIndex, publicUrl, alt, tickerRow);
         event.target.value = '';
         return;
       } catch {
@@ -242,7 +251,7 @@ export default function ContentPanel({
     const reader = new FileReader();
     reader.onload = () => {
       const src = typeof reader.result === 'string' ? reader.result : '';
-      applyCarouselSlideImageSrc(slideIndex, src, file.name.replace(/\.[^.]+$/, ''));
+      applyCarouselSlideImageSrc(slideIndex, src, file.name.replace(/\.[^.]+$/, ''), tickerRow);
       event.target.value = '';
     };
     reader.onerror = () => {
@@ -293,6 +302,13 @@ export default function ContentPanel({
     if (selectedNode.nodeType === 'tabs') return selectedNode;
     return nestedFeatureTabsNode || null;
   }, [selectedNode, nestedFeatureTabsNode]);
+
+  const tickerRowSlides = useMemo(() => {
+    if (!selectedNode || selectedNode.nodeType !== 'carousel' || form.carouselVariant !== 'ticker') {
+      return { topSlides: [], bottomSlides: [] };
+    }
+    return resolveDualTickerSlides(selectedNode.props);
+  }, [selectedNode, form.carouselVariant]);
 
   if (!selectedNode) {
     return (
@@ -884,12 +900,26 @@ export default function ContentPanel({
             <p className="bld-field-note">Variants</p>
           </div>
 
-          <div className="bld-field">
-            <label className="bld-label">Image upload</label>
-            <input type="file" accept="image/*" className="bld-input" onChange={handleCarouselQuickImageUpload} />
-            <p className="bld-field-note">Primary</p>
-          </div>
+          {!isTickerSlider ? (
+            <div className="bld-field">
+              <label className="bld-label">Image upload</label>
+              <input type="file" accept="image/*" className="bld-input" onChange={handleCarouselQuickImageUpload} />
+              <p className="bld-field-note">Primary</p>
+            </div>
+          ) : null}
 
+          {isTickerSlider ? (
+            <TickerDualRowSlidesEditor
+              topSlides={tickerRowSlides.topSlides}
+              bottomSlides={tickerRowSlides.bottomSlides}
+              onChange={onChange}
+              onSlideImageUpload={handleCarouselSlideImageUpload}
+              openMedia={openMedia}
+              canUseMedia={canUseMedia}
+            />
+          ) : null}
+
+          {!isTickerSlider ? (
           <div className="bld-field">
             <div className="bld-field-label-row">
               <span className="bld-label">Slides</span>
@@ -935,7 +965,9 @@ export default function ContentPanel({
               ))}
             </div>
           </div>
+          ) : null}
 
+          {!isTickerSlider ? (
           <div className="bld-field">
             <label className="bld-label">Slide editor</label>
             <p className="bld-field-note" style={{ marginTop: 0 }}>
@@ -1207,6 +1239,7 @@ export default function ContentPanel({
               ))}
             </div>
           </div>
+          ) : null}
 
           {isSplitHeroSlider ? (
             <>

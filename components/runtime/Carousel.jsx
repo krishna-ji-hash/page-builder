@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import FeatureTabCanvasField from '@/components/builder/canvas/FeatureTabCanvasField';
 import { liveCarouselSlideImageAttrs } from '@/lib/liveCarouselImageAttrs';
-import { resolveTickerScrollClasses } from '@/lib/carouselTickerShared';
+import { buildTickerDupSlides, resolveTickerScrollClasses } from '@/lib/carouselTickerShared';
+import { resolveDualTickerSlides } from '@/lib/carouselTickerRows';
 import { splitHeroCopyTypoFromProps, splitHeroCopyTypoToCssVars } from '@/lib/splitHeroCopyTypography';
 
 function clamp(n, min, max) {
@@ -390,17 +391,25 @@ export default function Carousel({
     return Math.max(8, Math.min(120, Number.isFinite(raw) ? raw : 32));
   }, [restProps?.tickerDurationSec, settings?.tickerDurationSec]);
 
-  const tickerDupSlides = useMemo(() => {
-    if (!safeSlides.length) return [];
-    const copies = 2;
-    const out = [];
-    for (let c = 0; c < copies; c += 1) {
-      safeSlides.forEach((s) => {
-        out.push({ slide: s, key: `${s.id}--t${c}` });
-      });
+  const { topSlides, bottomSlides } = useMemo(() => {
+    const topProp = restProps?.tickerSlidesTop ?? restProps?.slidesTop;
+    const bottomProp = restProps?.tickerSlidesBottom ?? restProps?.slidesBottom;
+    if (topProp != null || bottomProp != null) {
+      return {
+        topSlides: Array.isArray(topProp) ? topProp.map(normalizeSlide) : safeSlides,
+        bottomSlides: Array.isArray(bottomProp) ? bottomProp.map(normalizeSlide) : safeSlides,
+      };
     }
-    return out;
-  }, [safeSlides]);
+    const resolved = resolveDualTickerSlides({ slides: safeSlides });
+    return {
+      topSlides: resolved.topSlides.map((s, i) => normalizeSlide(s, i)),
+      bottomSlides: resolved.bottomSlides.map((s, i) => normalizeSlide(s, i)),
+    };
+  }, [safeSlides, restProps?.tickerSlidesTop, restProps?.tickerSlidesBottom, restProps?.slidesTop, restProps?.slidesBottom]);
+
+  const row1DupSlides = useMemo(() => buildTickerDupSlides(topSlides), [topSlides]);
+  const row2DupSlides = useMemo(() => buildTickerDupSlides(bottomSlides), [bottomSlides]);
+  const tickerDupSlides = row1DupSlides;
 
   const carouselScrollDirection = restProps?.scrollDirection ?? settings?.scrollDirection;
   const { row1TrackClass, row2TrackClass } = resolveTickerScrollClasses(variantKey, carouselScrollDirection);
@@ -458,7 +467,7 @@ export default function Carousel({
     };
   }, [instantTransition, index]);
 
-  if (!safeSlides.length) return null;
+  if (!safeSlides.length && !row1DupSlides.length && !row2DupSlides.length) return null;
 
   if (isTickerOrMarquee) {
     const ariaLabel = isMarqueeVariant ? 'Smooth logo marquee' : 'Logo ticker';
@@ -476,9 +485,10 @@ export default function Carousel({
         onMouseLeave={() => (cfg.pauseOnHover ? setIsPaused(false) : null)}
       >
         <div className={`live-carousel__ticker ${isMarqueeVariant ? 'live-carousel__ticker--single' : ''}`.trim()}>
+          {row1DupSlides.length ? (
           <div className="live-carousel__ticker-row">
             <div className={`live-carousel__ticker-track ${row1TrackClass}`.trim()}>
-              {tickerDupSlides.map(({ slide, key }, slideIndex) => (
+              {(isMarqueeVariant ? tickerDupSlides : row1DupSlides).map(({ slide, key }, slideIndex) => (
                 <div key={key} className="live-carousel__ticker-card">
                   {slide.imageSrc ? (
                     <img
@@ -495,10 +505,11 @@ export default function Carousel({
               ))}
             </div>
           </div>
-          {!isMarqueeVariant ? (
+          ) : null}
+          {!isMarqueeVariant && row2DupSlides.length ? (
             <div className="live-carousel__ticker-row">
               <div className={`live-carousel__ticker-track ${row2TrackClass}`.trim()}>
-                {tickerDupSlides.map(({ slide, key }, slideIndex) => (
+                {row2DupSlides.map(({ slide, key }, slideIndex) => (
                   <div key={`${key}-b`} className="live-carousel__ticker-card">
                     {slide.imageSrc ? (
                       <img

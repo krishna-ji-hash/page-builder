@@ -199,7 +199,15 @@ export default function AdvancedElementControls({
       <>
         <div className="bld-field">
           <label className="bld-label">Map embed URL</label>
-          <input className="bld-input" value={form.mapEmbedUrl || ''} onChange={(e) => onChange('mapEmbedUrl', e.target.value)} placeholder="Google Maps embed src" />
+          <input
+            className="bld-input"
+            value={form.mapEmbedUrl || ''}
+            onChange={(e) => onChange('mapEmbedUrl', e.target.value)}
+            placeholder="https://www.google.com/maps/embed?pb=…"
+          />
+          <p className="bld-field-note" style={{ marginTop: 6, marginBottom: 0 }}>
+            Paste the <strong>embed URL</strong> or the full <strong>&lt;iframe&gt;</strong> code from Google Maps → Share → Embed a map.
+          </p>
         </div>
         <div className="bld-field">
           <label className="bld-label">Address label</label>

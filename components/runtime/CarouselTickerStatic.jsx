@@ -6,6 +6,7 @@ import {
   tickerFallbackLabel,
   tickerSlideImgStyle,
 } from '@/lib/carouselTickerShared';
+import { resolveDualTickerSlides } from '@/lib/carouselTickerRows';
 import { liveCarouselSlideImageAttrs } from '@/lib/liveCarouselImageAttrs';
 
 /**
@@ -14,6 +15,8 @@ import { liveCarouselSlideImageAttrs } from '@/lib/liveCarouselImageAttrs';
  */
 export default function CarouselTickerStatic({
   slides = [],
+  slidesTop,
+  slidesBottom,
   variant = 'marquee',
   style,
   gap,
@@ -25,8 +28,17 @@ export default function CarouselTickerStatic({
     variantKey,
     scrollDirection
   );
-  const tickerDupSlides = buildTickerDupSlides(slides);
-  if (!tickerDupSlides.length) return null;
+  const { topSlides, bottomSlides } =
+    slidesTop != null || slidesBottom != null
+      ? {
+          topSlides: Array.isArray(slidesTop) ? slidesTop : slides,
+          bottomSlides: Array.isArray(slidesBottom) ? slidesBottom : slides,
+        }
+      : resolveDualTickerSlides({ slides });
+  const row1DupSlides = buildTickerDupSlides(topSlides);
+  const row2DupSlides = buildTickerDupSlides(bottomSlides);
+  const tickerDupSlides = isMarqueeVariant ? row1DupSlides : row1DupSlides;
+  if (!row1DupSlides.length && !row2DupSlides.length) return null;
 
   const gapPx = resolveTickerGapPx(gap);
   const durationSec = resolveTickerDurationSec(tickerDurationSec);
@@ -44,9 +56,10 @@ export default function CarouselTickerStatic({
       aria-label={ariaLabel}
     >
       <div className={`live-carousel__ticker ${isMarqueeVariant ? 'live-carousel__ticker--single' : ''}`.trim()}>
+        {row1DupSlides.length ? (
         <div className="live-carousel__ticker-row">
           <div className={`live-carousel__ticker-track ${row1TrackClass}`.trim()}>
-            {tickerDupSlides.map(({ slide, key }) => (
+            {(isMarqueeVariant ? tickerDupSlides : row1DupSlides).map(({ slide, key }) => (
               <div key={key} className="live-carousel__ticker-card">
                 {slide.imageSrc ? (
                   <img
@@ -62,10 +75,11 @@ export default function CarouselTickerStatic({
             ))}
           </div>
         </div>
-        {!isMarqueeVariant ? (
+        ) : null}
+        {!isMarqueeVariant && row2DupSlides.length ? (
           <div className="live-carousel__ticker-row">
             <div className={`live-carousel__ticker-track ${row2TrackClass}`.trim()}>
-              {tickerDupSlides.map(({ slide, key }, slideIndex) => (
+              {row2DupSlides.map(({ slide, key }, slideIndex) => (
                 <div key={`${key}-b`} className="live-carousel__ticker-card">
                   {slide.imageSrc ? (
                     <img

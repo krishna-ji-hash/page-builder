@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { normalizeMapEmbedUrl } from '@/lib/mapEmbedUrl';
 
 function normalizeEmbedUrl(raw) {
   const url = String(raw || '').trim();
@@ -187,9 +188,12 @@ export function LiveVideoEmbed({ embedUrl, title, aspectRatio = '16 / 9', classN
 
 export function LiveMapEmbed({ embedUrl, address, heightPx = 320, className = '' }) {
   const h = Math.max(160, Math.min(600, Number(heightPx) || 320));
-  const src = String(embedUrl || '').trim();
+  const src = useMemo(() => normalizeMapEmbedUrl(embedUrl), [embedUrl]);
   return (
-    <div className={`bld-el bld-el-map ${className}`.trim()} style={{ minHeight: `${h}px` }}>
+    <div
+      className={`bld-el bld-el-map ${className}`.trim()}
+      style={{ minHeight: `${h}px`, height: `${h}px` }}
+    >
       {src ? (
         <iframe src={src} title={address || 'Map'} loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
       ) : (

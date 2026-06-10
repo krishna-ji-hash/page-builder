@@ -180,6 +180,102 @@
   overflow: visible;
 }
 
+/* FAQ accordion — vertical stack (preview + builder parity; overrides stray row inline styles) */
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='faq']
+  .live-faq-accordion {
+  display: flex !important;
+  flex-direction: column !important;
+  flex-wrap: nowrap !important;
+  align-items: stretch !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='faq']
+  .live-faq-accordion__item {
+  flex: 0 0 auto !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='faq']
+  .live-faq-accordion--builder
+  .live-faq-accordion__builder-hint {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 0 12px !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='faq']
+  .live-faq-accordion__add-wrap {
+  width: 100% !important;
+  margin-top: 4px !important;
+  padding-top: 4px !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='faq']
+  .live-faq-accordion__add-btn {
+  width: 100% !important;
+  height: auto !important;
+}
+
+/* —— blogPreview (posts row + builder .bld-node-children hop) —— */
+:is(.live-doc, .bld-canvas__live-mirror)
+  :is(
+    [data-section-template='blogPreview'][data-tpl-role='items-host'],
+    [data-section-template='blogPreview'][data-bld-section-items='true'],
+    [data-section-template='blogPreview'] [data-tpl-role='items-host'],
+    [data-section-template='blogPreview'] [data-bld-section-items='true'],
+    [data-section-template='blogPreview'] .live-node.bld-stack:has(> .bld-node-children > [data-tpl-role='blog-card']),
+    [data-section-template='blogPreview'] .live-node.bld-stack:has(> [data-tpl-role='blog-card'])
+  ) {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  align-items: stretch !important;
+  width: 100% !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  :is(
+    [data-section-template='blogPreview'][data-tpl-role='items-host'],
+    [data-section-template='blogPreview'][data-bld-section-items='true'],
+    [data-section-template='blogPreview'] [data-tpl-role='items-host'],
+    [data-section-template='blogPreview'] [data-bld-section-items='true'],
+    [data-section-template='blogPreview'] .live-node.bld-stack:has(> .bld-node-children > [data-tpl-role='blog-card']),
+    [data-section-template='blogPreview'] .live-node.bld-stack:has(> [data-tpl-role='blog-card'])
+  )
+  > :is(
+    .live-node.bld-stack[data-tpl-role='blog-card'],
+    .bld-node__shell.bld-stack[data-tpl-role='blog-card'],
+    .bld-node-children > .live-node.bld-stack[data-tpl-role='blog-card'],
+    .bld-node-children > .bld-node__shell.bld-stack[data-tpl-role='blog-card']
+  ) {
+  flex: 1 1 calc(33.333% - 14px) !important;
+  max-width: calc(33.333% - 10px) !important;
+  width: auto !important;
+  min-width: min(100%, 220px) !important;
+  align-self: stretch !important;
+}
+
+.live-doc[data-bld-device='desktop']
+  :is(
+    [data-section-template='blogPreview'][data-tpl-role='items-host'],
+    [data-section-template='blogPreview'] [data-tpl-role='items-host'],
+    [data-section-template='blogPreview'][data-bld-section-items='true'],
+    [data-section-template='blogPreview'] [data-bld-section-items='true']
+  ) {
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+}
+
 /* —— resourcesBlogs —— */
 :is(.live-doc, .bld-canvas__live-mirror)
   > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='resourcesBlogs'] {

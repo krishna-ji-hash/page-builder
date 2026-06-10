@@ -57,6 +57,7 @@ import {
   canRenderBuilderLeafViaLive,
   wrapBuilderLeafForInlineEdit,
 } from '@/lib/builderLiveParity';
+import { getWidgetPickerEntries } from '@/lib/builder/widgetRegistry';
 import { renderNode } from '@/lib/liveRenderer';
 import HeaderBrandLogo from '@/components/runtime/HeaderBrandLogo';
 import {
@@ -98,6 +99,15 @@ import { bindInteractionObservers } from '@/lib/interactionScrollRuntime';
 import { bindHeaderBehaviorScroll } from '@/lib/headerBehaviorScroll';
 import { interactionPresentationClass, resolveLeafInteractionShell, deviceStyleForInteractionPreview } from '@/lib/nodeInteractionCss';
 import { getDeviceStyle, sanitizeInlineMarginCss, styleToCss } from '@/lib/styleToCss';
+import {
+  applySectionLayoutToDeviceStyle,
+  applySectionItemsChildToDeviceStyle,
+  getSectionLayoutClasses,
+  normalizeSectionLayout,
+  nodeIsSectionItemsHost,
+  sectionLayoutDataAttrs,
+} from '@/lib/sectionLayout';
+import { liveResponsiveLayoutClasses } from '@/lib/liveResponsiveClasses';
 import { useBuilderTheme } from '@/context/BuilderThemeContext';
 import { mergeNodeStyleWithSiteTheme, normalizeSiteTheme, siteThemeToCssVariableStyle } from '@/lib/siteDesignTheme';
 import { alignThemeTokensWithSiteTheme, themeTokensToCssVariableStyle } from '@/lib/themeTokens';
@@ -1153,6 +1163,12 @@ function NodeRenderer({
   insideSiteHeaderRow = false,
   builderPageId = null,
   builderProjectId = null,
+  /** Section row layout preset — passed to `sectionItemsHost` stacks (parity with liveRenderer). */
+  sectionLayout = null,
+  sectionTemplateId = null,
+  /** Direct child of a section items host (blog/pricing/team card row). */
+  insideSectionItemsHost = false,
+  parentSectionLayout = null,
 }) {
   const isSelected = node.id === selectedNodeId;
   const pendingTextEditPointerRef = useRef(null);
@@ -1588,7 +1604,10 @@ function NodeRenderer({
   const shellCarriesLeafLayout = isContainer || isDividerLeaf;
   const compoundFullWidthShell =
     !shellCarriesLeafLayout &&
-    (node.nodeType === 'stats_counter' || node.nodeType === 'tab_hero' || node.nodeType === 'tabs');
+    (node.nodeType === 'stats_counter' ||
+      node.nodeType === 'tab_hero' ||
+      node.nodeType === 'tabs' ||
+      node.nodeType === 'accordion');
   const selKind =
     isSelected && node.nodeType === 'row'
       ? 'bld-sel-section'
@@ -1614,41 +1633,6 @@ function NodeRenderer({
       : { style: {}, attrs: {} };
   const headerBehaviorClass =
     rowHeaderBehavior ? headerBehaviorCssClasses(rowHeaderBehavior) : '';
-  const classNames = [
-    ...(usesLiveNodeClass ? ['live-node'] : []),
-    node.nodeType === 'row'
-      ? 'bld-row'
-      : node.nodeType === 'column'
-        ? 'bld-column'
-        : node.nodeType === 'stack'
-          ? 'bld-stack'
-          : 'bld-block',
-    headerBarClasses,
-    headerBehaviorClass,
-    selKind,
-    isSelected ? 'is-selected' : '',
-    isDragging ? 'is-dragging' : '',
-    flashPasteNodeId === node.id ? 'bld-node--paste-flash' : '',
-    flashReorderNodeId === node.id ? 'bld-node--reorder-flash' : '',
-    deletingNodeId === node.id ? 'bld-node--deleting' : '',
-    isInlineEditing ||
-    isRichTextEditing ||
-    ((node.nodeType === 'tabs' || node.nodeType === 'tab_hero' || node.nodeType === 'stats_counter') &&
-      isFeatureTabFieldEditing)
-      ? 'bld-node--editing-focus'
-      : '',
-    sectionEditLocked ? 'bld-node--section-locked' : '',
-    node.nodeType === 'image' ? 'bld-block--image' : '',
-    node.nodeType === 'image' && nodeLooksLikeBrandLogo(node) ? 'bld-block--brand-logo' : '',
-    node.nodeType === 'carousel' ? 'bld-block--carousel' : '',
-    node.nodeType === 'stats_counter' ? 'bld-block--stats-counter' : '',
-    node.nodeType === 'tab_hero' ? 'bld-block--tab-hero' : '',
-    isSplitHeroCarouselNode(node) ? 'bld-block--split-hero-carousel' : '',
-    isDividerLeaf ? 'live-divider bld-divider-shell' : '',
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .trim();
   const [inlineDraftText, setInlineDraftText] = useState('');
   const [inlinePanelText, setInlinePanelText] = useState('');
   const [inlinePanelImageSrc, setInlinePanelImageSrc] = useState('');
@@ -1751,6 +1735,89 @@ function NodeRenderer({
   const surfaceReady = neutralizeLightSurfaceDeviceStyle(rawDevice, siteTheme, alignedContentTokens, node);
   const themed = mergeNodeStyleWithSiteTheme(surfaceReady, siteTheme, node.nodeType, { treeNode: node });
   const gapReady = withResolvedLayoutGap(themed, siteTheme);
+  const nodeMetaForLayout =
+    node.props?.meta && typeof node.props.meta === 'object' ? node.props.meta : {};
+  const rowMetaForLayout = node.nodeType === 'row' ? nodeMetaForLayout : {};
+  const sectionTemplateIdForLayout =
+    (node.nodeType === 'row' && rowMetaForLayout.sectionTemplate && String(rowMetaForLayout.sectionTemplate)) ||
+    sectionTemplateId ||
+    '';
+  const isSectionItemsHost = node.nodeType === 'stack' && nodeIsSectionItemsHost(node);
+  const layoutConfigSource =
+    isSectionItemsHost
+      ? sectionLayout
+      : node.nodeType === 'row' && rowMetaForLayout.sectionTemplate
+        ? rowMetaForLayout.sectionLayout
+        : sectionLayout;
+  const activeSectionLayout =
+    layoutConfigSource != null || sectionTemplateIdForLayout
+      ? normalizeSectionLayout(layoutConfigSource, sectionTemplateIdForLayout)
+      : null;
+  const shouldApplySectionLayout =
+    activeSectionLayout &&
+    (isSectionItemsHost || (node.nodeType === 'row' && nodeMetaForLayout.sectionColumnLayout));
+  let layoutReady = gapReady;
+  if (shouldApplySectionLayout) {
+    layoutReady = applySectionLayoutToDeviceStyle(gapReady, activeSectionLayout, device);
+  }
+  const isSectionColumnRow = node.nodeType === 'row' && Boolean(nodeMetaForLayout.sectionColumnLayout);
+  const layoutForChrome =
+    activeSectionLayout && (isSectionItemsHost || isSectionColumnRow) ? activeSectionLayout : null;
+  const sectionLayoutClass = layoutForChrome ? getSectionLayoutClasses(layoutForChrome) : '';
+  const sectionLayoutAttr = isSectionItemsHost && layoutForChrome ? sectionLayoutDataAttrs(layoutForChrome) : {};
+  const sectionColumnAttrs =
+    isSectionColumnRow && layoutForChrome
+      ? {
+          'data-bld-section-columns': 'true',
+          'data-bld-layout-direction': layoutForChrome.direction,
+          'data-bld-layout-mobile-stack': layoutForChrome.mobileStack ? 'true' : 'false',
+        }
+      : {};
+  const childSectionLayout =
+    node.nodeType === 'row' && rowMetaForLayout.sectionTemplate
+      ? normalizeSectionLayout(rowMetaForLayout.sectionLayout, rowMetaForLayout.sectionTemplate)
+      : sectionLayout;
+  const childSectionTemplateId =
+    node.nodeType === 'row' && rowMetaForLayout.sectionTemplate
+      ? String(rowMetaForLayout.sectionTemplate)
+      : sectionTemplateId;
+  const classNames = [
+    ...(usesLiveNodeClass ? ['live-node'] : []),
+    node.nodeType === 'row'
+      ? 'bld-row'
+      : node.nodeType === 'column'
+        ? 'bld-column'
+        : node.nodeType === 'stack'
+          ? 'bld-stack'
+          : 'bld-block',
+    sectionLayoutClass,
+    liveResponsiveLayoutClasses(node.style_json),
+    headerBarClasses,
+    headerBehaviorClass,
+    selKind,
+    isSelected ? 'is-selected' : '',
+    isDragging ? 'is-dragging' : '',
+    flashPasteNodeId === node.id ? 'bld-node--paste-flash' : '',
+    flashReorderNodeId === node.id ? 'bld-node--reorder-flash' : '',
+    deletingNodeId === node.id ? 'bld-node--deleting' : '',
+    isInlineEditing ||
+    isRichTextEditing ||
+    ((node.nodeType === 'tabs' || node.nodeType === 'tab_hero' || node.nodeType === 'stats_counter') &&
+      isFeatureTabFieldEditing)
+      ? 'bld-node--editing-focus'
+      : '',
+    sectionEditLocked ? 'bld-node--section-locked' : '',
+    node.nodeType === 'image' ? 'bld-block--image' : '',
+    node.nodeType === 'image' && nodeLooksLikeBrandLogo(node) ? 'bld-block--brand-logo' : '',
+    node.nodeType === 'carousel' ? 'bld-block--carousel' : '',
+    node.nodeType === 'stats_counter' ? 'bld-block--stats-counter' : '',
+    node.nodeType === 'tab_hero' ? 'bld-block--tab-hero' : '',
+    isSplitHeroCarouselNode(node) ? 'bld-block--split-hero-carousel' : '',
+    isDividerLeaf ? 'live-divider bld-divider-shell' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
   let deviceStyle = finalizeLeafDeviceStyle(
     node,
     device,
@@ -1759,11 +1826,11 @@ function NodeRenderer({
       node.nodeType === 'menu'
         ? mergeMenuDeviceStyle(
             node.props?.orientation === 'column' ? 'column' : 'row',
-            gapReady,
+            layoutReady,
             { align: node.props?.align },
             siteTheme
           )
-        : gapReady,
+        : layoutReady,
       { treeNode: node }
     )
   );
@@ -1771,7 +1838,12 @@ function NodeRenderer({
   const compactHeaderBar =
     (device === 'mobile' || device === 'tablet') && (siteHeaderRow || insideSiteHeaderRow);
   deviceStyle = applyCompactHeaderDeviceStyle(node, device, deviceStyle, insideSiteHeaderRow);
+  if (insideSectionItemsHost && parentSectionLayout && node.nodeType === 'stack') {
+    deviceStyle = applySectionItemsChildToDeviceStyle(deviceStyle, parentSectionLayout, device);
+  }
   const childInsideSiteHeaderRow = insideSiteHeaderRow || siteHeaderRow;
+  const childInsideSectionItemsHost = isSectionItemsHost;
+  const childParentSectionLayout = layoutForChrome || activeSectionLayout || parentSectionLayout;
   const externalPreviewRawEarly = previewCssByNodeId?.[node.id] || null;
   const previewIx = previewIxByNodeId?.[node.id];
   const deviceStyleWithPreviewIx = previewIx
@@ -4899,6 +4971,7 @@ function NodeRenderer({
           {...rowPaddingDefinedAttrs}
           {...sectionToneAttrs}
           {...sectionTemplateDataAttrsForRow(node)}
+          {...sectionColumnAttrs}
           {...(node.props?.meta?.isHeader ||
           node.props?.meta?.role === 'header' ||
           isSiteHeaderRowForCompact(node)
@@ -5110,6 +5183,10 @@ function NodeRenderer({
                     builderPageId={builderPageId}
                     builderProjectId={builderProjectId}
                     formPreviewByNodeId={formPreviewByNodeId}
+                    sectionLayout={childSectionLayout}
+                    sectionTemplateId={childSectionTemplateId}
+                    insideSectionItemsHost={childInsideSectionItemsHost}
+                    parentSectionLayout={childParentSectionLayout}
                   />
                 ))}
               </div>
@@ -5126,6 +5203,8 @@ function NodeRenderer({
           data-bld-node={node.id}
           {...sectionToneAttrs}
           {...builderSectionTemplateAttrs}
+          {...sectionLayoutAttr}
+          {...sectionColumnAttrs}
           {...tplRoleAttrs}
           {...(isImageLeaf && (imageAlignAxes.horizontal || imageAlignAxes.vertical)
             ? {
@@ -5747,6 +5826,10 @@ function NodeRenderer({
                     insideSiteHeaderRow={childInsideSiteHeaderRow}
                     builderPageId={builderPageId}
                     builderProjectId={builderProjectId}
+                    sectionLayout={childSectionLayout}
+                    sectionTemplateId={childSectionTemplateId}
+                    insideSectionItemsHost={childInsideSectionItemsHost}
+                    parentSectionLayout={childParentSectionLayout}
                   />
                 ))}
               </div>
@@ -6200,15 +6283,10 @@ export default function BuilderCanvas({
     []
   );
 
-  const allowedWidgets = useMemo(() => {
-    if (projectType === 'dashboard' || projectType === 'app') {
-      return ['heading', 'text', 'rich_text', 'image', 'button', 'menu', 'table', 'carousel'];
-    }
-    if (projectType === 'admin') {
-      return ['heading', 'text', 'rich_text', 'image', 'button', 'menu', 'table', 'form', 'carousel'];
-    }
-    return ['heading', 'text', 'rich_text', 'image', 'button', 'menu', 'carousel'];
-  }, [projectType]);
+  const widgetPickerEntries = useMemo(
+    () => getWidgetPickerEntries(projectType || 'website'),
+    [projectType]
+  );
 
   useEffect(() => {
     const handleKeyDelete = (event) => {
@@ -6817,7 +6895,7 @@ export default function BuilderCanvas({
           setIsWidgetPickerOpen(false);
           setWidgetPickerTargetId(null);
         }}
-        allowedWidgets={allowedWidgets}
+        widgetEntries={widgetPickerEntries}
         isBusy={isCreatingNode}
         onSelect={async (widgetNodeType) => {
           if (!widgetPickerTargetId) return;

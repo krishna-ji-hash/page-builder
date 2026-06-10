@@ -52,6 +52,12 @@ import {
 } from '@/lib/advancedElementInspector';
 import { appendFaqItem, normalizeFaqItems, patchFaqItems, removeFaqItemAt } from '@/lib/faqAccordionDefaults';
 import {
+  ensureTickerRowSlideArrays,
+  getTickerSlidesForRow,
+  splitLegacySlidesForTicker,
+  tickerRowSlidesKey,
+} from '@/lib/carouselTickerRows';
+import {
   appendStatsCounterItem,
   patchStatsCounterItem,
   removeStatsCounterItemAt,
@@ -2565,7 +2571,10 @@ export default function BuilderInspector({
         pendingCarouselVariantRef.current = { value: v, ts: Date.now() };
         const extra =
           v === 'ticker'
-            ? { scrollDirection: 'opposite' }
+            ? {
+                scrollDirection: 'opposite',
+                ...splitLegacySlidesForTicker(selectedNode.props?.slides),
+              }
             : v === 'marquee'
               ? { scrollDirection: 'right' }
               : {};
@@ -2777,25 +2786,52 @@ export default function BuilderInspector({
         const payload = value && typeof value === 'object' ? value : null;
         const from = Number(payload?.from);
         const to = Number(payload?.to);
-        const current = Array.isArray(selectedNode.props?.slides) ? selectedNode.props.slides : [];
+        const tickerRow =
+          payload?.tickerRow === 'top' || payload?.tickerRow === 'bottom' ? payload.tickerRow : null;
+        const variantKey = String(selectedNode.props?.variant ?? selectedNode.props?.settings?.variant ?? 'image');
+        const useTickerRow = variantKey === 'ticker' && tickerRow;
+        const current = useTickerRow
+          ? getTickerSlidesForRow(selectedNode.props, tickerRow)
+          : Array.isArray(selectedNode.props?.slides)
+            ? selectedNode.props.slides
+            : [];
         if (!Number.isInteger(from) || !Number.isInteger(to) || from === to) return;
         if (from < 0 || from >= current.length || to < 0 || to >= current.length) return;
         const next = [...current];
         const [moved] = next.splice(from, 1);
         next.splice(to, 0, moved);
-        await updateProps({ slides: next });
-        setForm((prevForm) => ({ ...prevForm, carouselSlidesJson: JSON.stringify(next, null, 2) }));
+        if (useTickerRow) {
+          const rowPatch = ensureTickerRowSlideArrays(selectedNode.props);
+          rowPatch[tickerRowSlidesKey(tickerRow)] = next.map((s, i) => normalizeCarouselSlide(s, i));
+          rowPatch.slides = rowPatch.tickerSlidesTop;
+          await updateProps(rowPatch);
+        } else {
+          await updateProps({ slides: next });
+          setForm((prevForm) => ({ ...prevForm, carouselSlidesJson: JSON.stringify(next, null, 2) }));
+        }
         return;
       }
       if (key === 'carouselAddSlide') {
-        const current = Array.isArray(selectedNode.props?.slides) ? selectedNode.props.slides : [];
+        const tickerRow =
+          value === 'top' || value === 'bottom'
+            ? value
+            : value && typeof value === 'object' && (value.tickerRow === 'top' || value.tickerRow === 'bottom')
+              ? value.tickerRow
+              : null;
+        const variantKey = String(selectedNode.props?.variant ?? selectedNode.props?.settings?.variant ?? 'image');
+        const useTickerRow = variantKey === 'ticker' && tickerRow;
+        const current = useTickerRow
+          ? getTickerSlidesForRow(selectedNode.props, tickerRow)
+          : Array.isArray(selectedNode.props?.slides)
+            ? selectedNode.props.slides
+            : [];
         const next = [
           ...current,
           normalizeCarouselSlide(
             {
               id: `slide-${current.length + 1}`,
-              title: `Slide title`,
-              subtitle: 'Slide subtitle',
+              title: `Logo ${current.length + 1}`,
+              subtitle: '',
               body: '',
               image: '',
               imageSrc: '',
@@ -2808,8 +2844,15 @@ export default function BuilderInspector({
             current.length
           ),
         ];
-        await updateProps({ slides: next });
-        setForm((prevForm) => ({ ...prevForm, carouselSlidesJson: JSON.stringify(next, null, 2) }));
+        if (useTickerRow) {
+          const rowPatch = ensureTickerRowSlideArrays(selectedNode.props);
+          rowPatch[tickerRowSlidesKey(tickerRow)] = next.map((s, i) => normalizeCarouselSlide(s, i));
+          rowPatch.slides = rowPatch.tickerSlidesTop;
+          await updateProps(rowPatch);
+        } else {
+          await updateProps({ slides: next });
+          setForm((prevForm) => ({ ...prevForm, carouselSlidesJson: JSON.stringify(next, null, 2) }));
+        }
         return;
       }
       if (key === 'carouselEnsureSlide0Image') {
@@ -2845,27 +2888,58 @@ export default function BuilderInspector({
         return;
       }
       if (key === 'carouselRemoveSlide') {
-        const idx = Number(value);
-        const current = Array.isArray(selectedNode.props?.slides) ? selectedNode.props.slides : [];
+        const payload = value && typeof value === 'object' ? value : { index: value };
+        const idx = Number(payload?.index ?? value);
+        const tickerRow =
+          payload?.tickerRow === 'top' || payload?.tickerRow === 'bottom' ? payload.tickerRow : null;
+        const variantKey = String(selectedNode.props?.variant ?? selectedNode.props?.settings?.variant ?? 'image');
+        const useTickerRow = variantKey === 'ticker' && tickerRow;
+        const current = useTickerRow
+          ? getTickerSlidesForRow(selectedNode.props, tickerRow)
+          : Array.isArray(selectedNode.props?.slides)
+            ? selectedNode.props.slides
+            : [];
         if (!Number.isInteger(idx) || idx < 0 || idx >= current.length) return;
         const next = current.filter((_, i) => i !== idx);
-        await updateProps({ slides: next });
-        setForm((prevForm) => ({ ...prevForm, carouselSlidesJson: JSON.stringify(next, null, 2) }));
+        if (useTickerRow) {
+          const rowPatch = ensureTickerRowSlideArrays(selectedNode.props);
+          rowPatch[tickerRowSlidesKey(tickerRow)] = next.map((s, i) => normalizeCarouselSlide(s, i));
+          rowPatch.slides = rowPatch.tickerSlidesTop;
+          await updateProps(rowPatch);
+        } else {
+          await updateProps({ slides: next });
+          setForm((prevForm) => ({ ...prevForm, carouselSlidesJson: JSON.stringify(next, null, 2) }));
+        }
         return;
       }
       if (key === 'carouselSlidePatch') {
         const payload = value && typeof value === 'object' ? value : null;
         const idx = Number(payload?.index);
         const patch = payload?.patch && typeof payload.patch === 'object' ? payload.patch : null;
-        const current = Array.isArray(selectedNode.props?.slides) ? selectedNode.props.slides : [];
+        const tickerRow =
+          payload?.tickerRow === 'top' || payload?.tickerRow === 'bottom' ? payload.tickerRow : null;
+        const variantKey = String(selectedNode.props?.variant ?? selectedNode.props?.settings?.variant ?? 'image');
+        const useTickerRow = variantKey === 'ticker' && tickerRow;
+        const current = useTickerRow
+          ? getTickerSlidesForRow(selectedNode.props, tickerRow)
+          : Array.isArray(selectedNode.props?.slides)
+            ? selectedNode.props.slides
+            : [];
         if (!Number.isInteger(idx) || idx < 0 || idx >= current.length || !patch) return;
         const prevNorm = normalizeCarouselSlide(current[idx], idx);
         const merged = { ...(current[idx] || {}), ...(patch || {}) };
         const nextNorm = normalizeCarouselSlide(merged, idx);
         if (JSON.stringify(prevNorm) === JSON.stringify(nextNorm)) return;
         const next = current.map((s, i) => (i === idx ? nextNorm : normalizeCarouselSlide(s, i)));
-        await updateProps({ slides: next });
-        setForm((prevForm) => ({ ...prevForm, carouselSlidesJson: JSON.stringify(next, null, 2) }));
+        if (useTickerRow) {
+          const rowPatch = ensureTickerRowSlideArrays(selectedNode.props);
+          rowPatch[tickerRowSlidesKey(tickerRow)] = next;
+          rowPatch.slides = rowPatch.tickerSlidesTop;
+          await updateProps(rowPatch);
+        } else {
+          await updateProps({ slides: next });
+          setForm((prevForm) => ({ ...prevForm, carouselSlidesJson: JSON.stringify(next, null, 2) }));
+        }
         return;
       }
     }
