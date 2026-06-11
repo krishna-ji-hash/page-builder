@@ -16,6 +16,7 @@
 @import '../shared/live-header-stack.css';
 @import '../shared/rich-text-controls.css';
 @import '../shared/content-composer.css';
+@import '../shared/image-leaf.css';
 
 .live-site {
   min-height: 100vh;
@@ -301,13 +302,20 @@
   }
 
   .live-doc:not([data-bld-device]) figure.live-fluid-image img,
-  .live-doc:not([data-bld-device]) figure.live-node img,
   .live-doc[data-bld-device='mobile'] figure.live-fluid-image img,
-  .live-doc[data-bld-device='mobile'] figure.live-node img,
-  .live-doc[data-bld-device='tablet'] figure.live-fluid-image img,
-  .live-doc[data-bld-device='tablet'] figure.live-node img {
+  .live-doc[data-bld-device='tablet'] figure.live-fluid-image img {
     max-width: 100% !important;
     width: 100% !important;
+    height: auto !important;
+    object-fit: contain !important;
+    object-position: center;
+  }
+
+  .live-doc:not([data-bld-device]) figure.live-image-stable:not(.live-fluid-image) img,
+  .live-doc[data-bld-device='mobile'] figure.live-image-stable:not(.live-fluid-image) img,
+  .live-doc[data-bld-device='tablet'] figure.live-image-stable:not(.live-fluid-image) img {
+    max-width: 100% !important;
+    width: auto !important;
     height: auto !important;
     object-fit: contain !important;
     object-position: center;
@@ -1360,8 +1368,20 @@
   animation: live-carousel-ticker-rtl var(--ticker-duration, 32s) linear infinite;
 }
 .live-carousel--ticker.is-paused .live-carousel__ticker-track--ltr,
-.live-carousel--ticker.is-paused .live-carousel__ticker-track--rtl {
+.live-carousel--ticker.is-paused .live-carousel__ticker-track--rtl,
+.live-carousel--ticker.live-carousel--pause-hover:hover .live-carousel__ticker-track--ltr,
+.live-carousel--ticker.live-carousel--pause-hover:hover .live-carousel__ticker-track--rtl {
   animation-play-state: paused;
+}
+
+.live-carousel--logo-hover-zoom .live-carousel__ticker-img,
+.live-carousel--logo-hover-zoom .live-carousel__slide .live-carousel__img {
+  transition: transform 0.22s ease;
+  transform-origin: center center;
+}
+.live-carousel--logo-hover-zoom .live-carousel__ticker-card:hover .live-carousel__ticker-img,
+.live-carousel--logo-hover-zoom .live-carousel__slide:hover .live-carousel__img {
+  transform: scale(var(--carousel-logo-hover-scale, 1.08));
 }
 
 @keyframes live-carousel-ticker-ltr {
@@ -1540,8 +1560,14 @@
   max-width: 100%;
 }
 
-.live-site figure.live-image-stable > img {
+.live-site figure.live-image-stable.live-fluid-image > img {
   width: 100%;
+  height: auto;
+}
+
+.live-site figure.live-image-stable:not(.live-fluid-image) > img {
+  width: auto;
+  max-width: 100%;
   height: auto;
 }
 

@@ -13,6 +13,8 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import { isValidNodeHierarchy } from '@/lib/builderHierarchy';
+import { effectiveDropValidationParent, resolveHierarchyAwareDrop } from '@/lib/resolveHierarchyAwareDrop';
+import { columnHasOnlyPlaceholderStacks } from '@/lib/sectionTemplateInsert';
 import {
   canonicalNodeId,
   computeMoveDown,
@@ -199,6 +201,7 @@ import {
 } from '@/lib/headerCompactLayout';
 import {
   buildImageAlignStylePatch,
+  buildVerticalAlignContainerPatches,
   getImageParentFlexDirection,
   mapImageObjectPositionCss,
   readImageAlignAxes,
@@ -271,6 +274,14 @@ function WpIconAlignBottom() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width={20} height={20} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
       <path d="M12 20l6-6h-4V4h-4v10H6l6 6z" />
+    </svg>
+  );
+}
+
+function WpIconAlignMiddle() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={20} height={20} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M4 7h16v2H4V7zm0 8h16v2H4v-2zM11 10h2v4h-2v-4z" />
     </svg>
   );
 }
@@ -876,8 +887,9 @@ function DropZone({
   showLabel = true,
   className = '',
 }) {
+  const effectiveParentType = effectiveDropValidationParent(validationParentType, draggingNodeType);
   const invalidWhileDragging =
-    draggingNodeType && !isValidNodeHierarchy(draggingNodeType, validationParentType ?? null);
+    draggingNodeType && !isValidNodeHierarchy(draggingNodeType, effectiveParentType ?? null);
   const disabled = isDisabled || invalidWhileDragging;
 
   const { isOver, setNodeRef } = useDroppable({ id, disabled });
@@ -1121,6 +1133,7 @@ function NodeRenderer({
   onUpdateNode,
   onCreateNode,
   onQuickAddNode,
+  onFulfillDropTarget,
   onDuplicateNode,
   onReorderNode,
   isReorderingNode,
@@ -2155,6 +2168,9 @@ function NodeRenderer({
   const linkedMeta = isRow ? getGlobalLinkMeta(node) : null;
   const isLinkedGlobal = Boolean(linkedMeta);
   const isRowEmpty = isRow && !node.children?.length;
+  const isColumnEffectivelyEmpty =
+    node.nodeType === 'column' &&
+    (!node.children?.length || columnHasOnlyPlaceholderStacks(node));
   const isDirectionalContainer = node.nodeType === 'column' || node.nodeType === 'stack';
   const supportsDirectManipulation = true;
 
@@ -4171,6 +4187,42 @@ function NodeRenderer({
         },
       },
     });
+
+    if (axis !== 'vertical') return;
+
+    const verticalSlot = String(slot || '').toLowerCase().trim();
+    const { stackId, columnId, stackPatch, columnPatch } = buildVerticalAlignContainerPatches(
+      tree,
+      node.id,
+      verticalSlot
+    );
+    if (!stackId || !stackPatch) return;
+
+    const patchContainerStyle = async (containerId, patch) => {
+      const container = findNodeInTree(tree, containerId);
+      if (!container?.id) return;
+      let containerStyleJson = container.style_json;
+      for (const d of ['desktop', 'tablet', 'mobile']) {
+        const next = applyDeviceStylePatch(
+          containerStyleJson,
+          d,
+          withFlexWidthOverride(container.nodeType, patch),
+          container.nodeType,
+          siteTheme
+        );
+        containerStyleJson = next.style_json;
+      }
+      await onUpdateNode({
+        nodeId: container.id,
+        payload: { style_json: containerStyleJson },
+        skipHistorySnapshot: true,
+      });
+    };
+
+    await patchContainerStyle(stackId, stackPatch);
+    if (columnId && columnPatch) {
+      await patchContainerStyle(columnId, columnPatch);
+    }
   };
 
   const quickImageFullWidth = async () => {
@@ -4632,8 +4684,9 @@ function NodeRenderer({
             onSetContainerDirection,
             onUpdateNode,
             onCreateNode,
-            onQuickAddNode,
-            onDuplicateNode,
+  onQuickAddNode,
+  onFulfillDropTarget,
+  onDuplicateNode,
             onReorderNode,
             isReorderingNode,
             isCreatingNode,
@@ -5563,6 +5616,7 @@ function NodeRenderer({
                           { axis: 'horizontal', slot: 'center', Icon: WpIconAlignCenter, label: 'Center' },
                           { axis: 'horizontal', slot: 'right', Icon: WpIconAlignRight, label: 'Right' },
                           { axis: 'vertical', slot: 'top', Icon: WpIconAlignTop, label: 'Top' },
+                          { axis: 'vertical', slot: 'center', Icon: WpIconAlignMiddle, label: 'Middle' },
                           { axis: 'vertical', slot: 'bottom', Icon: WpIconAlignBottom, label: 'Bottom' },
                         ].map(({ axis, slot, Icon, label }, index, arr) => {
                           const active =
@@ -5721,13 +5775,13 @@ function NodeRenderer({
                 showLabel={Boolean(draggingNodeType)}
               />
             ) : null}
-            {isContainer && !node.children?.length ? (
+            {isContainer && (node.nodeType === 'column' ? isColumnEffectivelyEmpty : !node.children?.length) ? (
               <div className="bld-node-empty" onPointerDown={stopDragBubble}>
                 <p className="bld-node-empty__text">
                   {node.nodeType === 'row'
                     ? 'This section is empty. Start by adding columns, then place elements inside.'
                     : node.nodeType === 'column'
-                      ? 'This column is empty. Add a stack or drop elements here.'
+                      ? 'This column is empty. Drop elements here or use + Add element.'
                       : node.nodeType === 'stack'
                         ? 'This stack is empty. Drop in a heading, text, image, or button to get started.'
                         : `Empty ${node.nodeType}. Add content to start building.`}
@@ -5755,7 +5809,8 @@ function NodeRenderer({
                 <p className="bld-node-empty__hint">Move, duplicate, and delete live in the toolbar; use ⋯ for more.</p>
               </div>
             ) : null}
-            {node.children?.length ? (
+            {node.children?.length &&
+            !(node.nodeType === 'column' && isColumnEffectivelyEmpty) ? (
               <div className="bld-node-children">
                 {node.children.map((childNode) => (
                   <NodeRenderer
@@ -5970,6 +6025,7 @@ export default function BuilderCanvas({
   isLoading,
   onCreateNode,
   onQuickAddNode,
+  onFulfillDropTarget,
   isCreatingNode = false,
   onReorderNode,
   isReorderingNode,
@@ -6363,9 +6419,26 @@ export default function BuilderCanvas({
     const overId = event.over?.id;
     if (activeNodeId == null || overId == null) return;
 
-    const payload = computeReorderFromDrop(tree, activeNodeId, overId);
-    if (!payload) return;
-    if (!validateResolvedDrop(tree, activeNodeId, payload)) return;
+    const resolvePayload = async (sourceTree) => {
+      const resolved = resolveHierarchyAwareDrop(sourceTree, activeNodeId, overId);
+      if (!resolved) return null;
+      if (resolved.needsFulfill && onFulfillDropTarget) {
+        const fulfilled = await onFulfillDropTarget(resolved.insertTarget);
+        if (!fulfilled?.parentId) return null;
+        return {
+          newParentId: fulfilled.parentId,
+          newIndex:
+            Number.isInteger(fulfilled.insertIndex) && fulfilled.insertIndex >= 0
+              ? fulfilled.insertIndex
+              : 0,
+        };
+      }
+      if (resolved.needsFulfill) return null;
+      return resolved;
+    };
+
+    const payload = await resolvePayload(tree);
+    if (!payload || !validateResolvedDrop(tree, activeNodeId, payload)) return;
 
     if (wantAltDuplicate && onDuplicateNode) {
       void (async () => {
@@ -6373,7 +6446,21 @@ export default function BuilderCanvas({
         const newId = dup?.duplicatedNodeId;
         if (!newId) return;
         const baseTree = dup.tree || tree;
-        const payloadDup = computeReorderFromDrop(baseTree, newId, overId);
+        const resolvedDup = resolveHierarchyAwareDrop(baseTree, newId, overId);
+        let payloadDup = resolvedDup;
+        if (resolvedDup?.needsFulfill && onFulfillDropTarget) {
+          const fulfilled = await onFulfillDropTarget(resolvedDup.insertTarget);
+          if (!fulfilled?.parentId) return;
+          payloadDup = {
+            newParentId: fulfilled.parentId,
+            newIndex:
+              Number.isInteger(fulfilled.insertIndex) && fulfilled.insertIndex >= 0
+                ? fulfilled.insertIndex
+                : 0,
+          };
+        } else if (resolvedDup?.needsFulfill) {
+          return;
+        }
         if (!payloadDup || !validateResolvedDrop(baseTree, newId, payloadDup)) return;
         await onReorderNode({
           nodeId: newId,
@@ -6407,8 +6494,9 @@ export default function BuilderCanvas({
   };
 
   const openWidgetPickerFor = (targetNodeId) => {
-    if (!targetNodeId) return;
-    setWidgetPickerTargetId(Number(targetNodeId));
+    const id = canonicalNodeId(targetNodeId);
+    if (id == null) return;
+    setWidgetPickerTargetId(id);
     setIsWidgetPickerOpen(true);
   };
 

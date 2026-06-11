@@ -32,6 +32,13 @@ import { getBlankSectionLayout, getBlankSectionLayoutForColumnCount } from '@/li
 import { buildHeaderStarterSectionRoots, materializeSectionTemplate, SECTION_TEMPLATES } from '@/lib/sectionTemplates';
 import { getFullPageTemplateById } from '@/lib/fullPageTemplates';
 import { flattenTemplateToBulkNodes } from '@/lib/sectionTemplates';
+import {
+  flattenTemplateIntoColumnBulkNodes,
+  isPageLevelSectionTemplateKey,
+  isPlaceholderEmptyStack,
+  resolveSectionTemplateInsertContext,
+  templateRowPatchFromRoot,
+} from '@/lib/sectionTemplateInsert';
 import { setupFeatureTabsElementMode } from '@/lib/setupFeatureTabsElementMode';
 import { normalizeSiteTheme, themeSpacingPx } from '@/lib/siteDesignTheme';
 import { BuilderThemeProvider } from '@/context/BuilderThemeContext';
@@ -1794,6 +1801,11 @@ export default function BuilderShell({ pageId }) {
     return { ok: true, parentId, insertIndex };
   };
 
+  const handleFulfillDropTarget = async (insertTarget) => {
+    if (!insertTarget) return null;
+    return fulfillInsertTarget(insertTarget, (payload) => createNodeRequest(payload));
+  };
+
   const executeDividerInsertPlan = async (plan) => {
     if (!plan?.kind) return null;
     if (plan.kind === 'stack-child') {
@@ -2113,25 +2125,110 @@ export default function BuilderShell({ pageId }) {
     }
   };
 
-  const handleInsertSectionTemplate = async (key, { insertIndex = null } = {}) => {
+  const handleInsertSectionTemplate = async (
+    key,
+    { insertIndex = null, targetNodeId = null, insertIntoColumn = false } = {}
+  ) => {
     const roots = SECTION_TEMPLATES[key];
     if (!roots?.length) return;
     if (isCreatingNode) return;
-    const resolvedInsertIndex = resolvePageRootInsertIndex(insertIndex, tree || []);
+
+    const columnTargetId = insertIntoColumn
+      ? targetNodeId != null && targetNodeId !== ''
+        ? targetNodeId
+        : selectedNodeId
+      : null;
+    const insertPositionAnchorId =
+      insertIndex == null && !insertIntoColumn
+        ? targetNodeId != null && targetNodeId !== ''
+          ? targetNodeId
+          : selectedNodeId
+        : targetNodeId != null && targetNodeId !== ''
+          ? targetNodeId
+          : null;
+    const unlockTargetId = columnTargetId ?? insertPositionAnchorId;
+    const treeForInsert = await tryAutoUnlockSectionForInsert(unlockTargetId, tree);
+
+    const canFillColumn =
+      !isPageLevelSectionTemplateKey(key) &&
+      roots.length === 1 &&
+      roots[0]?.nodeType === 'row';
+
+    if (insertIntoColumn && canFillColumn) {
+      if (columnTargetId == null || columnTargetId === '') {
+        setErrorMessage('Select a column or stack inside a section first.');
+        return;
+      }
+    }
+
+    const insertCtx =
+      canFillColumn && insertIntoColumn && columnTargetId != null && columnTargetId !== ''
+        ? resolveSectionTemplateInsertContext(treeForInsert, columnTargetId)
+        : { mode: 'page-root' };
+
+    if (insertIntoColumn && canFillColumn && insertCtx.mode !== 'column') {
+      setErrorMessage('Select a column or stack inside a section, then enable “Insert into column”.');
+      return;
+    }
+
+    if (insertCtx.locked) {
+      setErrorMessage('Unlock section to add this template.');
+      return;
+    }
+
     const beforeTree = tree;
     pushHistorySnapshot(beforeTree);
     setIsCreatingNode(true);
     setErrorMessage('');
     try {
-      const rootIds = await materializeSectionTemplate(roots, {
-        bulkCreateNodesRequest: (nodes) => bulkCreateNodesRequest(nodes),
-        createNodeRequest: (payload) => createNodeRequest(payload),
-        positionIndex: resolvedInsertIndex,
-      });
-      await reloadBuilder();
-      if (rootIds?.length) {
-        setSelectedNodeId(rootIds[0]);
-        setFlashReorderNodeId(rootIds[0]);
+      if (insertCtx.mode === 'column') {
+        const templateRoot = roots[0];
+        const columnNode = findNodeInTree(treeForInsert, insertCtx.columnId);
+        const placeholders = (columnNode?.children || []).filter(isPlaceholderEmptyStack);
+        for (const ph of placeholders) {
+          // eslint-disable-next-line no-await-in-loop
+          await deleteNodeRequest(ph.id);
+        }
+        const survivingCount =
+          (columnNode?.children || []).filter((c) => !isPlaceholderEmptyStack(c)).length;
+        const bulkNodes = flattenTemplateIntoColumnBulkNodes(
+          templateRoot,
+          insertCtx.columnId,
+          survivingCount
+        );
+        await bulkCreateNodesRequest(bulkNodes);
+
+        const rowPatch = templateRowPatchFromRoot(templateRoot);
+        if (Object.keys(rowPatch).length) {
+          await handleNodeUpdate({
+            nodeId: insertCtx.rowId,
+            payload: rowPatch,
+            skipHistorySnapshot: true,
+          });
+        }
+
+        await reloadBuilder();
+        setSelectedNodeId(insertCtx.columnId);
+        setFlashReorderNodeId(insertCtx.rowId);
+      } else {
+        let resolvedInsertIndex = resolvePageRootInsertIndex(insertIndex, treeForInsert || []);
+        if (insertIndex == null && insertPositionAnchorId != null && insertPositionAnchorId !== '') {
+          const anchorRow = findAncestorRowNode(treeForInsert, insertPositionAnchorId);
+          const anchorCtx = anchorRow?.id ? getSiblingContext(treeForInsert, anchorRow.id) : null;
+          if (anchorCtx && (anchorCtx.parentId == null || anchorCtx.parentId === '')) {
+            resolvedInsertIndex = anchorCtx.index + 1;
+          }
+        }
+        const rootIds = await materializeSectionTemplate(roots, {
+          bulkCreateNodesRequest: (nodes) => bulkCreateNodesRequest(nodes),
+          createNodeRequest: (payload) => createNodeRequest(payload),
+          positionIndex: resolvedInsertIndex,
+        });
+        await reloadBuilder();
+        if (rootIds?.length) {
+          setSelectedNodeId(rootIds[0]);
+          setFlashReorderNodeId(rootIds[0]);
+        }
       }
       setHasUnpublishedEdits(true);
     } catch (error) {
@@ -3046,6 +3143,34 @@ export default function BuilderShell({ pageId }) {
       });
       const data = await readJsonSafe(response);
       if (!response.ok) throw new Error(data.error || 'Failed to save global section');
+      await reloadBuilder();
+    } catch (error) {
+      setErrorMessage(humanizeClientError(error));
+    } finally {
+      setIsSavingNode(false);
+    }
+  };
+
+  const handleRemoveGlobalSection = async (role) => {
+    if (!page?.projectId || !pageIdValid) return;
+    const label = role === 'header' ? 'global header' : 'global footer';
+    const confirmed =
+      typeof window === 'undefined'
+        ? true
+        : window.confirm(
+            `Remove the ${label} from this project? It will stop merging on Draft Preview. Publish again for Live to match.`
+          );
+    if (!confirmed) return;
+    setIsSavingNode(true);
+    setErrorMessage('');
+    try {
+      const response = await fetch(`/api/projects/${page.projectId}/global-sections`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
+      });
+      const data = await readJsonSafe(response);
+      if (!response.ok) throw new Error(data.error || 'Failed to remove global section');
       await reloadBuilder();
     } catch (error) {
       setErrorMessage(humanizeClientError(error));
@@ -4698,9 +4823,9 @@ export default function BuilderShell({ pageId }) {
                   onInsertHeaderTemplate={handleInsertHeaderTemplate}
                   onInsertHeaderStarter={handleInsertHeaderStarter}
                   onCreateComponentPreset={handleCreateComponentPreset}
-                  onInsertSectionTemplate={async (id) => {
+                  onInsertSectionTemplate={async (id, options = {}) => {
                     if (id === 'header') {
-                      await handleInsertSectionTemplate('header');
+                      await handleInsertSectionTemplate('header', options);
                       return;
                     }
                     if (id === 'hero') {
@@ -4717,7 +4842,7 @@ export default function BuilderShell({ pageId }) {
                     }
                     // Default: use the generic section template pipeline
                     // (keeps builder architecture intact; supports new templates like `heroLanding`).
-                    await handleInsertSectionTemplate(id);
+                    await handleInsertSectionTemplate(id, options);
                   }}
                   onApplyFullPageTemplate={handleApplyFullPageTemplate}
                   onUpdateNode={handleNodeUpdate}
@@ -4742,6 +4867,7 @@ export default function BuilderShell({ pageId }) {
                   onRenameReusableBlock={handleRenameReusableBlock}
                   onDeleteReusableBlock={handleDeleteReusableBlock}
                   onInsertGlobalSection={handleInsertGlobalSection}
+                  onRemoveGlobalSection={handleRemoveGlobalSection}
                   onExportPage={handleExportPage}
                   globalSections={page?.projectConfig?.globalSections}
                   globalComponents={globalComponents}
@@ -4806,6 +4932,7 @@ export default function BuilderShell({ pageId }) {
               isLoading={isLoading}
               onCreateNode={handleCreateNode}
               onQuickAddNode={handleQuickAddNode}
+              onFulfillDropTarget={handleFulfillDropTarget}
               isCreatingNode={isCreatingNode}
               onReorderNode={handleReorderNode}
               isReorderingNode={isReorderingNode}

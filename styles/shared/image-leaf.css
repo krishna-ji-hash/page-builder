@@ -1,0 +1,108 @@
+/**
+ * Image leaf widgets — builder, draft preview, published live parity.
+ * See lib/liveImageFluid.js + lib/imageBlockAlign.js
+ */
+
+:is(.live-doc, .bld-canvas__live-mirror) .live-image-leaf-wrap {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: fit-content;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror) .live-image-leaf-wrap[data-image-align-h='left'] {
+  align-self: flex-start !important;
+  margin-left: 0 !important;
+  margin-right: auto !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror) .live-image-leaf-wrap[data-image-align-h='center'] {
+  align-self: center !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror) .live-image-leaf-wrap[data-image-align-h='right'] {
+  align-self: flex-end !important;
+  margin-left: auto !important;
+  margin-right: 0 !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror) .live-image-leaf-wrap[data-image-align-v='top'],
+:is(.live-doc, .bld-canvas__live-mirror) :is(.live-node.bld-block, .bld-node__shell.bld-block)[data-image-align-v='top'] {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror) .live-image-leaf-wrap[data-image-align-v='bottom'],
+:is(.live-doc, .bld-canvas__live-mirror) :is(.live-node.bld-block, .bld-node__shell.bld-block)[data-image-align-v='bottom'] {
+  margin-top: auto !important;
+  margin-bottom: 0 !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror) .live-image-leaf-wrap[data-image-align-v='center'],
+:is(.live-doc, .bld-canvas__live-mirror) :is(.live-node.bld-block, .bld-node__shell.bld-block)[data-image-align-v='center'] {
+  margin-top: auto !important;
+  margin-bottom: auto !important;
+}
+
+/* Let vertical align use free space inside a tall column. */
+:is(.live-doc, .bld-canvas__live-mirror) :is(.live-node.bld-row, .bld-node__shell.bld-row):has([data-image-align-v]) {
+  align-items: stretch !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror) :is(.live-node.bld-column, .bld-node__shell.bld-column):has([data-image-align-v]) {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  min-height: 100%;
+  height: 100%;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  :is(.live-node.bld-stack, .bld-node__shell.bld-stack):has([data-image-align-v]) {
+  flex: 1 1 auto !important;
+  align-self: stretch !important;
+  min-height: 100% !important;
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  :is(.live-node.bld-column, .bld-node__shell.bld-column)
+  > :is(.live-node.bld-stack, .bld-node__shell.bld-stack):has([data-image-align-v]) {
+  flex: 1 1 auto !important;
+  align-self: stretch !important;
+  min-height: 100% !important;
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror) figure.live-image-stable:not(.live-fluid-image) {
+  width: fit-content;
+  max-width: 100%;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror) figure.live-image-stable:not(.live-fluid-image) > img,
+:is(.live-doc, .bld-canvas__live-mirror) figure.live-image-stable:not(.live-fluid-image) > a > img {
+  width: auto;
+  max-width: 100%;
+  height: auto;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror) figure.live-image-stable.live-fluid-image {
+  width: 100%;
+  max-width: 100%;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror) figure.live-image-stable.live-fluid-image > img,
+:is(.live-doc, .bld-canvas__live-mirror) figure.live-image-stable.live-fluid-image > a > img {
+  width: 100%;
+  max-width: 100%;
+}

@@ -1625,6 +1625,37 @@ export default function ContentPanel({
             <p className="bld-field-note">Hover</p>
           </div>
 
+          {isLogoSlider || isTickerOrMarquee ? (
+            <>
+              <div className="bld-field">
+                <label className="bld-label">Logo hover zoom</label>
+                <select
+                  className="bld-input"
+                  value={form.carouselLogoHoverZoom ? 'yes' : 'no'}
+                  onChange={(e) => onChange('carouselLogoHoverZoom', e.target.value === 'yes')}
+                >
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                </select>
+                <p className="bld-field-note">Each logo scales up on hover</p>
+              </div>
+              {form.carouselLogoHoverZoom ? (
+                <div className="bld-field">
+                  <InspectorNumField
+                    id="carousel-logo-hover-zoom-scale"
+                    label="Zoom amount"
+                    min={1}
+                    max={1.5}
+                    step={0.01}
+                    value={form.carouselLogoHoverZoomScale ?? ''}
+                    onChange={inspectorNumStringChange(onChange, 'carouselLogoHoverZoomScale')}
+                  />
+                  <p className="bld-field-note">1 = none · 1.08 = subtle · 1.2 = strong</p>
+                </div>
+              ) : null}
+            </>
+          ) : null}
+
           {!isTickerOrMarquee ? (
           <div className="bld-field-grid">
             <div className="bld-field">

@@ -53,3 +53,13 @@ test('sanitizeInlineLeafHtml strips script tags', () => {
   assert.ok(!out.includes('script'));
   assert.ok(!out.includes('alert'));
 });
+
+test('normalizeInlineTextProps decodes &amp; in plain headings', () => {
+  const n = normalizeInlineTextProps({ text: 'Pickup &amp; dispatch' });
+  assert.equal(n.text, 'Pickup & dispatch');
+});
+
+test('propsPatchForTextContent stores decoded ampersand', () => {
+  const patch = propsPatchForTextContent({}, 'Track &amp; deliver');
+  assert.equal(patch.text, 'Track & deliver');
+});

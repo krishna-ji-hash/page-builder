@@ -1,6 +1,6 @@
 import { fail, ok } from '@/lib/api';
 import { resolveMaybeAsyncParams } from '@/lib/routeParams';
-import { saveGlobalSection } from '@/services/builder/projectAssetsService';
+import { removeGlobalSection, saveGlobalSection } from '@/services/builder/projectAssetsService';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,6 +20,20 @@ export async function POST(request, { params }) {
     return ok({ globalSections }, 201);
   } catch (error) {
     return fail('Failed to save global section', 500, error.message);
+  }
+}
+
+export async function DELETE(request, { params }) {
+  const resolved = await resolveMaybeAsyncParams(params);
+  const projectId = Number(resolved.projectId);
+  if (!Number.isInteger(projectId) || projectId <= 0) return fail('Invalid projectId', 400);
+  try {
+    const body = await request.json();
+    const role = typeof body?.role === 'string' ? body.role : '';
+    const globalSections = await removeGlobalSection({ projectId, role });
+    return ok({ globalSections });
+  } catch (error) {
+    return fail('Failed to remove global section', 500, error.message);
   }
 }
 

@@ -7,6 +7,7 @@ import {
   tickerSlideImgStyle,
 } from '@/lib/carouselTickerShared';
 import { resolveDualTickerSlides } from '@/lib/carouselTickerRows';
+import { logoHoverZoomPresentation } from '@/lib/carouselLogoHoverZoom';
 import { liveCarouselSlideImageAttrs } from '@/lib/liveCarouselImageAttrs';
 
 /**
@@ -22,6 +23,9 @@ export default function CarouselTickerStatic({
   gap,
   tickerDurationSec,
   scrollDirection,
+  pauseOnHover = true,
+  logoHoverZoom = false,
+  logoHoverZoomScale,
 }) {
   const variantKey = String(variant || 'marquee').toLowerCase();
   const { isMarqueeVariant, row1TrackClass, row2TrackClass } = resolveTickerScrollClasses(
@@ -43,16 +47,17 @@ export default function CarouselTickerStatic({
   const gapPx = resolveTickerGapPx(gap);
   const durationSec = resolveTickerDurationSec(tickerDurationSec);
   const ariaLabel = isMarqueeVariant ? 'Smooth logo marquee' : 'Logo ticker';
+  const hoverZoom = logoHoverZoomPresentation(logoHoverZoom, logoHoverZoomScale, {
+    ...(style || {}),
+    '--carousel-gap': `${gapPx}px`,
+    '--ticker-duration': `${durationSec}s`,
+  });
 
   return (
     <section
       suppressHydrationWarning
-      style={{
-        ...(style || {}),
-        '--carousel-gap': `${gapPx}px`,
-        '--ticker-duration': `${durationSec}s`,
-      }}
-      className={`live-carousel live-carousel--ticker ${isMarqueeVariant ? 'live-carousel--marquee' : ''}`.trim()}
+      style={hoverZoom.style}
+      className={`live-carousel live-carousel--ticker ${isMarqueeVariant ? 'live-carousel--marquee' : ''} ${pauseOnHover !== false ? 'live-carousel--pause-hover' : ''} ${hoverZoom.className}`.trim()}
       aria-label={ariaLabel}
     >
       <div className={`live-carousel__ticker ${isMarqueeVariant ? 'live-carousel__ticker--single' : ''}`.trim()}>

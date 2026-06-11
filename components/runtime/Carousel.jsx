@@ -5,6 +5,7 @@ import FeatureTabCanvasField from '@/components/builder/canvas/FeatureTabCanvasF
 import { liveCarouselSlideImageAttrs } from '@/lib/liveCarouselImageAttrs';
 import { buildTickerDupSlides, resolveTickerScrollClasses } from '@/lib/carouselTickerShared';
 import { resolveDualTickerSlides } from '@/lib/carouselTickerRows';
+import { logoHoverZoomPresentation } from '@/lib/carouselLogoHoverZoom';
 import { splitHeroCopyTypoFromProps, splitHeroCopyTypoToCssVars } from '@/lib/splitHeroCopyTypography';
 
 function clamp(n, min, max) {
@@ -340,6 +341,9 @@ export default function Carousel({
     'ease-out': 'ease-out',
   };
   const transitionEasingCss = easingCssMap[transitionEasingRaw] || easingCssMap.ease;
+  const logoHoverZoomEnabled = restProps?.logoHoverZoom ?? settings?.logoHoverZoom ?? false;
+  const logoHoverZoomScaleRaw = restProps?.logoHoverZoomScale ?? settings?.logoHoverZoomScale;
+  const logoHoverZoomClass = logoHoverZoomPresentation(logoHoverZoomEnabled, logoHoverZoomScaleRaw).className;
   const showOverlayRaw = restProps?.showOverlay ?? settings?.showOverlay;
   const variantForOverlay = variantKey || 'hero';
   const overlayDefaultOn =
@@ -471,14 +475,15 @@ export default function Carousel({
 
   if (isTickerOrMarquee) {
     const ariaLabel = isMarqueeVariant ? 'Smooth logo marquee' : 'Logo ticker';
+    const tickerHoverZoom = logoHoverZoomPresentation(logoHoverZoomEnabled, logoHoverZoomScaleRaw, {
+      ...(style || {}),
+      '--carousel-gap': `${cfg.gapPx}px`,
+      '--ticker-duration': `${tickerDurationSec}s`,
+    });
     return (
       <section
-        style={{
-          ...(style || {}),
-          '--carousel-gap': `${cfg.gapPx}px`,
-          '--ticker-duration': `${tickerDurationSec}s`,
-        }}
-        className={`live-carousel live-carousel--ticker ${isMarqueeVariant ? 'live-carousel--marquee' : ''} ${isPaused ? 'is-paused' : ''}`.trim()}
+        style={tickerHoverZoom.style}
+        className={`live-carousel live-carousel--ticker ${isMarqueeVariant ? 'live-carousel--marquee' : ''} ${isPaused ? 'is-paused' : ''} ${cfg.pauseOnHover !== false ? 'live-carousel--pause-hover' : ''} ${tickerHoverZoom.className}`.trim()}
         aria-label={ariaLabel}
         tabIndex={0}
         onMouseEnter={() => (cfg.pauseOnHover ? setIsPaused(true) : null)}
@@ -574,7 +579,7 @@ export default function Carousel({
   const activeDotIndex = useSeamlessLoop ? ((index - 1 + nSlides) % nSlides + nSlides) % nSlides : index;
   const fitModeClass =
     isLogoVariant ? 'live-carousel--slide-intrinsic' : imageFit === 'contain' ? 'live-carousel--fit-contain' : '';
-  const sectionClass = `live-carousel live-carousel--${variantKey} ${fitModeClass}`.trim();
+  const sectionClass = `live-carousel live-carousel--${variantKey} ${fitModeClass} ${logoHoverZoomClass} ${cfg.pauseOnHover !== false ? 'live-carousel--pause-hover' : ''}`.trim();
   const slideModeClass =
     variantKey === 'card'
       ? ''
@@ -904,7 +909,7 @@ export default function Carousel({
 
   return (
     <section
-      style={{ ...(style || {}), ...(vars || {}) }}
+      style={logoHoverZoomPresentation(logoHoverZoomEnabled, logoHoverZoomScaleRaw, { ...(style || {}), ...(vars || {}) }).style}
       className={sectionClass}
       aria-label="Carousel"
       tabIndex={0}

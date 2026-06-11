@@ -276,6 +276,7 @@ export default function BuilderSidebar({
   onDeleteReusableBlock,
   activeSectionRowId = null,
   onInsertGlobalSection,
+  onRemoveGlobalSection,
   onExportPage,
   globalSections,
   globalComponents = [],
@@ -296,6 +297,12 @@ export default function BuilderSidebar({
   const [selectedFullPageTemplateId, setSelectedFullPageTemplateId] = useState(
     FULL_PAGE_TEMPLATES?.[0]?.id || ''
   );
+  const [insertTemplateIntoColumn, setInsertTemplateIntoColumn] = useState(false);
+
+  const callInsertSectionTemplate = (key) => {
+    const options = insertTemplateIntoColumn ? { insertIntoColumn: true } : undefined;
+    onInsertSectionTemplate?.(key, options);
+  };
 
   const toggleLayerCollapse = (nodeId) =>
     setCollapsedLayerMap((prev) => ({ ...prev, [nodeId]: !prev[nodeId] }));
@@ -651,136 +658,154 @@ export default function BuilderSidebar({
             </details>
             <details className="bld-acc" open>
               <summary>Section Templates</summary>
+              <div className="bld-acc__body">
+                <p className="bld-sidebar__hint">
+                  Click a template to add a <strong>new section below</strong> the selected section (or at the page
+                  bottom). To place content inside a column instead, enable the option below and select a{' '}
+                  <strong>Column</strong> or <strong>Stack</strong> first.
+                </p>
+                <label className="bld-field" style={{ marginTop: 10 }}>
+                  <span className="bld-label">Insert into selected column</span>
+                  <select
+                    className="bld-input"
+                    value={insertTemplateIntoColumn ? 'yes' : 'no'}
+                    onChange={(e) => setInsertTemplateIntoColumn(e.target.value === 'yes')}
+                  >
+                    <option value="no">No — add new section below</option>
+                    <option value="yes">Yes — fill selected column</option>
+                  </select>
+                </label>
+              </div>
               <div className="bld-acc__body bld-acc__body--grid">
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('header')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('header')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">HDR</span>
                   <span className="bld-block-card__label">Header</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('hero')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('hero')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">H</span>
                   <span className="bld-block-card__label">Hero</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('heroLanding')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('heroLanding')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">HL</span>
                   <span className="bld-block-card__label">Hero Landing</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('platformHero')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('platformHero')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">1P</span>
                   <span className="bld-block-card__label">Platform Hero</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('splitHeroCarousel')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('splitHeroCarousel')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">SHC</span>
                   <span className="bld-block-card__label">Split Hero Carousel</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('whyChooseCourier')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('whyChooseCourier')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">WC</span>
                   <span className="bld-block-card__label">Why Choose</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('courierFeatureBands')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('courierFeatureBands')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">3B</span>
                   <span className="bld-block-card__label">Feature Bands</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('howItWorks')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('howItWorks')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">3S</span>
                   <span className="bld-block-card__label">How It Works</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('featureTabs')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('featureTabs')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">TAB</span>
                   <span className="bld-block-card__label">Feature Tabs</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('tabHero')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('tabHero')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">TH</span>
                   <span className="bld-block-card__label">Tab Hero</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('resourcesBlogs')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('resourcesBlogs')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">BLG</span>
                   <span className="bld-block-card__label">Resources Blogs</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('trustLogos')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('trustLogos')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">SP</span>
                   <span className="bld-block-card__label">Social Proof</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('stats')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('stats')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">ST</span>
                   <span className="bld-block-card__label">Stats Counter</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('features')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('features')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">≡</span>
                   <span className="bld-block-card__label">Features</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('benefits')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('benefits')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">BEN</span>
                   <span className="bld-block-card__label">Benefits</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('testimonials')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('testimonials')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">★</span>
                   <span className="bld-block-card__label">Testimonials</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('faq')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('faq')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">FAQ</span>
                   <span className="bld-block-card__label">FAQ</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('getInTouch')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('getInTouch')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">✉</span>
                   <span className="bld-block-card__label">Get in Touch</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('cta')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('cta')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">CTA</span>
                   <span className="bld-block-card__label">CTA</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('footer')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('footer')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">FTR</span>
                   <span className="bld-block-card__label">Footer</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('pricing')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('pricing')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">PRC</span>
                   <span className="bld-block-card__label">Pricing</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('contactForm')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('contactForm')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">CF</span>
                   <span className="bld-block-card__label">Contact Form</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('blogPreview')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('blogPreview')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">BLOG</span>
                   <span className="bld-block-card__label">Blog Preview</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('timeline')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('timeline')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">TL</span>
                   <span className="bld-block-card__label">Timeline</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('comparisonTable')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('comparisonTable')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">CMP</span>
                   <span className="bld-block-card__label">Comparison Table</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('gallery')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('gallery')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">GAL</span>
                   <span className="bld-block-card__label">Gallery</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('team')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('team')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">TEAM</span>
                   <span className="bld-block-card__label">Team</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('videoSection')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('videoSection')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">VID</span>
                   <span className="bld-block-card__label">Video Section</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('processSteps')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('processSteps')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">STEP</span>
                   <span className="bld-block-card__label">Process Steps</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('trustBadges')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('trustBadges')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">TRUST</span>
                   <span className="bld-block-card__label">Trust Badges</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('brandsLogoSlider')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('brandsLogoSlider')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">LOGO</span>
                   <span className="bld-block-card__label">Brands Logo Slider</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('webStory')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('webStory')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">WEB</span>
                   <span className="bld-block-card__label">WebStory Section</span>
                 </button>
-                <button type="button" className="bld-block-card" onClick={() => onInsertSectionTemplate?.('mapIntegration')} disabled={isCreatingNode}>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('mapIntegration')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">MAP</span>
                   <span className="bld-block-card__label">Map Integration</span>
                 </button>
@@ -979,6 +1004,30 @@ export default function BuilderSidebar({
                   <span className="bld-block-card__icon">GF</span>
                   <span className="bld-block-card__label">Insert Global Footer</span>
                 </button>
+                {hasGlobalHeader ? (
+                  <button
+                    type="button"
+                    className="bld-block-card bld-block-card--danger"
+                    onClick={() => onRemoveGlobalSection?.('header')}
+                    disabled={isCreatingNode}
+                    title="Stop merging the global header on Draft Preview and Live (after publish)"
+                  >
+                    <span className="bld-block-card__icon">✕</span>
+                    <span className="bld-block-card__label">Remove Global Header</span>
+                  </button>
+                ) : null}
+                {hasGlobalFooter ? (
+                  <button
+                    type="button"
+                    className="bld-block-card bld-block-card--danger"
+                    onClick={() => onRemoveGlobalSection?.('footer')}
+                    disabled={isCreatingNode}
+                    title="Stop merging the global footer on Draft Preview and Live (after publish)"
+                  >
+                    <span className="bld-block-card__icon">✕</span>
+                    <span className="bld-block-card__label">Remove Global Footer</span>
+                  </button>
+                ) : null}
               </div>
               {!hasGlobalHeader && !hasGlobalFooter ? (
                 <div className="bld-field-note">

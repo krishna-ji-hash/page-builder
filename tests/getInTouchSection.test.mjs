@@ -4,6 +4,7 @@ import {
   applyTemplateSectionContrast,
   isPlatformHeroPitchColumnNode,
   isPlatformHeroSectionRow,
+  isTimelineSectionRow,
   sectionTemplateDataAttrsForRow,
 } from '../lib/getInTouchSection.js';
 import { containerPaintsDark, LIVE_SECTION_FG_ON_DARK } from '../lib/liveSectionContrastVars.js';
@@ -19,6 +20,31 @@ test('isPlatformHeroSectionRow matches displayName', () => {
 test('sectionTemplateDataAttrsForRow infers platformHero from displayName', () => {
   assert.deepEqual(sectionTemplateDataAttrsForRow({ nodeType: 'row', displayName: 'Platform Hero' }), {
     'data-section-template': 'platformHero',
+  });
+});
+
+test('isTimelineSectionRow matches timeline-step descendants', () => {
+  const row = {
+    nodeType: 'row',
+    displayName: 'Delivery steps',
+    children: [
+      {
+        nodeType: 'stack',
+        children: [{ nodeType: 'stack', props: { meta: { tplRole: 'timeline-step' } } }],
+      },
+    ],
+  };
+  assert.equal(isTimelineSectionRow(row), true);
+});
+
+test('sectionTemplateDataAttrsForRow infers timeline from structure', () => {
+  const row = {
+    nodeType: 'row',
+    children: [{ nodeType: 'stack', props: { meta: { tplRole: 'timeline-step' } } }],
+  };
+  assert.deepEqual(sectionTemplateDataAttrsForRow(row), {
+    'data-section-template': 'timeline',
+    'data-tpl-polish': 'true',
   });
 });
 

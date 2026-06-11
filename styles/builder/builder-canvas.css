@@ -180,12 +180,19 @@
   flex: 1 1 auto !important;
 }
 
-.bld-canvas--mobile .bld-canvas__live-mirror figure.live-node img,
 .bld-canvas--mobile .bld-canvas__live-mirror figure.live-fluid-image img,
-.bld-canvas--tablet .bld-canvas__live-mirror figure.live-node img,
 .bld-canvas--tablet .bld-canvas__live-mirror figure.live-fluid-image img {
   max-width: 100% !important;
   width: 100% !important;
+  height: auto !important;
+  object-fit: contain !important;
+  object-position: center;
+}
+
+.bld-canvas--mobile .bld-canvas__live-mirror figure.live-image-stable:not(.live-fluid-image) img,
+.bld-canvas--tablet .bld-canvas__live-mirror figure.live-image-stable:not(.live-fluid-image) img {
+  max-width: 100% !important;
+  width: auto !important;
   height: auto !important;
   object-fit: contain !important;
   object-position: center;

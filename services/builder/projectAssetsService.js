@@ -91,6 +91,21 @@ export async function saveGlobalSection({ pageId, rowId, role }) {
   return nextConfig.globalSections;
 }
 
+export async function removeGlobalSection({ projectId, role }) {
+  const validRole = role === 'header' || role === 'footer' ? role : null;
+  if (!validRole) throw new Error('Invalid global section role');
+  const project = await getProjectConfig(projectId);
+  if (!project) throw new Error('Project not found');
+  const prevGlobal = (project.config || {}).globalSections || {};
+  const nextGlobal = { ...prevGlobal, [validRole]: null };
+  const nextConfig = {
+    ...(project.config || {}),
+    globalSections: nextGlobal,
+  };
+  await saveProjectConfig(projectId, nextConfig);
+  return nextGlobal;
+}
+
 export async function savePageTemplate({ pageId, name }) {
   const templateName = String(name || '').trim();
   if (!templateName) throw new Error('Template name is required');

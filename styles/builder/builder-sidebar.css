@@ -232,6 +232,15 @@
   cursor: not-allowed;
 }
 
+.bld-block-card--danger {
+  border-color: color-mix(in srgb, #ef4444 45%, var(--bld-border));
+}
+
+.bld-block-card--danger:hover:not(:disabled) {
+  border-color: color-mix(in srgb, #ef4444 70%, var(--bld-border));
+  background: color-mix(in srgb, #ef4444 8%, var(--bld-surface-2));
+}
+
 .bld-block-card__icon {
   width: 28px;
   height: 22px;

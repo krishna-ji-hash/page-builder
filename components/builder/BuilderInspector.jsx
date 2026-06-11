@@ -985,6 +985,8 @@ export default function BuilderInspector({
     carouselGapPx: '16',
     carouselPerView: '1',
     carouselPauseOnHover: true,
+    carouselLogoHoverZoom: false,
+    carouselLogoHoverZoomScale: '1.08',
     carouselImageFit: 'cover',
     splitHeroVisualFrame: 'none',
     splitHeroVisualShadow: 'none',
@@ -1408,6 +1410,14 @@ export default function BuilderInspector({
       carouselPauseOnHover: pickPending(
         'carouselPauseOnHover',
         Boolean(selectedNode.props?.pauseOnHover ?? true)
+      ),
+      carouselLogoHoverZoom: pickPending(
+        'carouselLogoHoverZoom',
+        Boolean(selectedNode.props?.logoHoverZoom ?? false)
+      ),
+      carouselLogoHoverZoomScale: pickPending(
+        'carouselLogoHoverZoomScale',
+        String(Number(selectedNode.props?.logoHoverZoomScale ?? 1.08) || 1.08)
       ),
       carouselImageFit: pickPending(
         'carouselImageFit',
@@ -2616,6 +2626,17 @@ export default function BuilderInspector({
       if (key === 'carouselPauseOnHover') {
         const v = Boolean(value);
         await updateCarouselMirrored({ pauseOnHover: v }, {});
+        return;
+      }
+      if (key === 'carouselLogoHoverZoom') {
+        const v = Boolean(value);
+        await updateCarouselMirrored({ logoHoverZoom: v }, {});
+        return;
+      }
+      if (key === 'carouselLogoHoverZoomScale') {
+        if (value === '') return;
+        const scale = Math.min(1.5, Math.max(1, Number(value) || 1.08));
+        await updateCarouselMirrored({ logoHoverZoomScale: scale }, {});
         return;
       }
       if (key === 'carouselGapPx') {
