@@ -66,3 +66,11 @@ test('resolveDividerInsertPlan row-column right', () => {
   assert.equal(plan.rowId, 1);
   assert.equal(plan.columnIndex, 1);
 });
+
+test('resolveDividerInsertPlan row-column left uses full-height vertical accent', () => {
+  const plan = resolveDividerInsertPlan(tree, 4, 'vertical', 'left');
+  assert.equal(plan?.kind, 'row-column');
+  assert.equal(plan.columnIndex, 0);
+  assert.equal(plan.style_json?.desktop?.size?.height, '100%');
+  assert.equal(plan.props?.orientation, 'vertical');
+});

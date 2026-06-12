@@ -108,10 +108,11 @@ export default async function DraftPreviewView({ pageId }) {
       }}
     >
       <LcpImagePreload nodes={renderNodes} />
-      <LiveDoc>
+      <LiveDoc device="desktop">
         <PublishedLiveTree
           nodes={renderNodes}
           options={buildPublishedLiveRenderOptions(state.page?.projectConfig, {
+            device: 'desktop',
             currentPath,
             projectPages,
             pageSlug,

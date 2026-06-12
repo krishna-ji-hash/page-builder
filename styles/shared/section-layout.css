@@ -92,7 +92,35 @@
   max-width: 100%;
 }
 
-.bld-section-layout.bld-cols-2.bld-layout-horizontal > :is(
+.bld-section-layout.bld-cols-1 {
+  --bld-section-layout-cols: 1;
+}
+.bld-section-layout.bld-cols-2 {
+  --bld-section-layout-cols: 2;
+}
+.bld-section-layout.bld-cols-3 {
+  --bld-section-layout-cols: 3;
+}
+.bld-section-layout.bld-cols-4 {
+  --bld-section-layout-cols: 4;
+}
+.bld-section-layout.bld-cols-5 {
+  --bld-section-layout-cols: 5;
+}
+.bld-section-layout.bld-cols-6 {
+  --bld-section-layout-cols: 6;
+}
+
+/* Item width tracks live gap via --bld-section-layout-gap (set on host inline). */
+.bld-section-layout.bld-layout-horizontal > :is(
+    .live-node.bld-stack,
+    .bld-node__shell.bld-stack,
+    .live-leaf-wrap,
+    .bld-node-children > .live-node.bld-stack,
+    .bld-node-children > .bld-node__shell.bld-stack,
+    .bld-node-children > .live-leaf-wrap
+  ),
+.bld-section-layout.bld-layout-auto > :is(
     .live-node.bld-stack,
     .bld-node__shell.bld-stack,
     .live-leaf-wrap,
@@ -100,9 +128,34 @@
     .bld-node-children > .bld-node__shell.bld-stack,
     .bld-node-children > .live-leaf-wrap
   ) {
-  flex: 1 1 calc(50% - 12px) !important;
-  max-width: calc(50% - 6px) !important;
+  flex: 1 1
+    calc(
+      (100% - (var(--bld-section-layout-cols, 3) - 1) * var(--bld-section-layout-gap, 20px)) /
+        var(--bld-section-layout-cols, 3)
+    ) !important;
+  max-width: calc(
+    (100% - (var(--bld-section-layout-cols, 3) - 1) * var(--bld-section-layout-gap, 20px)) /
+      var(--bld-section-layout-cols, 3)
+  ) !important;
   width: auto !important;
+}
+
+.bld-section-layout.bld-cols-2.bld-layout-horizontal > :is(
+    .live-node.bld-stack,
+    .bld-node__shell.bld-stack,
+    .live-leaf-wrap,
+    .bld-node-children > .live-node.bld-stack,
+    .bld-node-children > .bld-node__shell.bld-stack,
+    .bld-node-children > .live-leaf-wrap
+  ),
+.bld-section-layout.bld-cols-2.bld-layout-auto > :is(
+    .live-node.bld-stack,
+    .bld-node__shell.bld-stack,
+    .live-leaf-wrap,
+    .bld-node-children > .live-node.bld-stack,
+    .bld-node-children > .bld-node__shell.bld-stack,
+    .bld-node-children > .live-leaf-wrap
+  ) {
   min-width: min(100%, 260px);
 }
 
@@ -113,10 +166,15 @@
     .bld-node-children > .live-node.bld-stack,
     .bld-node-children > .bld-node__shell.bld-stack,
     .bld-node-children > .live-leaf-wrap
+  ),
+.bld-section-layout.bld-cols-3.bld-layout-auto > :is(
+    .live-node.bld-stack,
+    .bld-node__shell.bld-stack,
+    .live-leaf-wrap,
+    .bld-node-children > .live-node.bld-stack,
+    .bld-node-children > .bld-node__shell.bld-stack,
+    .bld-node-children > .live-leaf-wrap
   ) {
-  flex: 1 1 calc(33.333% - 14px) !important;
-  max-width: calc(33.333% - 10px) !important;
-  width: auto !important;
   min-width: min(100%, 220px);
 }
 
@@ -127,10 +185,15 @@
     .bld-node-children > .live-node.bld-stack,
     .bld-node-children > .bld-node__shell.bld-stack,
     .bld-node-children > .live-leaf-wrap
+  ),
+.bld-section-layout.bld-cols-4.bld-layout-auto > :is(
+    .live-node.bld-stack,
+    .bld-node__shell.bld-stack,
+    .live-leaf-wrap,
+    .bld-node-children > .live-node.bld-stack,
+    .bld-node-children > .bld-node__shell.bld-stack,
+    .bld-node-children > .live-leaf-wrap
   ) {
-  flex: 1 1 calc(25% - 16px) !important;
-  max-width: calc(25% - 12px) !important;
-  width: auto !important;
   min-width: min(100%, 200px);
 }
 
@@ -141,10 +204,15 @@
     .bld-node-children > .live-node.bld-stack,
     .bld-node-children > .bld-node__shell.bld-stack,
     .bld-node-children > .live-leaf-wrap
+  ),
+.bld-section-layout.bld-cols-5.bld-layout-auto > :is(
+    .live-node.bld-stack,
+    .bld-node__shell.bld-stack,
+    .live-leaf-wrap,
+    .bld-node-children > .live-node.bld-stack,
+    .bld-node-children > .bld-node__shell.bld-stack,
+    .bld-node-children > .live-leaf-wrap
   ) {
-  flex: 1 1 calc(20% - 16px) !important;
-  max-width: calc(20% - 12px) !important;
-  width: auto !important;
   min-width: min(100%, 160px);
 }
 
@@ -155,10 +223,15 @@
     .bld-node-children > .live-node.bld-stack,
     .bld-node-children > .bld-node__shell.bld-stack,
     .bld-node-children > .live-leaf-wrap
+  ),
+.bld-section-layout.bld-cols-6.bld-layout-auto > :is(
+    .live-node.bld-stack,
+    .bld-node__shell.bld-stack,
+    .live-leaf-wrap,
+    .bld-node-children > .live-node.bld-stack,
+    .bld-node-children > .bld-node__shell.bld-stack,
+    .bld-node-children > .live-leaf-wrap
   ) {
-  flex: 1 1 calc(16.666% - 16px) !important;
-  max-width: calc(16.666% - 12px) !important;
-  width: auto !important;
   min-width: min(100%, 140px);
 }
 
@@ -276,8 +349,15 @@
       .live-node.bld-stack,
       .bld-node-children > .live-node.bld-stack
     ) {
-    flex: 1 1 calc(50% - 8px) !important;
-    max-width: calc(50% - 4px) !important;
+    flex: 1 1
+      calc(
+        (100% - (var(--bld-section-layout-cols, 2) - 1) * var(--bld-section-layout-gap, 12px)) /
+          var(--bld-section-layout-cols, 2)
+      ) !important;
+    max-width: calc(
+      (100% - (var(--bld-section-layout-cols, 2) - 1) * var(--bld-section-layout-gap, 12px)) /
+        var(--bld-section-layout-cols, 2)
+    ) !important;
     min-width: min(100%, 160px) !important;
   }
 }

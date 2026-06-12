@@ -131,6 +131,12 @@ function defaultMetaByTemplateId(id) {
       category: 'cta',
       icon: '✉',
     },
+    b2bshippingservices: {
+      title: 'B2B Shipping Services',
+      description: 'Centered header + 3×3 icon service cards (LTL, FTL, air cargo, and more).',
+      category: 'features',
+      icon: 'B2B',
+    },
     features: {
       title: 'Features',
       description: 'A clean feature grid with headings and copy.',
@@ -181,6 +187,7 @@ function getMarketplaceTemplates() {
     { id: 'featureTabs', type: 'section' },
     { id: 'resourcesBlogs', type: 'section' },
     { id: 'trustLogos', type: 'section' },
+    { id: 'b2bShippingServices', type: 'section' },
     { id: 'features', type: 'section' },
     { id: 'benefits', type: 'section' },
     { id: 'testimonials', type: 'section' },

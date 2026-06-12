@@ -2135,6 +2135,49 @@ html.bld-media-modal-open .bld-grid-overlay {
   color: var(--bld-muted);
 }
 
+.bld-line-tools__accent {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--bld-border);
+}
+
+.bld-line-tools__subhead {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--bld-text);
+  margin-bottom: 4px;
+}
+
+.bld-line-tools__desc {
+  margin: 0 0 10px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--bld-muted);
+}
+
+.bld-line-tools__fields {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.bld-line-tools__actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.bld-line-tools__btn--accent {
+  border-color: color-mix(in srgb, var(--bld-accent) 40%, var(--bld-border));
+  background: color-mix(in srgb, var(--bld-accent) 6%, var(--bld-surface));
+}
+
+.bld-line-tools__btn--ghost {
+  color: var(--bld-muted);
+}
+
 .bld-form-leads {
   margin-bottom: 16px;
   padding: 12px;

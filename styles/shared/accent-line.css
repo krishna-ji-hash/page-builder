@@ -1,0 +1,5 @@
+/* Left/right card accent (V Line) — builder + live parity */
+:is(.live-doc, .bld-canvas__live-mirror) .live-node[data-bld-accent-line='left'],
+:is(.live-doc, .bld-canvas__live-mirror) .live-node[data-bld-accent-line='right'] {
+  box-sizing: border-box;
+}

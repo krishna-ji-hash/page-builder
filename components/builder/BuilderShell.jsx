@@ -53,6 +53,12 @@ import { buildDividerCreatePayload } from '@/lib/dividerDefaults';
 import { payloadForWidgetCreate } from '@/lib/nodeCreatePayload';
 import { resolveDividerInsertPlan } from '@/lib/dividerInsert';
 import {
+  buildStackAccentNodePayload,
+  resolveAccentLineTarget,
+  resolveStackAccentPlan,
+  STACK_ACCENT_DEFAULTS,
+} from '@/lib/stackAccentLine';
+import {
   INSERT_TARGET_MESSAGES,
   isStackLeafWidgetType,
   resolveEditableInsertTarget,
@@ -1877,6 +1883,70 @@ export default function BuilderShell({ pageId }) {
       });
     }
     return null;
+  };
+
+  const handleApplyStackAccent = async (accentOptions = {}) => {
+    const selectedNode = selectedNodeId ? findNodeInTree(tree, selectedNodeId) : null;
+    const plan = resolveStackAccentPlan(tree, selectedNodeId, selectedNode, {
+      ...STACK_ACCENT_DEFAULTS,
+      ...accentOptions,
+    });
+    const targetId = plan?.targetNodeId ?? plan?.stackId;
+    if (!targetId) {
+      setErrorMessage('Select a section, column, heading, or paragraph to add the left accent line.');
+      return;
+    }
+    const targetNode = findNodeInTree(tree, targetId);
+    if (!targetNode) return;
+    if (isNodeEditsDisabledBySectionLock(tree, targetId)) {
+      setErrorMessage('Unlock this section to edit the accent line.');
+      return;
+    }
+    const beforeTree = tree;
+    pushHistorySnapshot(beforeTree);
+    setIsCreatingNode(true);
+    setErrorMessage('');
+    try {
+      const payload = buildStackAccentNodePayload(targetNode, device, plan.accent);
+      if (!payload) return;
+      await handleNodeUpdate({ nodeId: targetId, payload, skipHistorySnapshot: true });
+      setSelectedNodeId(targetId);
+      setHasUnpublishedEdits(true);
+    } catch (error) {
+      setUndoStack((prev) => prev.slice(0, -1));
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsCreatingNode(false);
+    }
+  };
+
+  const handleRemoveStackAccent = async () => {
+    const selectedNode = selectedNodeId ? findNodeInTree(tree, selectedNodeId) : null;
+    const ctx = resolveAccentLineTarget(tree, selectedNodeId, selectedNode);
+    const targetId = ctx?.targetNodeId;
+    if (!targetId || !ctx.accentLine) {
+      setErrorMessage('No accent line on this section.');
+      return;
+    }
+    if (isNodeEditsDisabledBySectionLock(tree, targetId)) {
+      setErrorMessage('Unlock this section to remove the accent line.');
+      return;
+    }
+    const beforeTree = tree;
+    pushHistorySnapshot(beforeTree);
+    setIsCreatingNode(true);
+    setErrorMessage('');
+    try {
+      const payload = buildStackAccentNodePayload(ctx.node, device, null, { remove: true });
+      if (!payload) return;
+      await handleNodeUpdate({ nodeId: targetId, payload, skipHistorySnapshot: true });
+      setHasUnpublishedEdits(true);
+    } catch (error) {
+      setUndoStack((prev) => prev.slice(0, -1));
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsCreatingNode(false);
+    }
   };
 
   const handleInsertDivider = async (orientation, placement = 'inside') => {
@@ -4818,6 +4888,8 @@ export default function BuilderShell({ pageId }) {
                   tree={tree}
                   onCreateNode={handleCreateNode}
                   onQuickAddNode={handleQuickAddNode}
+                  onInsertDivider={handleInsertDivider}
+                  onApplyStackAccent={handleApplyStackAccent}
                   onCreateSection={handleCreateSection}
                   onInsertStarterTemplate={handleInsertStarterTemplate}
                   onInsertHeaderTemplate={handleInsertHeaderTemplate}
@@ -5022,6 +5094,8 @@ export default function BuilderShell({ pageId }) {
               editingDisabledBySectionLock={editingDisabledBySectionLock}
               pageTree={tree}
               onInsertDivider={handleInsertDivider}
+              onApplyStackAccent={handleApplyStackAccent}
+              onRemoveStackAccent={handleRemoveStackAccent}
               canInsertDivider={canInsertDividerLine}
               isCreatingNode={isCreatingNode}
               onApplyResponsiveToPage={handleApplyResponsiveToPage}

@@ -45,6 +45,11 @@ const PRESETS = [
     description: 'Title + “View All” and three blue blog cards with image, category, date, and headline.',
   },
   {
+    id: 'b2bShippingServices',
+    title: 'B2B Shipping Services',
+    description: '3×3 icon card grid with nine B2B freight services.',
+  },
+  {
     id: 'features',
     title: 'Features row',
     description: 'Two columns with headings and short copy.',

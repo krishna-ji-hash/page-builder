@@ -104,9 +104,11 @@ import { getDeviceStyle, sanitizeInlineMarginCss, styleToCss } from '@/lib/style
 import {
   applySectionLayoutToDeviceStyle,
   applySectionItemsChildToDeviceStyle,
+  buildSectionItemsHostGapUpdate,
   getSectionLayoutClasses,
   normalizeSectionLayout,
   nodeIsSectionItemsHost,
+  sectionLayoutCssVars,
   sectionLayoutDataAttrs,
 } from '@/lib/sectionLayout';
 import { liveResponsiveLayoutClasses } from '@/lib/liveResponsiveClasses';
@@ -2085,6 +2087,12 @@ function NodeRenderer({
     rowChildColumnIndex: rowChildColumnIndex >= 0 ? rowChildColumnIndex : undefined,
   });
   nodeCssWithSectionContent = templateContrast.css;
+  if (isSectionItemsHost && layoutForChrome) {
+    nodeCssWithSectionContent = {
+      ...(nodeCssWithSectionContent || {}),
+      ...sectionLayoutCssVars(layoutForChrome),
+    };
+  }
   const rowPaddingDefinedAttrs =
     isRootLiveDocRow &&
     (rowSemanticTag === 'section' || rowSemanticTag === 'main') &&
@@ -4369,6 +4377,14 @@ function NodeRenderer({
   const quickGapDelta = async (delta) => {
     const currentGap = parseGapPx(deviceStyle?.layout?.gap);
     const nextGap = Math.max(0, Math.round(currentGap + delta));
+    if (nodeIsSectionItemsHost(node) && onUpdateNode && Array.isArray(tree)) {
+      const gapUpdate = buildSectionItemsHostGapUpdate(tree, node, nextGap);
+      if (gapUpdate) {
+        await onUpdateNode({ nodeId: gapUpdate.sectionRowId, payload: gapUpdate.sectionRowPayload });
+        await onUpdateNode({ nodeId: gapUpdate.hostId, payload: gapUpdate.hostPayload });
+        return;
+      }
+    }
     await applyQuickFlexPatch({
       layout: { gap: nextGap },
     });

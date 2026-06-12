@@ -119,6 +119,7 @@ import {
 import { getDeviceStyle, styleToCss } from '@/lib/styleToCss';
 import InspectorTabs from './inspector/InspectorTabs';
 import LineToolsPanel from './inspector/LineToolsPanel';
+import { resolveAccentLineTarget } from '@/lib/stackAccentLine';
 import InspectorResponsiveBar from './inspector/InspectorResponsiveBar';
 import ContentPanel from './inspector/ContentPanel';
 import LayoutPanel from './inspector/LayoutPanel';
@@ -140,8 +141,12 @@ import {
 } from '@/lib/builderTree';
 import {
   applySectionLayoutToStyleJson,
+  buildSectionItemsHostGapUpdate,
   findSectionItemsHostNode,
   normalizeSectionLayout,
+  nodeIsSectionItemsHost,
+  resolveSectionItemsHostLayout,
+  sectionLayoutGapPx,
 } from '@/lib/sectionLayout';
 import {
   dividerOrientationFromProps,
@@ -466,6 +471,8 @@ export default function BuilderInspector({
   /** Top-level page rows (same array the canvas passes as `tree`). Used for per-section page spacing overrides. */
   pageTree = [],
   onInsertDivider,
+  onApplyStackAccent,
+  onRemoveStackAccent,
   canInsertDivider = true,
   isCreatingNode = false,
   onSetupFeatureTabsElementMode = null,
@@ -537,6 +544,11 @@ export default function BuilderInspector({
     if (!selectedNode || selectedNode.nodeType === 'accordion') return null;
     return findDescendantNodeByType(selectedNode, 'accordion');
   }, [selectedNode]);
+
+  const stackAccentContext = useMemo(
+    () => resolveAccentLineTarget(pageTree, selectedNode?.id, selectedNode),
+    [pageTree, selectedNode]
+  );
 
   /** Row that owns strip width for the current selection (selected row, or nearest ancestor row). */
   const sectionStripLayoutRow = useMemo(() => {
@@ -1254,6 +1266,10 @@ export default function BuilderInspector({
           const gapFromProps =
             statsLayoutSource?.props?.gapPx != null ? Number(statsLayoutSource.props.gapPx) : null;
           if (Number.isFinite(gapFromProps)) return gapFromProps;
+          if (nodeIsSectionItemsHost(selectedNode) && Array.isArray(pageTree)) {
+            const sectionLayout = resolveSectionItemsHostLayout(pageTree, selectedNode);
+            if (sectionLayout) return sectionLayoutGapPx(sectionLayout);
+          }
           return parsePxValue(layoutStyle?.layout?.gap, statsLayoutSource ? 32 : 0);
         })()
       ),
@@ -3357,6 +3373,22 @@ export default function BuilderInspector({
         );
       }
 
+      if (
+        nodeIsSectionItemsHost(selectedNode) &&
+        (key === 'layoutGapPx' || key === 'layoutGapScale') &&
+        built.patch?.layout?.gap != null
+      ) {
+        const gapPx = useGapScale
+          ? themeSpacingPx(siteTheme, gapScaleSel)
+          : parsePxValue(built.patch.layout.gap, 0);
+        const gapUpdate = buildSectionItemsHostGapUpdate(pageTree, selectedNode, gapPx);
+        if (gapUpdate) {
+          await updateNode(gapUpdate.sectionRowId, gapUpdate.sectionRowPayload);
+          await updateNode(gapUpdate.hostId, gapUpdate.hostPayload);
+          return;
+        }
+      }
+
       previewStylePatch(built.patch);
       const style_json = mergeStyleForDevice(styleTarget, device, built.patch, siteTheme, baseJsonOverride);
       const nodePayload = { style_json };
@@ -3815,18 +3847,24 @@ export default function BuilderInspector({
             </button>
           </div>
         ) : null}
-        {variant === 'panel' && onInsertDivider ? (
+        {variant === 'panel' && (onInsertDivider || onApplyStackAccent) ? (
           <LineToolsPanel
-            onInsertHorizontal={() => onInsertDivider('horizontal', 'inside')}
-            onInsertVertical={() => onInsertDivider('vertical', 'inside')}
-            disabled={!canInsertDivider || editingDisabledBySectionLock}
+            onInsertHorizontal={() => onInsertDivider?.('horizontal', 'inside')}
+            onApplyVerticalAccent={onApplyStackAccent}
+            onRemoveVerticalAccent={onRemoveStackAccent}
+            accentLine={stackAccentContext?.accentLine || null}
+            disabled={!canInsertDivider || editingDisabledBySectionLock || !stackAccentContext}
             busy={isCreatingNode}
             hint={
               !canInsertDivider
                 ? 'Add a page section first.'
                 : editingDisabledBySectionLock
                   ? 'Unlock this section to add lines.'
-                  : 'Adds a line inside the selected stack.'
+                  : !stackAccentContext
+                    ? 'Select a section, column, heading, or paragraph.'
+                    : stackAccentContext.accentLine
+                      ? 'Accent is active — adjust color, thickness, or gap, then Update V Line.'
+                      : 'Set color/thickness/gap, then Add V Line.'
             }
           />
         ) : null}

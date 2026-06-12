@@ -16,6 +16,7 @@
 @import '../shared/live-header-stack.css';
 @import '../shared/rich-text-controls.css';
 @import '../shared/content-composer.css';
+@import '../shared/accent-line.css';
 @import '../shared/image-leaf.css';
 
 .live-site {

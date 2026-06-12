@@ -393,7 +393,10 @@ export default function ContentPanel({
           />
           <InspectorTipChips
             style={{ marginBottom: 12 }}
-            chips={['Style → Background for gradients', 'Style → Size for length', 'Row stack: use V Line']}
+            chips={[
+              'Use Style → Lines → V Line card accent for full-height bar',
+              'Or edit color/thickness on the stack border here',
+            ]}
           />
         </>
       ) : null}

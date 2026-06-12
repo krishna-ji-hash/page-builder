@@ -250,6 +250,8 @@ export default function BuilderSidebar({
   tree,
   onCreateNode,
   onQuickAddNode,
+  onInsertDivider,
+  onApplyStackAccent,
   onCreateSection,
   onInsertStarterTemplate,
   onInsertHeaderTemplate,
@@ -535,9 +537,12 @@ export default function BuilderSidebar({
                       }
                       onClick={() => {
                         if (!block.supported || disabled) return;
-                        const dividerExtra = block.dividerOrientation
-                          ? { dividerOrientation: block.dividerOrientation }
-                          : {};
+                        const dividerOrient = block.dividerOrientation || null;
+                        if (dividerOrient === 'vertical' && onApplyStackAccent) {
+                          onApplyStackAccent();
+                          return;
+                        }
+                        const dividerExtra = dividerOrient ? { dividerOrientation: dividerOrient } : {};
                         const useQuick =
                           canQuickAddWidget ||
                           (onQuickAddNode &&
@@ -728,6 +733,10 @@ export default function BuilderSidebar({
                 <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('stats')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">ST</span>
                   <span className="bld-block-card__label">Stats Counter</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('b2bShippingServices')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">B2B</span>
+                  <span className="bld-block-card__label">B2B Services</span>
                 </button>
                 <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('features')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">≡</span>

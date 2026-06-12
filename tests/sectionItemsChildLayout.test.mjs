@@ -28,8 +28,8 @@ test('section items child patch removes width 100% and sets 3-col flex', () => {
   cardDs = applySectionItemsChildToDeviceStyle(cardDs, layout, 'desktop');
   const css = styleToCss(cardDs);
   assert.equal(css.width, undefined);
-  assert.match(String(css.flexBasis), /33\.333%/);
-  assert.match(String(css.maxWidth), /33\.333%/);
+  assert.match(String(css.flexBasis), /calc\(\(100% - 2 \* 20px\) \/ 3\)/);
+  assert.match(String(css.maxWidth), /calc\(\(100% - 2 \* 20px\) \/ 3\)/);
 });
 
 test('section items host uses row flex on desktop', () => {

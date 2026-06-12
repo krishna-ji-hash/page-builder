@@ -216,6 +216,25 @@ test('dark mode: light hero gradient remaps to dark section contrast', () => {
   assert.ok(!String(withContrast.backgroundImage || '').includes('#f6f8ff'));
 });
 
+test('resolveSectionBackgroundIsLight prefers opaque light surface under decorative tint gradient', () => {
+  const light = resolveSectionBackgroundIsLight({
+    css: {
+      backgroundColor: 'var(--token-bg-surface, #ffffff)',
+      backgroundImage:
+        'linear-gradient(180deg, rgba(37, 99, 235, 0.09) 0%, rgba(255, 255, 255, 0) 70%)',
+    },
+    deviceStyle: {
+      background: {
+        backgroundColor: 'var(--token-bg-surface, #ffffff)',
+        backgroundImage:
+          'linear-gradient(180deg, rgba(37, 99, 235, 0.09) 0%, rgba(255, 255, 255, 0) 70%)',
+      },
+    },
+    siteTheme: lightSite,
+  });
+  assert.equal(light, true);
+});
+
 test('liveSectionContrastCssVarsForRow resolves var(--color-background) against site theme', () => {
   const vars = liveSectionContrastCssVarsForRow({
     css: { backgroundColor: 'var(--color-background)' },
