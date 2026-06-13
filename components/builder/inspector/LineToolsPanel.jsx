@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { STACK_ACCENT_DEFAULTS } from '@/lib/stackAccentLine';
 import { InspectorNumField } from '@/components/builder/inspector/InspectorNumeric';
+import { InspectorSection } from '@/components/builder/inspector/InspectorUi';
 
 export default function LineToolsPanel({
   onInsertHorizontal,
@@ -33,24 +34,28 @@ export default function LineToolsPanel({
 
   return (
     <div className="bld-line-tools" role="group" aria-label="Line tools">
-      <div className="bld-line-tools__head">Lines</div>
-      <div className="bld-line-tools__row">
-        <button
-          type="button"
-          className="bld-line-tools__btn"
-          disabled={disabled || busy}
-          onClick={() => onInsertHorizontal?.('inside')}
-          title="Add horizontal line inside the selected stack"
-        >
-          <span className="bld-line-tools__icon" aria-hidden>
-            ―
-          </span>
-          H Line
-        </button>
-      </div>
+      <InspectorSection title="Lines" defaultOpen={false} keywords="horizontal h line divider">
+        <div className="bld-line-tools__row">
+          <button
+            type="button"
+            className="bld-line-tools__btn"
+            disabled={disabled || busy}
+            onClick={() => onInsertHorizontal?.('inside')}
+            title="Add horizontal line inside the selected stack"
+          >
+            <span className="bld-line-tools__icon" aria-hidden>
+              ―
+            </span>
+            H Line
+          </button>
+        </div>
+      </InspectorSection>
 
-      <div className="bld-line-tools__accent">
-        <div className="bld-line-tools__subhead">V Line — card accent</div>
+      <InspectorSection
+        title="V Line — card accent"
+        defaultOpen={false}
+        keywords="vertical accent bar card border color thickness gap"
+      >
         <p className="bld-line-tools__desc">
           Full-height blue bar on the left of heading + paragraphs (like a card border).
         </p>
@@ -108,7 +113,7 @@ export default function LineToolsPanel({
             </button>
           ) : null}
         </div>
-      </div>
+      </InspectorSection>
 
       {hint ? <p className="bld-line-tools__hint">{hint}</p> : null}
     </div>

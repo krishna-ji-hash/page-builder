@@ -4389,6 +4389,18 @@ function NodeRenderer({
       layout: { gap: nextGap },
     });
   };
+  const commitGapHandlePatch = async (patch) => {
+    const nextGap = parseGapPx(patch?.layout?.gap);
+    if (nodeIsSectionItemsHost(node) && onUpdateNode && Array.isArray(tree)) {
+      const gapUpdate = buildSectionItemsHostGapUpdate(tree, node, nextGap);
+      if (gapUpdate) {
+        await onUpdateNode({ nodeId: gapUpdate.sectionRowId, payload: gapUpdate.sectionRowPayload });
+        await onUpdateNode({ nodeId: gapUpdate.hostId, payload: gapUpdate.hostPayload });
+        return;
+      }
+    }
+    await commitStylePatch(patch);
+  };
   const quickSetJustify = async (justify) => {
     await applyQuickFlexPatch({
       layout: {
@@ -5400,7 +5412,7 @@ function NodeRenderer({
                 deviceStyle={deviceStyle}
                 disabled={isSavingNode || isDragging || Boolean(draggingNodeType) || sectionEditLocked}
                 onPreviewCss={setInteractionPreviewStyle}
-                onCommitPatch={commitStylePatch}
+                onCommitPatch={commitGapHandlePatch}
                 snapGapToScale={snapGapToScale}
                 applyDeviceStylePatch={applyDeviceStylePatch}
                 withFlexWidthOverride={withFlexWidthOverride}
