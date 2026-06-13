@@ -1,4 +1,5 @@
 import { fail, ok, parseJsonBody } from '@/lib/api';
+import { guardAdminApi } from '@/lib/auth/guardAdminApi';
 import { resolveMaybeAsyncParams } from '@/lib/routeParams';
 import { deleteNode, updateNode } from '@/services/builder/builderService';
 
@@ -20,6 +21,8 @@ function mapUpdateError(error) {
 }
 
 export async function PUT(request, { params }) {
+  const auth = await guardAdminApi(request, { action: 'write' });
+  if (auth.error) return auth.error;
   const resolved = await resolveMaybeAsyncParams(params);
   const nodeId = parseNodeId(resolved.id);
   if (!Number.isInteger(nodeId) || nodeId <= 0) {
@@ -40,7 +43,9 @@ export async function PUT(request, { params }) {
   }
 }
 
-export async function DELETE(_request, { params }) {
+export async function DELETE(request, { params }) {
+  const auth = await guardAdminApi(request, { action: 'write' });
+  if (auth.error) return auth.error;
   const resolved = await resolveMaybeAsyncParams(params);
   const nodeId = parseNodeId(resolved.id);
   if (!Number.isInteger(nodeId) || nodeId <= 0) {

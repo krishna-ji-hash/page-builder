@@ -1,4 +1,5 @@
 import { fail, ok } from '@/lib/api';
+import { guardAdminApi } from '@/lib/auth/guardAdminApi';
 import { resolveMaybeAsyncParams } from '@/lib/routeParams';
 import { duplicateNode } from '@/services/builder/builderService';
 
@@ -12,7 +13,9 @@ function parseNodeId(raw) {
   return m ? Number(m[0]) : NaN;
 }
 
-export async function POST(_request, { params }) {
+export async function POST(request, { params }) {
+  const auth = await guardAdminApi(request, { action: 'write' });
+  if (auth.error) return auth.error;
   const resolved = await resolveMaybeAsyncParams(params);
   const nodeId = parseNodeId(resolved.id);
   if (!Number.isInteger(nodeId) || nodeId <= 0) {

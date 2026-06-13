@@ -1,7 +1,21 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { previewVersionPath } from '@/lib/builder/adminBuilderRoutes';
 import '@/styles/admin/platform.css';
+
+function versionStatusBadge(version) {
+  if (version.isLive) {
+    return <span className="version-badge version-badge--live">Live</span>;
+  }
+  if (version.status === 'published') {
+    return <span className="version-badge version-badge--published">Published</span>;
+  }
+  if (version.status === 'archived') {
+    return <span className="version-badge version-badge--archived">Archived</span>;
+  }
+  return null;
+}
 
 export default function VersionHistoryModal({
   open,
@@ -79,10 +93,10 @@ export default function VersionHistoryModal({
           {versions.map((v) => (
             <li key={v.id}>
               <div>
-                <strong>v{v.versionNumber}</strong>
-                {v.isLive && (
-                  <span style={{ marginLeft: 8, fontSize: 12, color: '#16a34a' }}>Live</span>
-                )}
+                <div className="version-list__title">
+                  <strong>v{v.versionNumber}</strong>
+                  {versionStatusBadge(v)}
+                </div>
                 <div style={{ fontSize: 13, color: '#64748b' }}>
                   {v.publishDate ? new Date(v.publishDate).toLocaleString() : '—'} · {v.author}
                 </div>
@@ -92,11 +106,12 @@ export default function VersionHistoryModal({
                   type="button"
                   className="platform-btn"
                   disabled={busyId === v.id}
-                  onClick={() =>
-                    window.open(`/api/pages/${pageId}/versions/${v.id}`, '_blank', 'noopener')
-                  }
+                  onClick={() => {
+                    const href = previewVersionPath(v.id);
+                    if (href) window.open(href, '_blank', 'noopener');
+                  }}
                 >
-                  Preview JSON
+                  Preview
                 </button>
                 <button
                   type="button"
@@ -112,7 +127,7 @@ export default function VersionHistoryModal({
                   disabled={busyId === v.id}
                   onClick={() => runAction(v.id, 'restore')}
                 >
-                  Restore
+                  Restore to draft
                 </button>
               </div>
             </li>

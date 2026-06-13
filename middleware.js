@@ -17,6 +17,64 @@ function normalizeHost(host) {
     .split(':')[0];
 }
 
+function isLocalDevHost(host) {
+  const h = normalizeHost(host);
+  if (!h || h === 'localhost' || h === '127.0.0.1') return true;
+  if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(h)) return true;
+  if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h)) return true;
+  if (/^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(h)) return true;
+  return false;
+}
+
+function isAuthDisabled() {
+  return process.env.AUTH_DISABLED === 'true' || process.env.AUTH_DISABLED === '1';
+}
+
+const PUBLIC_API_PREFIXES = [
+  '/api/forms/submit',
+  '/api/runtime/',
+  '/api/platform/resolve-host',
+  '/api/auth/login',
+  '/api/auth/session-check',
+];
+
+function isPublicApiPath(pathname, method = 'GET') {
+  const verb = String(method || 'GET').toUpperCase();
+  if (pathname === '/api/forms/analytics' && verb === 'POST') return true;
+  if (pathname.startsWith('/api/forms/analytics')) return false;
+  return PUBLIC_API_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix));
+}
+
+function isProtectedAdminPath(pathname) {
+  return (pathname === '/admin' || pathname.startsWith('/admin/')) && pathname !== '/admin/login';
+}
+
+function isProtectedApiPath(pathname, method = 'GET') {
+  if (!pathname.startsWith('/api/')) return false;
+  if (isPublicApiPath(pathname, method)) return false;
+  if (pathname.startsWith('/api/auth/')) {
+    return (
+      pathname === '/api/auth/logout' ||
+      pathname === '/api/auth/me' ||
+      pathname === '/api/auth/change-password'
+    );
+  }
+  return true;
+}
+
+async function hasValidSession(request) {
+  const origin = request.nextUrl.origin;
+  try {
+    const res = await fetch(`${origin}/api/auth/session-check`, {
+      headers: { cookie: request.headers.get('cookie') || '' },
+      cache: 'no-store',
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Custom domain + platform host routing.
  * Rewrites to /{projectSlug}/{pageSlug} preserving renderTree live pipeline.
@@ -25,10 +83,28 @@ export async function middleware(request) {
   const host = normalizeHost(request.headers.get('host'));
   const { pathname } = request.nextUrl;
 
+  if (!isAuthDisabled()) {
+    if (isProtectedAdminPath(pathname)) {
+      const valid = await hasValidSession(request);
+      if (!valid) {
+        const loginUrl = request.nextUrl.clone();
+        loginUrl.pathname = '/admin/login';
+        loginUrl.searchParams.set('next', pathname);
+        return NextResponse.redirect(loginUrl);
+      }
+    }
+
+    if (isProtectedApiPath(pathname, request.method)) {
+      const valid = await hasValidSession(request);
+      if (!valid) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+    }
+  }
+
   if (
     !host ||
-    host === 'localhost' ||
-    host === '127.0.0.1' ||
+    isLocalDevHost(host) ||
     pathname.startsWith('/api') ||
     pathname.startsWith('/admin') ||
     pathname.startsWith('/_next') ||

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { guardAdminApi } from '@/lib/auth/guardAdminApi';
 import { resolveMaybeAsyncParams } from '@/lib/routeParams';
 import { createItem, listItemsByCollectionSlug } from '@/services/builder/cmsService';
 
@@ -18,15 +19,17 @@ function parseQuery(url) {
   };
 }
 
-export async function GET(req, { params }) {
+export async function GET(request, { params }) {
   try {
     const resolved = await resolveMaybeAsyncParams(params);
+    const auth = await guardAdminApi(request, { projectId: Number(resolved.projectId), action: 'read' });
+    if (auth.error) return auth.error;
     const projectId = Number(resolved.projectId);
     const collectionSlug = String(resolved.collectionSlug || '');
     if (!Number.isInteger(projectId) || projectId <= 0) {
       return NextResponse.json({ ok: false, error: 'Invalid projectId' }, { status: 400 });
     }
-    const q = parseQuery(req.url);
+    const q = parseQuery(request.url);
     const items = await listItemsByCollectionSlug(projectId, collectionSlug, q);
     return NextResponse.json({ ok: true, items });
   } catch (e) {
@@ -37,15 +40,17 @@ export async function GET(req, { params }) {
   }
 }
 
-export async function POST(req, { params }) {
+export async function POST(request, { params }) {
   try {
     const resolved = await resolveMaybeAsyncParams(params);
+    const auth = await guardAdminApi(request, { projectId: Number(resolved.projectId), action: 'write' });
+    if (auth.error) return auth.error;
     const projectId = Number(resolved.projectId);
     const collectionSlug = String(resolved.collectionSlug || '');
     if (!Number.isInteger(projectId) || projectId <= 0) {
       return NextResponse.json({ ok: false, error: 'Invalid projectId' }, { status: 400 });
     }
-    const body = await req.json().catch(() => ({}));
+    const body = await request.json().catch(() => ({}));
     const item = await createItem(projectId, collectionSlug, body);
     return NextResponse.json({ ok: true, item });
   } catch (e) {

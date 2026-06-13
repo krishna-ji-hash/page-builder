@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation';
 import DraftPreviewView from '@/components/live/DraftPreviewView';
+import VersionPreviewView from '@/components/live/VersionPreviewView';
 import { previewPagePath } from '@/lib/builder/adminBuilderRoutes';
 import { buildDraftPreviewMetadata } from '@/lib/draftPreviewMetadata';
 import { isPublicSlug, resolveMaybeAsyncParams } from '@/lib/routeParams';
@@ -21,8 +22,14 @@ export async function generateMetadata({ params }) {
   return buildDraftPreviewMetadata(projectSlug, pageSlug);
 }
 
-export default async function DraftPreviewPage({ params }) {
+export default async function DraftPreviewPage({ params, searchParams }) {
   const resolved = await resolveMaybeAsyncParams(params);
+  const sp = searchParams ? await Promise.resolve(searchParams) : null;
+  const versionId = Number(sp?.versionId);
+  if (Number.isInteger(versionId) && versionId > 0) {
+    return <VersionPreviewView versionId={versionId} />;
+  }
+
   const segments = Array.isArray(resolved.slug)
     ? resolved.slug
     : resolved.slug

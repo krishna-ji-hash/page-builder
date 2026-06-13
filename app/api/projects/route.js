@@ -1,13 +1,18 @@
 import { fail, ok, parseJsonBody } from '@/lib/api';
+import { ACTIVITY_ACTIONS } from '@/lib/admin/activityActions';
+import { guardAdminApi } from '@/lib/auth/guardAdminApi';
 import {
   createProjectWithDefaultPage,
   listProjectsWithPageCount,
 } from '@/services/builder/builderService';
+import { recordAdminActivity } from '@/services/admin/activityLogService';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request) {
+  const auth = await guardAdminApi(request, { action: 'read' });
+  if (auth.error) return auth.error;
   try {
     const projects = await listProjectsWithPageCount();
     return ok({ projects });
@@ -23,6 +28,8 @@ export async function GET() {
 }
 
 export async function POST(request) {
+  const auth = await guardAdminApi(request, { minRole: 'admin' });
+  if (auth.error) return auth.error;
   const body = await parseJsonBody(request);
   if (!body || typeof body !== 'object') {
     return fail('Invalid JSON body', 400);
@@ -33,6 +40,13 @@ export async function POST(request) {
       name: body.name,
       slug: body.slug,
       type: body.type,
+    });
+    void recordAdminActivity({
+      userId: auth.user.id,
+      projectId: result.project?.id,
+      pageId: result.defaultPage?.id,
+      action: ACTIVITY_ACTIONS.PROJECT_CREATED,
+      metadata: { slug: result.project?.slug, name: result.project?.name },
     });
     return ok(result, 201);
   } catch (error) {

@@ -1,4 +1,5 @@
 import { fail, ok, parseJsonBody } from '@/lib/api';
+import { guardAdminApi } from '@/lib/auth/guardAdminApi';
 import { reorderNode } from '@/services/builder/builderService';
 
 export const runtime = 'nodejs';
@@ -11,6 +12,8 @@ function mapReorderError(error) {
 }
 
 export async function PUT(request) {
+  const auth = await guardAdminApi(request, { action: 'write' });
+  if (auth.error) return auth.error;
   const body = await parseJsonBody(request);
   if (!body || typeof body !== 'object') {
     return fail('Invalid JSON body', 400);

@@ -1,0 +1,90 @@
+/* CMS manager — admin workspace */
+
+.admin-cms-layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.admin-cms-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+}
+
+.admin-cms-list__btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.admin-cms-list__btn:hover {
+  background: #f9fafb;
+}
+
+.admin-cms-list__btn.is-active {
+  background: #eff6ff;
+}
+
+.admin-cms-list__name {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.admin-cms-list__slug {
+  display: block;
+  font-size: 11px;
+  color: #9ca3af;
+  margin-top: 2px;
+}
+
+.admin-cms-list__empty {
+  padding: 16px;
+  font-size: 13px;
+  color: #9ca3af;
+}
+
+.admin-cms-items-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.admin-cms-item {
+  padding: 12px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fafafa;
+}
+
+.admin-cms-item__title {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.admin-cms-item__slug {
+  display: block;
+  font-size: 12px;
+  color: #9ca3af;
+  margin-top: 2px;
+}
+
+@media (max-width: 800px) {
+  .admin-cms-layout {
+    grid-template-columns: 1fr;
+  }
+}

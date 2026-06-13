@@ -3,8 +3,19 @@
  * Usage: npm run dev (separate terminal), then: node scripts/production-acceptance.mjs
  */
 const BASE = (process.env.BATTLE_BASE_URL || 'http://localhost:3000').replace(/\/+$/, '');
+const AUTH_EMAIL = process.env.PAT_ADMIN_EMAIL || process.env.ADMIN_BOOTSTRAP_EMAIL || 'admin@localhost';
+const AUTH_PASSWORD = process.env.PAT_ADMIN_PASSWORD || process.env.ADMIN_BOOTSTRAP_PASSWORD || 'changeme';
 
 const results = [];
+let sessionCookie = '';
+
+function absorbSessionCookie(res) {
+  const setCookies = typeof res.headers.getSetCookie === 'function' ? res.headers.getSetCookie() : [];
+  for (const raw of setCookies) {
+    const part = String(raw).split(';')[0];
+    if (part.startsWith('bld_admin_session=')) sessionCookie = part;
+  }
+}
 
 function record(module, status, detail, extra = {}) {
   results.push({ module, status, detail, ...extra });
@@ -12,7 +23,13 @@ function record(module, status, detail, extra = {}) {
 
 async function jsonFetch(path, options = {}) {
   const url = `${BASE}${path}`;
-  const res = await fetch(url, { cache: 'no-store', ...options });
+  const headers = {
+    Origin: BASE,
+    ...(options.headers || {}),
+  };
+  if (sessionCookie) headers.Cookie = sessionCookie;
+  const res = await fetch(url, { cache: 'no-store', ...options, headers });
+  absorbSessionCookie(res);
   const text = await res.text();
   let data = {};
   try {
@@ -21,6 +38,38 @@ async function jsonFetch(path, options = {}) {
     data = { _raw: text.slice(0, 200) };
   }
   return { res, data, url };
+}
+
+async function ensureAdminSession() {
+  if (process.env.AUTH_DISABLED === 'true' || process.env.AUTH_DISABLED === '1') {
+    record('0. Admin Auth', 'WARNING', 'AUTH_DISABLED — skipping login');
+    return true;
+  }
+  try {
+    const login = await jsonFetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: AUTH_EMAIL, password: AUTH_PASSWORD }),
+    });
+    if (!login.res.ok) {
+      record(
+        '0. Admin Auth',
+        'FAIL',
+        login.data?.error || `login HTTP ${login.res.status} — run npm run db:bootstrap-admin`
+      );
+      return false;
+    }
+    const me = await jsonFetch('/api/auth/me');
+    if (!me.res.ok) {
+      record('0. Admin Auth', 'FAIL', `session check failed HTTP ${me.res.status}`);
+      return false;
+    }
+    record('0. Admin Auth', 'PASS', `logged in as ${me.data?.user?.email || AUTH_EMAIL}`);
+    return true;
+  } catch (e) {
+    record('0. Admin Auth', 'FAIL', e.message);
+    return false;
+  }
 }
 
 function slugUnique(prefix) {
@@ -507,15 +556,22 @@ async function testDarkLightMode(ctx) {
 
 async function testUiRoutes() {
   const routes = [
-    ['/admin/builder', 'Project manager + wizard entry'],
+    ['/admin/dashboard', 'Admin dashboard'],
+    ['/admin/projects', 'Projects list'],
+    ['/admin/builder', 'Builder index redirects to projects'],
     ['/admin/publishing', 'Publishing dashboard'],
     ['/admin/platform-health', 'Platform health'],
   ];
   for (const [path, label] of routes) {
     try {
-      const res = await fetch(`${BASE}${path}`, { cache: 'no-store', redirect: 'follow' });
+      const headers = sessionCookie ? { Cookie: sessionCookie } : {};
+      const res = await fetch(`${BASE}${path}`, { cache: 'no-store', redirect: 'follow', headers });
       if (res.status >= 500) {
         record('UI Routes', 'FAIL', `${path} (${label}) HTTP ${res.status}`);
+      } else if (res.status === 401 || res.url.includes('/admin/login')) {
+        record('UI Routes', 'FAIL', `${path} (${label}) redirected to login`);
+      } else {
+        record('UI Routes', 'PASS', `${path} (${label}) HTTP ${res.status}`);
       }
     } catch (e) {
       record('UI Routes', 'FAIL', `${path}: ${e.message}`);
@@ -539,6 +595,11 @@ async function main() {
     process.exit(1);
   }
 
+  const authed = await ensureAdminSession();
+  if (!authed && process.env.AUTH_DISABLED !== 'true' && process.env.AUTH_DISABLED !== '1') {
+    process.stdout.write('\nAborting PAT — admin authentication required.\n');
+    process.exit(1);
+  }
   await testUiRoutes();
   const ctx = await testProjectWizard();
   await testTemplateDeployment(ctx);

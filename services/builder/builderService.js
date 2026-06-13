@@ -1887,3 +1887,44 @@ export async function publishPage(pageId) {
     };
   });
 }
+
+/**
+ * Take page offline: clear live pointer, archive the live snapshot row, keep all page_versions.
+ * Draft tree remains editable; live reads return unpublished (no published_version_id).
+ */
+export async function unpublishPage(pageId) {
+  return withTransaction(async (connection) => {
+    const page = await getPageById(pageId, connection);
+    if (!page) return null;
+
+    const liveVersionId = page.published_version_id;
+    if (!liveVersionId) {
+      return {
+        pageId,
+        alreadyUnpublished: true,
+        unpublishedVersionId: null,
+        status: 'draft',
+      };
+    }
+
+    await connection.query(
+      `UPDATE page_versions
+       SET status = 'archived'
+       WHERE id = ? AND page_id = ? AND status = 'published'`,
+      [liveVersionId, pageId]
+    );
+
+    await connection.query(
+      `UPDATE pages
+       SET published_version_id = NULL, status = 'draft', updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [pageId]
+    );
+
+    return {
+      pageId,
+      unpublishedVersionId: liveVersionId,
+      status: 'draft',
+    };
+  });
+}

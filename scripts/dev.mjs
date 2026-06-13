@@ -8,6 +8,8 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import {
   killPort,
+  getDevHost,
+  printDevNetworkHints,
   waitForBuilderPageChunk,
   waitForDevReady,
   warmupDevRoutes,
@@ -17,6 +19,7 @@ const root = process.cwd();
 const envFile = path.join(root, '.env');
 const nextDir = path.join(root, '.next');
 const PORT = Number(process.env.PORT || 3000);
+const HOST = getDevHost();
 
 const ensureMysqlArgs = fs.existsSync(envFile)
   ? ['--env-file=.env', path.join(root, 'scripts', 'ensure-mysql.mjs')]
@@ -36,6 +39,11 @@ if (mig.status !== 0) {
     '\n[dev] Migration step failed. Start DB (npm run db:xampp or XAMPP MySQL), fix .env (see .env.example), or skip migrate with: npm run dev:simple\n\n'
   );
   process.exit(mig.status ?? 1);
+}
+
+if (fs.existsSync(envFile) && process.env.ADMIN_BOOTSTRAP_PASSWORD) {
+  const bootstrapArgs = ['--env-file=.env', path.join(root, 'scripts', 'bootstrap-admin.mjs')];
+  spawnSync(process.execPath, bootstrapArgs, { cwd: root, stdio: 'inherit' });
 }
 
 if (process.env.BLD_DEV_CLEAN === '1') {
@@ -58,10 +66,10 @@ killPort(PORT);
 killPort(3001);
 
 const nextBin = path.join(root, 'node_modules', 'next', 'dist', 'bin', 'next');
-const child = spawn(process.execPath, [nextBin, 'dev', '-p', String(PORT)], {
+const child = spawn(process.execPath, [nextBin, 'dev', '-H', HOST, '-p', String(PORT)], {
   cwd: root,
   stdio: 'inherit',
-  env: { ...process.env, PORT: String(PORT) },
+  env: { ...process.env, PORT: String(PORT), HOST },
 });
 
 let warmupStarted = false;
@@ -79,6 +87,7 @@ const startWarmup = () => {
     await warmupDevRoutes(PORT);
     const compiled = await waitForBuilderPageChunk(root);
     if (compiled) {
+      printDevNetworkHints(PORT);
       process.stdout.write('[dev] Builder ready — open http://localhost:' + PORT + '/admin/builder/dispatch/home\n');
     } else {
       process.stderr.write(

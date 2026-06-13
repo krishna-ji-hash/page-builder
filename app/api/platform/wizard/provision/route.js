@@ -1,10 +1,13 @@
 import { fail, ok, parseJsonBody } from '@/lib/api';
+import { guardAdminApi } from '@/lib/auth/guardAdminApi';
 import { provisionProjectFromWizard } from '@/services/platform/projectProvisioningService';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request) {
+  const auth = await guardAdminApi(request, { minRole: 'admin' });
+  if (auth.error) return auth.error;
   const body = await parseJsonBody(request);
   if (!body || typeof body !== 'object') return fail('Invalid JSON body', 400);
   try {

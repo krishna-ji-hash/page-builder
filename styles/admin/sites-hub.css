@@ -1,0 +1,151 @@
+/* Sites hub — matches admin content area */
+
+.sites-hub {
+  width: 100%;
+  max-width: 100%;
+}
+
+.sites-hub__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.sites-hub__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.sites-hub__sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #9ca3af;
+}
+
+.sites-hub__list {
+  display: grid;
+  gap: 12px;
+}
+
+.sites-hub__project {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.sites-hub__project-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #f3f4f6;
+  background: #fafafa;
+}
+
+.sites-hub__project-name {
+  margin: 0 0 2px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.sites-hub__project-meta {
+  margin: 0;
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.sites-hub__project-meta code {
+  font-size: 11px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.sites-hub__pages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sites-hub__page {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 16px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.sites-hub__page:first-child {
+  border-top: none;
+}
+
+.sites-hub__page-main {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+
+.sites-hub__page-title {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.sites-hub__page-path {
+  display: block;
+  font-size: 12px;
+  color: #9ca3af;
+  word-break: break-all;
+}
+
+.sites-hub__page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.sites-hub__empty-project {
+  margin: 0;
+  padding: 14px 16px;
+  font-size: 13px;
+  color: #9ca3af;
+}
+
+.sites-hub__empty-project a {
+  color: #3b82f6;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.sites-hub__more {
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+.sites-hub__more a {
+  color: #3b82f6;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+@media (max-width: 640px) {
+  .sites-hub__head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .sites-hub__page-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+}

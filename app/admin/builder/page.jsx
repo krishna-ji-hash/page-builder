@@ -1,12 +1,9 @@
-import BuilderProjectsManager from '@/components/builder/BuilderProjectsManager';
+import { redirect } from 'next/navigation';
+import { ADMIN_PROJECTS_PATH } from '@/lib/admin/adminRoutes';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata = {
-  title: 'Builder — Projects',
-  description: 'Manage projects and pages for builder',
-};
-
-export default async function AdminBuilderIndexPage() {
-  return <BuilderProjectsManager />;
+/** Builder index — flow enters builder from a project page, not a separate manager hop. */
+export default function AdminBuilderIndexPage() {
+  redirect(ADMIN_PROJECTS_PATH);
 }

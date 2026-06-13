@@ -1,4 +1,6 @@
 import { fail, ok, parseJsonBody } from '@/lib/api';
+import { guardAdminApi } from '@/lib/auth/guardAdminApi';
+import { getPageProjectId } from '@/lib/auth/pageProject';
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { resolveMaybeAsyncParams } from '@/lib/routeParams';
 import { previewPagePath } from '@/lib/builder/adminBuilderRoutes';
@@ -13,6 +15,9 @@ export const dynamic = 'force-dynamic';
 export async function PATCH(request, { params }) {
   const resolved = await resolveMaybeAsyncParams(params);
   const pageId = Number(resolved.pageId);
+  const projectId = await getPageProjectId(pageId);
+  const auth = await guardAdminApi(request, { projectId, action: 'write' });
+  if (auth.error) return auth.error;
   if (!Number.isInteger(pageId) || pageId <= 0) {
     return fail('Invalid pageId', 400);
   }
@@ -47,9 +52,12 @@ export async function PATCH(request, { params }) {
   }
 }
 
-export async function DELETE(_request, { params }) {
+export async function DELETE(request, { params }) {
   const resolved = await resolveMaybeAsyncParams(params);
   const pageId = Number(resolved.pageId);
+  const projectId = await getPageProjectId(pageId);
+  const auth = await guardAdminApi(request, { projectId, action: 'write' });
+  if (auth.error) return auth.error;
   if (!Number.isInteger(pageId) || pageId <= 0) {
     return fail('Invalid pageId', 400);
   }

@@ -1,7 +1,20 @@
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+function getPrivateLanHosts() {
+  const hosts = new Set(['localhost', '127.0.0.1']);
+  const nets = os.networkInterfaces();
+  for (const entries of Object.values(nets)) {
+    for (const entry of entries || []) {
+      if (!entry || entry.family !== 'IPv4' || entry.internal) continue;
+      hosts.add(entry.address);
+    }
+  }
+  return Array.from(hosts);
+}
 
 const publicProjectSlug = String(
   process.env.NEXT_PUBLIC_PUBLIC_PROJECT_SLUG || process.env.PUBLIC_PROJECT_SLUG || 'dispatch'
@@ -16,6 +29,8 @@ const flatPublicUrls =
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Next.js 15 blocks non-localhost dev access unless listed (LAN testing from phone/Mac)
+  allowedDevOrigins: getPrivateLanHosts(),
   async redirects() {
     if (!flatPublicUrls) return [];
     return [

@@ -1,17 +1,11 @@
 import { fail, ok, parseJsonBody } from '@/lib/api';
+import { getClientIp } from '@/lib/auth/clientIp';
+import { checkFormSubmitRateLimit } from '@/lib/auth/formRateLimit';
 import { shouldSaveLead } from '@/lib/formWorkflowEngine.js';
 import { validateFormFields } from '@/lib/runtime/formValidation';
 import { runFormSubmitWorkflow } from '@/services/forms/formWorkflowService';
 import { recordFormAnalyticsEvent } from '@/services/forms/formAnalyticsService';
 import { createFormSubmission } from '@/services/forms/formSubmissionsService';
-
-function getClientIp(request) {
-  const xff = request.headers.get('x-forwarded-for');
-  if (xff && typeof xff === 'string') return xff.split(',')[0].trim();
-  const xr = request.headers.get('x-real-ip');
-  if (xr && typeof xr === 'string') return xr.trim();
-  return '';
-}
 
 function safeNotifications(n) {
   if (!n || typeof n !== 'object' || Array.isArray(n)) return null;
@@ -26,6 +20,7 @@ function safeNotifications(n) {
 }
 
 export async function POST(request) {
+  const ip = getClientIp(request);
   const body = await parseJsonBody(request);
   if (!body || typeof body !== 'object') return fail('Invalid JSON body');
 
@@ -39,6 +34,11 @@ export async function POST(request) {
   if (!formId.trim()) return fail('Invalid formId');
   if (!values) return fail('Invalid values');
 
+  const limit = checkFormSubmitRateLimit(ip, `${projectId}:${pageId}:${formId}`);
+  if (!limit.allowed) {
+    return fail(`Too many submissions. Retry in ${limit.retryAfterSec}s`, 429);
+  }
+
   const fields = Array.isArray(body.fields) ? body.fields : null;
   if (fields) {
     const v = validateFormFields(values, fields);
@@ -48,7 +48,7 @@ export async function POST(request) {
   const workflow = body.workflow && typeof body.workflow === 'object' ? body.workflow : null;
   const notifications = safeNotifications(body.notifications);
   const meta = {
-    ip: getClientIp(request),
+    ip,
     ua: String(request.headers.get('user-agent') || '').slice(0, 300),
     ref: String(request.headers.get('referer') || '').slice(0, 500),
     notifications: notifications || undefined,

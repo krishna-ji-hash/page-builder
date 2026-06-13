@@ -1,15 +1,20 @@
 import { fail, ok, parseJsonBody } from '@/lib/api';
+import { ACTIVITY_ACTIONS } from '@/lib/admin/activityActions';
+import { guardAdminApi } from '@/lib/auth/guardAdminApi';
 import { resolveMaybeAsyncParams } from '@/lib/routeParams';
 import {
   createPageForProject,
   listPagesByProject,
 } from '@/services/builder/builderService';
+import { recordAdminActivity } from '@/services/admin/activityLogService';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function GET(_request, { params }) {
+export async function GET(request, { params }) {
   const resolved = await resolveMaybeAsyncParams(params);
+  const auth = await guardAdminApi(request, { projectId: Number(resolved.projectId), action: 'read' });
+  if (auth.error) return auth.error;
   const projectId = Number(resolved.projectId);
   if (!Number.isInteger(projectId) || projectId <= 0) {
     return fail('Invalid projectId', 400);
@@ -25,6 +30,8 @@ export async function GET(_request, { params }) {
 
 export async function POST(request, { params }) {
   const resolved = await resolveMaybeAsyncParams(params);
+  const auth = await guardAdminApi(request, { projectId: Number(resolved.projectId), action: 'write' });
+  if (auth.error) return auth.error;
   const projectId = Number(resolved.projectId);
   if (!Number.isInteger(projectId) || projectId <= 0) {
     return fail('Invalid projectId', 400);
@@ -40,6 +47,13 @@ export async function POST(request, { params }) {
       title: body.title,
       slug: body.slug,
       createStarter: body.createStarter !== false,
+    });
+    void recordAdminActivity({
+      userId: auth.user.id,
+      projectId,
+      pageId: page?.id,
+      action: ACTIVITY_ACTIONS.PAGE_CREATED,
+      metadata: { slug: page?.slug, title: page?.title },
     });
     return ok({ page }, 201);
   } catch (error) {

@@ -51,6 +51,15 @@ test('publishPage creates new published version without flipping draft row', () 
   assert.match(publishBlock, /globalSections:/);
 });
 
+test('unpublishPage clears live pointer and archives snapshot without deleting versions', () => {
+  const src = read('services/builder/builderService.js');
+  const block = src.slice(src.indexOf('export async function unpublishPage'));
+  assert.match(block, /published_version_id = NULL/);
+  assert.match(block, /status = 'draft'/);
+  assert.match(block, /status = 'archived'/);
+  assert.doesNotMatch(block, /DELETE FROM page_versions/);
+});
+
 test('live page uses publishedGlobalSections via publicSitePage', () => {
   const liveSrc = read('lib/publicSitePage.jsx');
   assert.match(liveSrc, /publishedGlobalSections/);
