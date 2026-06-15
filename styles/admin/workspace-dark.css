@@ -1,0 +1,507 @@
+/* Workspace pages — dark mode (settings, project hub, CMS, SEO, etc.) */
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main {
+  /* Soften light semantic chips on project / hub pages */
+  --ph-good-soft: rgba(91, 184, 168, 0.14);
+  --ph-good-border: rgba(91, 184, 168, 0.32);
+  --ph-warn-soft: rgba(201, 168, 76, 0.14);
+  --ph-warn-border: rgba(201, 168, 76, 0.32);
+  --po-warn-soft: rgba(201, 168, 76, 0.14);
+  --po-warn-border: rgba(201, 168, 76, 0.32);
+  --pp-warn-soft: rgba(201, 168, 76, 0.14);
+  --pp-warn-border: rgba(201, 168, 76, 0.32);
+  --pub-warn-soft: rgba(201, 168, 76, 0.14);
+  --pub-warn-border: rgba(201, 168, 76, 0.32);
+  --ps-warn-soft: rgba(201, 168, 76, 0.14);
+  --ps-warn-border: rgba(201, 168, 76, 0.32);
+}
+
+/* ── Heroes & stat chips ── */
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class$='__hero'] {
+  background:
+    radial-gradient(ellipse 60% 55% at 100% 0%, rgba(167, 139, 250, 0.1), transparent 55%),
+    linear-gradient(155deg, var(--admin-accent-soft) 0%, var(--admin-surface) 60%);
+  border-color: var(--admin-border);
+  box-shadow: none;
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class$='__badge'] {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border);
+  color: var(--admin-accent);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class$='__stat'] {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class$='__stat-val'] {
+  color: var(--admin-text);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class$='__stat-lbl'] {
+  color: var(--admin-muted);
+}
+
+/* ── Cards, panels, tables ── */
+.admin-shell[data-admin-theme='dark'] .admin-shell__main :is(
+  [class$='__card'],
+  [class$='__panel'],
+  [class$='__table-wrap'],
+  [class$='__section'],
+  [class$='__feed'],
+  [class$='__side'],
+  [class$='__detail'],
+  [class$='__grid-card'],
+  [class$='__list-card'],
+  [class$='__meta-card'],
+  [class$='__toolbar-card'],
+  [class$='__upload-zone'],
+  [class$='__dropzone'],
+  [class$='__asset-card'],
+  [class$='__domain-card'],
+  [class$='__page-card'],
+  [class$='__form-card'],
+  [class$='__item'],
+  [class$='__row-card']
+) {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+  box-shadow: none;
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main .proj-theme__card--preview {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main .proj-settings__export-card {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+}
+
+/* ── Projects hub (BEM uses projects-* not __hero) ── */
+.admin-shell[data-admin-theme='dark'] .admin-shell__main .projects-card,
+.admin-shell[data-admin-theme='dark'] .admin-shell__main .projects-toolbar__search {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+  box-shadow: none;
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main .projects-card__head {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main .projects-toolbar__search input {
+  color: var(--admin-text);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main .projects-stat__value {
+  color: var(--admin-text);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main .projects-stat__label {
+  color: var(--admin-muted);
+}
+
+/* ── Typography ── */
+.admin-shell[data-admin-theme='dark'] .admin-shell__main :is(
+  [class$='__title'],
+  [class$='__panel-title'],
+  [class$='__card-title'],
+  [class$='__name'],
+  [class$='__module'],
+  [class$='__heading'],
+  [class$='__empty-title'],
+  [class$='__modal-title'],
+  [class$='__section-title']
+) {
+  color: var(--admin-text);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main :is(
+  [class$='__sub'],
+  [class$='__desc'],
+  [class$='__hint'],
+  [class$='__meta'],
+  [class$='__email'],
+  [class$='__module-hint'],
+  [class$='__empty-text'],
+  [class$='__loading'],
+  [class$='__note'],
+  [class$='__label']
+) {
+  color: var(--admin-muted);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class$='__link'] {
+  color: var(--admin-accent);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class$='__link']:hover {
+  color: var(--admin-accent-hover);
+}
+
+/* ── Tables & matrix ── */
+.admin-shell[data-admin-theme='dark'] .admin-shell__main :is([class*='__table'] th, [class*='__matrix'] th) {
+  background: var(--admin-surface-2);
+  color: var(--admin-muted);
+  border-color: var(--admin-border);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main :is([class*='__table'] td, [class*='__matrix'] td) {
+  border-color: var(--admin-border);
+  color: var(--admin-text);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__row']:hover {
+  background: var(--admin-hover);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__row'].is-selected,
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__card'].is-active {
+  background: var(--admin-hover-strong);
+  border-color: var(--admin-accent-border);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__card']:hover {
+  border-color: var(--admin-accent-border);
+}
+
+/* ── Inputs & filters ── */
+.admin-shell[data-admin-theme='dark'] .admin-shell__main :is(
+  [class*='__search'],
+  [class*='__input'],
+  [class*='__select'],
+  [class*='__textarea'],
+  [class*='__filter'],
+  [class*='__scope'],
+  [class*='__projects'],
+  [class*='__preset-toggle'],
+  [class*='__color-field'],
+  [class*='__token-input']
+) {
+  background: var(--admin-input-bg);
+  border-color: var(--admin-border);
+  color: var(--admin-text);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__search'] input {
+  color: var(--admin-text);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__search'] input::placeholder {
+  color: var(--admin-muted);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__preset-btn'].is-active {
+  background: var(--admin-surface-3);
+  color: var(--admin-text);
+  border-color: var(--admin-accent-border);
+}
+
+/* ── Buttons ── */
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__btn']:not([class*='--primary']):not([class*='--danger']) {
+  background: var(--admin-input-bg);
+  border-color: var(--admin-border);
+  color: var(--admin-text-soft);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__btn']:not([class*='--primary']):not([class*='--danger']):hover:not(:disabled) {
+  background: var(--admin-surface-3);
+  border-color: #475569;
+  color: var(--admin-text);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__btn--primary'] {
+  background: var(--admin-accent-btn);
+  border-color: var(--admin-accent-btn);
+  color: var(--admin-accent-btn-fg);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__btn--primary']:hover:not(:disabled) {
+  background: var(--admin-accent-btn-hover);
+  border-color: var(--admin-accent-btn-hover);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__btn--danger'] {
+  background: rgba(127, 29, 29, 0.25);
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #fca5a5;
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__btn--danger']:hover:not(:disabled) {
+  background: rgba(127, 29, 29, 0.4);
+  color: #fecaca;
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__close'] {
+  color: var(--admin-muted);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__close']:hover {
+  color: var(--admin-text);
+  background: var(--admin-hover);
+}
+
+/* ── Role / permission / status badges ── */
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__pill'] {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border);
+  color: var(--admin-accent);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__chip'] {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border);
+  color: var(--admin-text-soft);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__card-value'] {
+  color: var(--admin-text);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__perm--full'],
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__role--super_admin'] {
+  color: #c4b5fd;
+  background: rgba(109, 40, 217, 0.2);
+  border-color: rgba(167, 139, 250, 0.35);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__perm--manage'],
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__role--admin'] {
+  color: #93c5fd;
+  background: rgba(29, 78, 216, 0.2);
+  border-color: rgba(59, 130, 246, 0.35);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__perm--write'],
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__role--editor'] {
+  color: #5eead4;
+  background: rgba(15, 118, 110, 0.2);
+  border-color: rgba(45, 212, 191, 0.35);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__perm--read'],
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__role--viewer'] {
+  color: #cbd5e1;
+  background: var(--admin-input-bg);
+  border-color: var(--admin-border);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__perm--none'] {
+  color: var(--admin-muted);
+  background: var(--admin-input-bg);
+  border-color: var(--admin-border);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main :is(
+  [class*='__icon--super_admin'],
+  [class*='__avatar']
+) {
+  color: var(--admin-accent);
+  background: var(--admin-accent-soft);
+  border-color: var(--admin-accent-border);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__icon--admin'] {
+  color: #93c5fd;
+  background: rgba(29, 78, 216, 0.2);
+  border-color: rgba(59, 130, 246, 0.35);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__icon--editor'] {
+  color: #5eead4;
+  background: rgba(15, 118, 110, 0.2);
+  border-color: rgba(45, 212, 191, 0.35);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__icon--viewer'] {
+  color: #cbd5e1;
+  background: var(--admin-input-bg);
+  border-color: var(--admin-border);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__member'] {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__member-name'] {
+  color: var(--admin-text);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__member-email'] {
+  color: var(--admin-muted);
+}
+
+/* ── Alerts ── */
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__alert--error'] {
+  background: rgba(127, 29, 29, 0.25);
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #fca5a5;
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main :is([class*='__alert--ok'], [class*='__alert--success']) {
+  background: rgba(6, 78, 59, 0.25);
+  border-color: rgba(52, 211, 153, 0.35);
+  color: #6ee7b7;
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__alert--warn'] {
+  background: rgba(120, 53, 15, 0.25);
+  border-color: rgba(251, 191, 36, 0.35);
+  color: #fcd34d;
+}
+
+/* ── Modals ── */
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__modal-backdrop'] {
+  background: rgba(0, 0, 0, 0.65);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class$='__modal'] {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+  color: var(--admin-text);
+}
+
+/* ── SEO hub ── */
+.admin-shell[data-admin-theme='dark'] .admin-shell__main .seo-hub__tab {
+  background: var(--admin-input-bg);
+  border-color: var(--admin-border);
+  color: var(--admin-text-soft);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main .seo-hub__tab--active {
+  background: var(--admin-accent-soft);
+  border-color: var(--admin-accent);
+  color: var(--admin-accent);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main :is(
+  .seo-hub__score-card,
+  .seo-hub__widget,
+  .seo-hub__page-editor,
+  .seo-hub__audit-card
+) {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main .seo-hub__score-ring {
+  background: conic-gradient(var(--score-color) calc(var(--score) * 1%), var(--admin-surface-3) 0);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main .seo-hub__score-ring span {
+  background: var(--admin-surface);
+  color: var(--admin-text);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main .seo-hub__page-list button {
+  background: var(--admin-input-bg);
+  border-color: var(--admin-border);
+  color: var(--admin-text);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main .seo-hub__page-list button.is-active {
+  background: var(--admin-accent-soft);
+  border-color: var(--admin-accent);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main .seo-hub__sitemap-xml {
+  background: var(--admin-input-bg);
+  border-color: var(--admin-border);
+  color: var(--admin-code-fg);
+}
+
+/* ── Project domains (new workspace) ── */
+.admin-shell[data-admin-theme='dark'] .admin-shell__main .proj-domains__dns-row,
+.admin-shell[data-admin-theme='dark'] .admin-shell__main .proj-domains__record {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main .proj-domains__dns-row code,
+.admin-shell[data-admin-theme='dark'] .admin-shell__main .proj-domains__record code {
+  background: var(--admin-input-bg);
+  color: var(--admin-code-fg);
+}
+
+/* ── Media grid ── */
+.admin-shell[data-admin-theme='dark'] .admin-shell__main .proj-media__thumb-wrap {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border);
+}
+
+/* ── Theme editor (keep live preview colors intact) ── */
+.admin-shell[data-admin-theme='dark'] .admin-shell__main .proj-theme__preview-inner {
+  /* Preview uses inline site theme vars — only frame is dark-themed */
+  border-color: var(--admin-border);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main .proj-theme__swatch {
+  border-color: var(--admin-border);
+}
+
+/* ── Skeletons ── */
+.admin-shell[data-admin-theme='dark'] .admin-shell__main :is(
+  [class*='__skeleton-block'],
+  [class*='__skeleton']
+) {
+  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+  background-size: 200% 100%;
+}
+
+/* ── Empty states ── */
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__empty'] {
+  color: var(--admin-muted);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__empty-icon'] {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border);
+  color: var(--admin-muted);
+}
+
+/* ── Status pills (publish, domain, etc.) ── */
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__status--published'],
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__badge--good'] {
+  background: rgba(22, 101, 52, 0.25);
+  color: #86efac;
+  border-color: rgba(52, 211, 153, 0.35);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__status--draft'],
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__badge--warn'] {
+  background: rgba(146, 64, 14, 0.25);
+  color: #fcd34d;
+  border-color: rgba(251, 191, 36, 0.35);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__status--pending'] {
+  background: rgba(29, 78, 216, 0.2);
+  color: #93c5fd;
+  border-color: rgba(59, 130, 246, 0.35);
+}
+
+/* ── Code blocks in workspace ── */
+.admin-shell[data-admin-theme='dark'] .admin-shell__main code {
+  background: var(--admin-code-bg);
+  color: var(--admin-code-fg);
+  border-color: var(--admin-border);
+}
+
+/* ── Project checkboxes / meta rows ── */
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__project-check']:hover {
+  background: var(--admin-hover);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__meta-row'] {
+  border-color: var(--admin-border);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-shell__main [class*='__meta-row'] strong {
+  color: var(--admin-text);
+}

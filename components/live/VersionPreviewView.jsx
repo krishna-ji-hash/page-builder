@@ -7,6 +7,8 @@ import {
   prepareNodesForLiveRender,
 } from '@/lib/prepareLivePageRender';
 import { buildRenderNodesWithGlobals } from '@/lib/globalSectionMerge';
+import { applyHomeHeaderNavToGlobal, syncPageTreeHeaderNavFromHome } from '@/lib/globalHeaderNavSync';
+import { getPublishedHomeHeaderRow } from '@/services/site/homeHeaderNavService';
 import LiveDoc from '@/components/live/LiveDoc';
 import LcpImagePreload from '@/components/seo/LcpImagePreload';
 import { publicPagePath } from '@/lib/publicSiteUrls';
@@ -43,16 +45,25 @@ export default async function VersionPreviewView({ versionId, pageContext = null
     return <div style={{ padding: 40 }}>Version snapshot is empty.</div>;
   }
 
+  const pageSlug = state.page.slug;
+  const projectSlug = state.page.projectSlug;
+
+  const homeHeader = await getPublishedHomeHeaderRow(projectSlug);
+  const pageNodes = syncPageTreeHeaderNavFromHome(state.snapshot_json, homeHeader, pageSlug);
   const frozenGlobals = state.publishedGlobalSections || {};
-  const globalHeader = frozenGlobals.header
-    ? cloneGlobalNode(frozenGlobals.header, 'global-header')
+  const syncedHeaderSource =
+    frozenGlobals.header && homeHeader
+      ? applyHomeHeaderNavToGlobal(frozenGlobals.header, homeHeader)
+      : frozenGlobals.header;
+  const globalHeader = syncedHeaderSource
+    ? cloneGlobalNode(syncedHeaderSource, 'global-header')
     : null;
   const globalFooter = frozenGlobals.footer
     ? cloneGlobalNode(frozenGlobals.footer, 'global-footer')
     : null;
 
   const mergedNodes = buildRenderNodesWithGlobals(
-    state.snapshot_json,
+    pageNodes,
     globalHeader,
     globalFooter,
     cloneGlobalNode
@@ -62,8 +73,6 @@ export default async function VersionPreviewView({ versionId, pageContext = null
     state.page.projectConfig
   );
 
-  const pageSlug = state.page.slug;
-  const projectSlug = state.page.projectSlug;
   const currentPath = publicPagePath(projectSlug, pageSlug);
   const projectPages = (state.projectPages || []).map((page) => ({
     slug: page.slug,

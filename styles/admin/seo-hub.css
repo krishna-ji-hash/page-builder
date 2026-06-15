@@ -1,0 +1,236 @@
+/* Enterprise SEO hub tabs + dashboard */
+
+.seo-hub__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.seo-hub__tab {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--ps-brand-border, #e4deff);
+  background: var(--admin-surface, #fff);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.seo-hub__tab--active {
+  background: var(--ps-brand-soft, #f3f0ff);
+  border-color: var(--ps-brand, #7c75b8);
+  color: var(--ps-brand, #7c75b8);
+}
+
+.seo-hub__dashboard {
+  display: grid;
+  gap: 20px;
+}
+
+.seo-hub__scores {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 16px;
+}
+
+.seo-hub__score-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid var(--ps-brand-border);
+  background: var(--admin-surface, #fff);
+}
+
+.seo-hub__score-ring {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 18px;
+  background: conic-gradient(var(--score-color) calc(var(--score) * 1%), #eee 0);
+  position: relative;
+}
+
+.seo-hub__score-ring span {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--admin-surface, #fff);
+  display: grid;
+  place-items: center;
+}
+
+.seo-hub__score-label {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+.seo-hub__widgets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.seo-hub__widget {
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid var(--ps-brand-border);
+  background: var(--admin-surface, #fff);
+}
+
+.seo-hub__widget h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.seo-hub__stat {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.seo-hub__status--enabled {
+  color: var(--ps-good, #5bb8a8);
+}
+
+.seo-hub__status--disabled {
+  color: #e07a7a;
+}
+
+.seo-hub__critical {
+  color: #e07a7a;
+}
+
+.seo-hub__warning {
+  color: var(--ps-warn, #c9a84c);
+}
+
+.seo-hub__pages {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 20px;
+}
+
+.seo-hub__page-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.seo-hub__page-list button {
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--ps-brand-border);
+  background: var(--admin-surface, #fff);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.seo-hub__page-list button.is-active {
+  border-color: var(--ps-brand);
+  background: var(--ps-brand-soft);
+}
+
+.seo-hub__page-list button span {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.seo-hub__page-editor {
+  padding: 20px;
+  border-radius: 16px;
+  border: 1px solid var(--ps-brand-border);
+  background: var(--admin-surface, #fff);
+}
+
+.seo-hub__audit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.seo-hub__audit-card {
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid var(--ps-brand-border);
+  background: var(--admin-surface, #fff);
+}
+
+.seo-hub__audit-card h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.seo-hub__issues {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.seo-hub__issue {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.seo-hub__issue-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.seo-hub__issue--critical .seo-hub__issue-badge {
+  color: #e07a7a;
+}
+
+.seo-hub__issue--warning .seo-hub__issue-badge {
+  color: var(--ps-warn);
+}
+
+.seo-hub__sitemap-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.seo-hub__sitemap-xml {
+  max-height: 420px;
+  overflow: auto;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--ps-brand-border);
+  background: #faf9ff;
+  font-size: 11px;
+  white-space: pre-wrap;
+}
+
+.seo-hub__empty {
+  opacity: 0.7;
+  font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .seo-hub__pages {
+    grid-template-columns: 1fr;
+  }
+}

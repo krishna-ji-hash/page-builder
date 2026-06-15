@@ -1,0 +1,205 @@
+/* Admin light theme — workspace content + topbar controls */
+
+.admin-shell[data-admin-theme='light'] .admin-shell__main {
+  background: var(--admin-bg);
+}
+
+.admin-shell[data-admin-theme='light'] .admin-shell__topbar {
+  background: var(--admin-topbar-bg);
+  border-color: var(--admin-topbar-border);
+}
+
+.admin-shell[data-admin-theme='light'] .admin-shell__page-title,
+.admin-shell[data-admin-theme='light'] .admin-page__header h1,
+.admin-shell[data-admin-theme='light'] .admin-page__header h2,
+.admin-shell[data-admin-theme='light'] .admin-page__title {
+  color: var(--admin-title);
+}
+
+.admin-shell[data-admin-theme='light'] .admin-topbar__icon-btn,
+.admin-shell[data-admin-theme='light'] .admin-topbar__search-label {
+  background: var(--admin-topbar-btn-bg);
+  border-color: var(--admin-topbar-btn-border);
+  color: var(--admin-topbar-icon-fg);
+}
+
+.admin-shell[data-admin-theme='light'] .admin-topbar__icon-btn:hover,
+.admin-shell[data-admin-theme='light'] .admin-topbar__search-label:focus-within,
+.admin-shell[data-admin-theme='light'] .admin-topbar__search.is-open .admin-topbar__search-label {
+  background: var(--admin-topbar-btn-hover-bg);
+  border-color: #cbd5e1;
+  color: #111827;
+}
+
+.admin-shell[data-admin-theme='light'] .admin-topbar__icon-btn svg,
+.admin-shell[data-admin-theme='light'] .admin-topbar__search-label svg {
+  color: inherit;
+}
+
+.admin-shell[data-admin-theme='light'] .admin-topbar__search-label input {
+  color: var(--admin-text);
+}
+
+.admin-shell[data-admin-theme='light'] .admin-topbar__clock-time {
+  color: var(--admin-text);
+}
+
+.admin-shell[data-admin-theme='light'] .admin-topbar__clock-date {
+  color: var(--admin-muted);
+}
+
+.admin-shell[data-admin-theme='light'] .platform-shell {
+  color: var(--admin-text);
+}
+
+.admin-shell[data-admin-theme='light'] .admin-page__description,
+.admin-shell[data-admin-theme='light'] .admin-page__header p,
+.admin-shell[data-admin-theme='light'] .platform-shell__sub {
+  color: var(--admin-muted);
+}
+
+.admin-shell[data-admin-theme='light'] .platform-card,
+.admin-shell[data-admin-theme='light'] .platform-panel,
+.admin-shell[data-admin-theme='light'] .dash-quick__item,
+.admin-shell[data-admin-theme='light'] .admin-pipeline,
+.admin-shell[data-admin-theme='light'] .platform-toolbar {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.admin-shell[data-admin-theme='light'] .platform-panel__head,
+.admin-shell[data-admin-theme='light'] .platform-toolbar {
+  background: var(--admin-surface-2);
+}
+
+.admin-shell[data-admin-theme='light'] .platform-card__label,
+.admin-shell[data-admin-theme='light'] .platform-card__hint,
+.admin-shell[data-admin-theme='light'] .dash-quick__desc {
+  color: var(--admin-muted);
+}
+
+.admin-shell[data-admin-theme='light'] .platform-card__score,
+.admin-shell[data-admin-theme='light'] .platform-panel__title,
+.admin-shell[data-admin-theme='light'] .dash-quick__label {
+  color: var(--admin-text);
+}
+
+.admin-shell[data-admin-theme='light'] .sites-hub__title,
+.admin-shell[data-admin-theme='light'] .sites-hub__project-name,
+.admin-shell[data-admin-theme='light'] .sites-hub__page-title {
+  color: var(--admin-text);
+}
+
+.admin-shell[data-admin-theme='light'] .sites-hub__sub,
+.admin-shell[data-admin-theme='light'] .sites-hub__project-meta,
+.admin-shell[data-admin-theme='light'] .sites-hub__empty-project {
+  color: var(--admin-muted);
+}
+
+.admin-shell[data-admin-theme='light'] .sites-hub__project {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+}
+
+.admin-shell[data-admin-theme='light'] .sites-hub__project-head {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border-soft);
+}
+
+.admin-shell[data-admin-theme='light'] .sites-hub__page {
+  border-color: var(--admin-border-soft);
+}
+
+.admin-shell[data-admin-theme='light'] .sites-hub__project-meta code,
+.admin-shell[data-admin-theme='light'] .sites-hub__page-path {
+  background: var(--admin-code-bg);
+  color: var(--admin-code-fg);
+  border: 1px solid var(--admin-border);
+}
+
+.admin-shell[data-admin-theme='light'] .platform-btn {
+  background: var(--admin-surface);
+  border-color: #cbd5e1;
+  color: var(--admin-text-soft);
+}
+
+.admin-shell[data-admin-theme='light'] .platform-btn:hover {
+  background: var(--admin-surface-2);
+  border-color: #94a3b8;
+  color: var(--admin-text);
+}
+
+.admin-shell[data-admin-theme='light'] .platform-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--admin-muted);
+}
+
+.admin-shell[data-admin-theme='light'] .platform-btn--ghost:hover {
+  background: var(--admin-hover);
+  color: var(--admin-text);
+}
+
+.admin-shell[data-admin-theme='light'] .dash-hero__badge {
+  color: var(--dash-brand);
+  background: var(--dash-brand-soft);
+  border-color: var(--dash-brand-border);
+}
+
+.admin-shell[data-admin-theme='light'] .dash-stat,
+.admin-shell[data-admin-theme='light'] .dash-health,
+.admin-shell[data-admin-theme='light'] .dash-quick,
+.admin-shell[data-admin-theme='light'] .dash-card,
+.admin-shell[data-admin-theme='light'] .dash-flow__track {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+}
+
+.admin-shell[data-admin-theme='light'] .dash-quick__item {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border-soft);
+}
+
+.admin-shell[data-admin-theme='light'] .dash-flow__step:hover {
+  background: var(--dash-brand-soft);
+  border-color: var(--dash-brand-border);
+}
+
+.admin-shell[data-admin-theme='light'] .dash-health__chip {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border-soft);
+}
+
+.admin-shell[data-admin-theme='light'] .dash-card__badge--blue {
+  color: var(--dash-brand);
+  background: var(--dash-brand-soft);
+  border: 1px solid var(--dash-brand-border);
+}
+
+.admin-shell[data-admin-theme='light'] .dash-flow__step {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border-soft);
+}
+
+.admin-shell[data-admin-theme='light'] .dash-bars__track,
+.admin-shell[data-admin-theme='light'] .dash-gauge__track,
+.admin-shell[data-admin-theme='light'] .dash-donut__track {
+  stroke: var(--admin-surface-2);
+  background: var(--admin-surface-2);
+}
+
+.admin-shell[data-admin-theme='light'] .platform-status--published {
+  color: #166534;
+  background: #ecfdf3;
+}
+
+.admin-shell[data-admin-theme='light'] .platform-status--draft {
+  color: #92400e;
+  background: #fffbeb;
+}
+
+.admin-shell[data-admin-theme='light'] code {
+  background: var(--admin-code-bg);
+  color: var(--admin-code-fg);
+}

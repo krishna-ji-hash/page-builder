@@ -40,6 +40,7 @@ export async function generateMetadata({ params }) {
     pageName: page.name,
     currentPath,
     pageSeo: page.seo,
+    cmsItemSeo: item.seo,
     cmsContext: { item, sys: { slug, collection: 'products' } },
   });
   return metadata;
@@ -74,6 +75,7 @@ export default async function ProductDetailRoute({ params }) {
     pageName: page.name,
     currentPath,
     pageSeo: page.seo,
+    cmsItemSeo: item.seo,
     cmsContext: { item, sys: { slug, collection: 'products' } },
   });
 

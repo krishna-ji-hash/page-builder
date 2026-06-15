@@ -33,9 +33,9 @@
 
 .admin-topbar__search.is-open .admin-topbar__search-label,
 .admin-topbar__search-label:focus-within {
-  border-color: #93c5fd;
+  border-color: var(--admin-accent-border, #c7d2fe);
   background: #fff;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--admin-accent, #4f46e5) 12%, transparent);
   color: #6b7280;
 }
 
@@ -126,7 +126,7 @@
 
 .admin-topbar__search-hit:hover,
 .admin-topbar__search-hit.is-active {
-  background: #eff6ff;
+  background: var(--admin-accent-soft, #eef2ff);
 }
 
 .admin-topbar__search-hit-main {
@@ -206,6 +206,16 @@
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
 
+.admin-topbar__icon-btn svg {
+  display: block;
+  color: inherit;
+}
+
+.admin-topbar__search-label svg {
+  flex-shrink: 0;
+  color: inherit;
+}
+
 .admin-topbar__icon-btn:hover {
   background: #f9fafb;
   border-color: #d1d5db;
@@ -263,14 +273,14 @@
   font: inherit;
   font-size: 12px;
   font-weight: 600;
-  color: #2563eb;
+  color: var(--admin-accent, #4f46e5);
   cursor: pointer;
   padding: 4px 6px;
   border-radius: 6px;
 }
 
 .admin-topbar__notif-mark:hover {
-  background: #eff6ff;
+  background: var(--admin-accent-soft, #eef2ff);
 }
 
 .admin-topbar__notif-empty {
@@ -318,23 +328,23 @@
 }
 
 .admin-topbar__notif-icon--publish {
-  background: #ecfdf3;
-  color: #166534;
+  background: #e8f8f4;
+  color: #5bb8a8;
 }
 
 .admin-topbar__notif-icon--draft {
-  background: #fffbeb;
-  color: #92400e;
+  background: #fff8e8;
+  color: #c9a84c;
 }
 
 .admin-topbar__notif-icon--domain {
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: var(--admin-accent-soft, #eef2ff);
+  color: var(--admin-accent, #4f46e5);
 }
 
 .admin-topbar__notif-icon--create {
-  background: #f5f3ff;
-  color: #6d28d9;
+  background: #f3f0ff;
+  color: #7c75b8;
 }
 
 .admin-topbar__notif-body {
@@ -371,7 +381,7 @@
 .admin-topbar__notif-foot a {
   font-size: 12px;
   font-weight: 600;
-  color: #2563eb;
+  color: var(--admin-accent, #4f46e5);
   text-decoration: none;
 }
 

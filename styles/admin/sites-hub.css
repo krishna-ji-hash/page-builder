@@ -1,4 +1,4 @@
-/* Sites hub — matches admin content area */
+/* Sites hub — compact embed layout */
 
 .sites-hub {
   width: 100%;
@@ -17,13 +17,13 @@
   margin: 0;
   font-size: 15px;
   font-weight: 600;
-  color: #111827;
+  color: var(--admin-text, #2e2b3d);
 }
 
 .sites-hub__sub {
   margin: 4px 0 0;
   font-size: 13px;
-  color: #9ca3af;
+  color: var(--admin-muted, #9b97ab);
 }
 
 .sites-hub__list {
@@ -32,10 +32,11 @@
 }
 
 .sites-hub__project {
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  background: #fff;
+  border: 1px solid var(--admin-border, #ece8f5);
+  border-radius: 14px;
+  background: var(--admin-surface, #fff);
   overflow: hidden;
+  box-shadow: 0 1px 2px rgba(124, 117, 168, 0.04);
 }
 
 .sites-hub__project-head {
@@ -44,29 +45,29 @@
   justify-content: space-between;
   gap: 12px;
   padding: 14px 16px;
-  border-bottom: 1px solid #f3f4f6;
-  background: #fafafa;
+  border-bottom: 1px solid var(--admin-border-soft, #f3f0fa);
+  background: var(--admin-surface-2, #f8f6ff);
 }
 
 .sites-hub__project-name {
   margin: 0 0 2px;
   font-size: 14px;
   font-weight: 600;
-  color: #111827;
+  color: var(--admin-text, #2e2b3d);
 }
 
 .sites-hub__project-meta {
   margin: 0;
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--admin-muted, #9b97ab);
 }
 
 .sites-hub__project-meta code {
   font-size: 11px;
   padding: 1px 5px;
   border-radius: 4px;
-  background: #f3f4f6;
-  color: #4b5563;
+  background: var(--admin-code-bg, #f3f0fa);
+  color: var(--admin-code-fg, #5c5870);
 }
 
 .sites-hub__pages {
@@ -81,7 +82,7 @@
   align-items: center;
   gap: 10px;
   padding: 11px 16px;
-  border-top: 1px solid #f3f4f6;
+  border-top: 1px solid var(--admin-border-soft, #f3f4f6);
 }
 
 .sites-hub__page:first-child {
@@ -97,13 +98,19 @@
   display: block;
   font-size: 13px;
   font-weight: 600;
-  color: #111827;
+  color: var(--admin-text, #2e2b3d);
 }
 
 .sites-hub__page-path {
-  display: block;
+  display: inline-block;
+  margin-top: 2px;
+  padding: 2px 8px;
+  border-radius: 5px;
   font-size: 12px;
-  color: #9ca3af;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--admin-code-fg, #64748b);
+  background: var(--admin-code-bg, #f1f5f9);
+  border: 1px solid var(--admin-border, #e5e7eb);
   word-break: break-all;
 }
 
@@ -118,11 +125,11 @@
   margin: 0;
   padding: 14px 16px;
   font-size: 13px;
-  color: #9ca3af;
+  color: var(--admin-muted, #9b97ab);
 }
 
 .sites-hub__empty-project a {
-  color: #3b82f6;
+  color: var(--admin-accent, #7c75b8);
   font-weight: 600;
   text-decoration: none;
 }
@@ -133,7 +140,7 @@
 }
 
 .sites-hub__more a {
-  color: #3b82f6;
+  color: var(--admin-accent, #7c75b8);
   font-weight: 600;
   text-decoration: none;
 }

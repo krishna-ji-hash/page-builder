@@ -11,6 +11,8 @@ import {
   prepareNodesForLiveRender,
 } from '@/lib/prepareLivePageRender';
 import { buildRenderNodesWithGlobals } from '@/lib/globalSectionMerge';
+import { applyHomeHeaderNavToGlobal, syncPageTreeHeaderNavFromHome } from '@/lib/globalHeaderNavSync';
+import { getPublishedHomeHeaderRow } from '@/services/site/homeHeaderNavService';
 import { isPublicSlug } from '@/lib/routeParams';
 import { publicPagePathForSeo } from '@/lib/publicSiteUrls';
 import { resolveSeoMetadata } from '@/lib/seo/seoEngine';
@@ -85,15 +87,21 @@ export default async function PublicSitePageView({ projectSlug, pageSlug, search
     return <div style={{ padding: 40 }}>Published page is empty</div>;
   }
 
+  const homeHeader = await getPublishedHomeHeaderRow(projectSlug);
+  const pageNodes = syncPageTreeHeaderNavFromHome(page.snapshot_json, homeHeader, pageSlug);
   const frozenGlobals = page.publishedGlobalSections || {};
-  const globalHeader = frozenGlobals.header
-    ? cloneGlobalNode(frozenGlobals.header, 'global-header')
+  const syncedGlobalHeaderSource =
+    frozenGlobals.header && homeHeader
+      ? applyHomeHeaderNavToGlobal(frozenGlobals.header, homeHeader)
+      : frozenGlobals.header;
+  const globalHeader = syncedGlobalHeaderSource
+    ? cloneGlobalNode(syncedGlobalHeaderSource, 'global-header')
     : null;
   const globalFooter = frozenGlobals.footer
     ? cloneGlobalNode(frozenGlobals.footer, 'global-footer')
     : null;
   const mergedNodes = buildRenderNodesWithGlobals(
-    page.snapshot_json,
+    pageNodes,
     globalHeader,
     globalFooter,
     cloneGlobalNode

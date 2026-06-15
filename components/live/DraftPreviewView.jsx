@@ -7,6 +7,8 @@ import {
   prepareNodesForLiveRender,
 } from '@/lib/prepareLivePageRender';
 import { buildRenderNodesWithGlobals } from '@/lib/globalSectionMerge';
+import { applyHomeHeaderNavToGlobal, syncPageTreeHeaderNavFromHome } from '@/lib/globalHeaderNavSync';
+import { getDraftHomeHeaderRow } from '@/services/site/homeHeaderNavService';
 import { expandLinkedGlobalComponents } from '@/lib/globalComponentExpand';
 import { expandCms } from '@/lib/cms/cmsExpand';
 import { getGlobalComponentsByIds } from '@/services/builder/globalComponentsService';
@@ -47,13 +49,17 @@ export default async function DraftPreviewView({ pageId }) {
     return <div style={{ padding: 40 }}>Draft is empty.</div>;
   }
 
-  const globalHeader = state.page.projectConfig?.globalSections?.header
-    ? cloneGlobalNode(state.page.projectConfig.globalSections.header, 'global-header')
+  const homeHeader = await getDraftHomeHeaderRow(state.page.projectId);
+  const headerSource = state.page.projectConfig?.globalSections?.header;
+  const syncedHeaderSource =
+    headerSource && homeHeader ? applyHomeHeaderNavToGlobal(headerSource, homeHeader) : headerSource;
+  const globalHeader = syncedHeaderSource
+    ? cloneGlobalNode(syncedHeaderSource, 'global-header')
     : null;
   const globalFooter = state.page.projectConfig?.globalSections?.footer
     ? cloneGlobalNode(state.page.projectConfig.globalSections.footer, 'global-footer')
     : null;
-  let renderBase = state.tree;
+  let renderBase = syncPageTreeHeaderNavFromHome(state.tree, homeHeader, state.page.slug);
   const ids = [];
   const walk = (nodes) => {
     for (const n of nodes || []) {

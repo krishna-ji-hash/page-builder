@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 
 const DEV_EMAIL = 'admin@localhost';
 const DEV_PASSWORD = 'changeme';
+const IS_DEV = process.env.NODE_ENV === 'development';
 
 export default function AdminLoginForm() {
   const router = useRouter();
@@ -40,35 +41,43 @@ export default function AdminLoginForm() {
   }
 
   return (
-    <form className="admin-login__form" onSubmit={handleSubmit}>
-      <p className="admin-login__hint">
-        Local dev: <code>{DEV_EMAIL}</code> / <code>{DEV_PASSWORD}</code>
-      </p>
-      <label className="admin-login__field">
+    <form className="login-card__form" onSubmit={handleSubmit}>
+      {IS_DEV ? (
+        <p className="login-card__hint">
+          Local dev credentials: <code>{DEV_EMAIL}</code> / <code>{DEV_PASSWORD}</code>
+        </p>
+      ) : null}
+      <label className="login-card__field">
         <span>Email</span>
         <input
           type="email"
           name="email"
           autoComplete="username"
+          placeholder="you@company.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
         />
       </label>
-      <label className="admin-login__field">
+      <label className="login-card__field">
         <span>Password</span>
         <input
           type="password"
           name="password"
           autoComplete="current-password"
+          placeholder="Enter your password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
         />
       </label>
-      {error ? <p className="admin-login__error" role="alert">{error}</p> : null}
-      <button type="submit" className="admin-login__submit" disabled={loading}>
-        {loading ? 'Signing in…' : 'Sign in'}
+      {error ? (
+        <p className="login-card__error" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <button type="submit" className="login-btn" disabled={loading}>
+        {loading ? 'Signing in…' : 'LOGIN TO DASHBOARD'}
       </button>
     </form>
   );

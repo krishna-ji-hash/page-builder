@@ -5,6 +5,7 @@
   --admin-surface: #1e293b;
   --admin-surface-2: #172033;
   --admin-surface-3: #334155;
+  --admin-surface-muted: #172033;
   --admin-border: #334155;
   --admin-border-soft: #1e293b;
   --admin-text: #f1f5f9;
@@ -17,14 +18,14 @@
   --admin-code-fg: #cbd5e1;
 }
 
-/* ── Shell / topbar ── */
+/* ── Shell / topbar (content surfaces; sidebar tokens live in shell.css) ── */
 .admin-shell[data-admin-theme='dark'] .admin-shell__main {
   background: var(--admin-bg);
 }
 
 .admin-shell[data-admin-theme='dark'] .admin-shell__topbar {
-  background: var(--admin-surface);
-  border-color: var(--admin-border);
+  background: var(--admin-topbar-bg);
+  border-color: var(--admin-topbar-border);
 }
 
 .admin-shell[data-admin-theme='dark'] .admin-shell__page-title,
@@ -50,6 +51,11 @@
   background: var(--admin-input-bg);
   border-color: var(--admin-border);
   color: var(--admin-text);
+}
+
+.admin-shell[data-admin-theme='dark'] .admin-topbar__icon-btn svg,
+.admin-shell[data-admin-theme='dark'] .admin-topbar__search-label svg {
+  color: inherit;
 }
 
 .admin-shell[data-admin-theme='dark'] .admin-shell__user-label {
@@ -256,9 +262,11 @@
   border-color: var(--admin-border-soft);
 }
 
-.admin-shell[data-admin-theme='dark'] .sites-hub__project-meta code {
-  background: var(--admin-input-bg);
+.admin-shell[data-admin-theme='dark'] .sites-hub__project-meta code,
+.admin-shell[data-admin-theme='dark'] .sites-hub__page-path {
+  background: var(--admin-code-bg);
   color: var(--admin-code-fg);
+  border-color: var(--admin-border);
 }
 
 .admin-shell[data-admin-theme='dark'] .sites-hub__more a,
@@ -310,15 +318,15 @@
 }
 
 .admin-shell[data-admin-theme='dark'] .platform-btn--primary {
-  background: #2563eb;
-  border-color: #2563eb;
-  color: #fff;
+  background: var(--admin-accent-btn);
+  border-color: var(--admin-accent-btn);
+  color: var(--admin-accent-btn-fg);
 }
 
 .admin-shell[data-admin-theme='dark'] .platform-btn--primary:hover {
-  background: #1d4ed8;
-  border-color: #1d4ed8;
-  color: #fff;
+  background: var(--admin-accent-btn-hover);
+  border-color: var(--admin-accent-btn-hover);
+  color: var(--admin-accent-btn-fg);
 }
 
 .admin-shell[data-admin-theme='dark'] .platform-btn--danger {
@@ -621,6 +629,94 @@
 }
 
 .admin-shell[data-admin-theme='dark'] code {
-  background: var(--admin-input-bg);
+  background: var(--admin-code-bg);
   color: var(--admin-code-fg);
+}
+
+.admin-shell[data-admin-theme='dark'] .dash-hero__badge {
+  color: var(--dash-brand);
+  background: var(--dash-brand-soft);
+  border-color: var(--dash-brand-border);
+}
+
+.admin-shell[data-admin-theme='dark'] .dash-stat,
+.admin-shell[data-admin-theme='dark'] .dash-health,
+.admin-shell[data-admin-theme='dark'] .dash-quick,
+.admin-shell[data-admin-theme='dark'] .dash-card,
+.admin-shell[data-admin-theme='dark'] .dash-flow__track {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+  box-shadow: none;
+}
+
+.admin-shell[data-admin-theme='dark'] .dash-quick__item {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border);
+}
+
+.admin-shell[data-admin-theme='dark'] .dash-quick__item:hover {
+  background: var(--admin-hover-strong);
+  border-color: #3b82f6;
+}
+
+.admin-shell[data-admin-theme='dark'] .dash-quick__icon {
+  background: var(--admin-input-bg);
+  border-color: var(--admin-border);
+  color: #93c5fd;
+}
+
+.admin-shell[data-admin-theme='dark'] .dash-health__chip {
+  background: var(--admin-input-bg);
+  border-color: var(--admin-border);
+}
+
+.admin-shell[data-admin-theme='dark'] .dash-health__link {
+  color: #93c5fd;
+}
+
+.admin-shell[data-admin-theme='dark'] .dash-card__link {
+  color: var(--dash-brand);
+}
+
+.admin-shell[data-admin-theme='dark'] .dash-card__badge--blue {
+  color: var(--dash-brand);
+  background: var(--dash-brand-soft);
+  border: 1px solid var(--dash-brand-border);
+}
+
+.admin-shell[data-admin-theme='dark'] .dash-flow__step {
+  background: var(--admin-surface-2);
+  border-color: var(--admin-border);
+}
+
+.admin-shell[data-admin-theme='dark'] .dash-flow__step:hover {
+  background: var(--dash-brand-soft);
+  border-color: var(--dash-brand-border);
+}
+
+.admin-shell[data-admin-theme='dark'] .dash-flow__num {
+  color: var(--dash-brand);
+  background: var(--dash-brand-soft);
+  border-color: var(--dash-brand-border);
+}
+
+.admin-shell[data-admin-theme='dark'] .dash-flow__icon {
+  color: var(--dash-brand-muted);
+}
+
+.admin-shell[data-admin-theme='dark'] .dash-bars__track {
+  background: var(--admin-input-bg);
+}
+
+.admin-shell[data-admin-theme='dark'] .dash-gauge__track {
+  stroke: var(--admin-input-bg);
+}
+
+.admin-shell[data-admin-theme='dark'] .dash-donut__track {
+  stroke: var(--admin-input-bg);
+}
+
+.admin-shell[data-admin-theme='dark'] .dash-skeleton-block {
+  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+  background-size: 200% 100%;
 }

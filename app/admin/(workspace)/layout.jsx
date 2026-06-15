@@ -1,7 +1,9 @@
 import { Inter } from 'next/font/google';
 import AdminShell from '@/components/admin/AdminShell';
 import '@/styles/admin/shell.css';
+import '@/styles/admin/light-theme.css';
 import '@/styles/admin/dark-theme.css';
+import '@/styles/admin/workspace-dark.css';
 
 const inter = Inter({
   subsets: ['latin'],

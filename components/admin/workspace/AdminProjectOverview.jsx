@@ -3,10 +3,71 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import AdminActivityLogPanel from '@/components/admin/AdminActivityLogPanel';
-import AdminPageHeader from '@/components/admin/AdminPageHeader';
 import { adminProjectSectionPath } from '@/lib/admin/adminRoutes';
 import { adminBuilderPagePath } from '@/lib/builder/adminBuilderRoutes';
 import '@/styles/admin/platform.css';
+import '@/styles/admin/project-overview.css';
+
+function projectInitial(name) {
+  const ch = String(name ?? '?').trim().charAt(0);
+  return ch ? ch.toUpperCase() : '?';
+}
+
+const STAT_CARDS = [
+  {
+    key: 'pages',
+    label: 'Pages',
+    tone: 'pages',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <path
+          d="M5.5 3.5h6l3 3v10a1 1 0 01-1 1h-8a1 1 0 01-1-1v-12a1 1 0 011-1z"
+          stroke="currentColor"
+          strokeWidth="1.5"
+        />
+        <path d="M11.5 3.5V7h3" stroke="currentColor" strokeWidth="1.5" />
+      </svg>
+    ),
+  },
+  {
+    key: 'published',
+    label: 'Published',
+    tone: 'published',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <path
+          d="M4 10.5l4 4 8-9"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    ),
+  },
+  {
+    key: 'drafts',
+    label: 'Drafts',
+    tone: 'drafts',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <path d="M5 4.5h10v11H5v-11z" stroke="currentColor" strokeWidth="1.5" />
+        <path d="M7.5 8h5M7.5 11h5M7.5 14h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
+    key: 'domains',
+    label: 'Domains',
+    tone: 'domains',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="1.5" />
+        <path d="M3 10h14M10 3a10.5 10.5 0 010 14M10 3a10.5 10.5 0 000 14" stroke="currentColor" strokeWidth="1.5" />
+      </svg>
+    ),
+  },
+];
 
 export default function AdminProjectOverview({ projectId }) {
   const [project, setProject] = useState(null);
@@ -41,37 +102,29 @@ export default function AdminProjectOverview({ projectId }) {
   }, [projectId]);
 
   const publishedCount = pages.filter((p) => p.status === 'published').length;
+  const draftCount = pages.length - publishedCount;
+
+  const statValues = {
+    pages: pages.length,
+    published: publishedCount,
+    drafts: draftCount,
+    domains: domains.length,
+  };
 
   return (
-    <div className="platform-shell">
-      <AdminPageHeader
-        badge="Workspace · Overview"
-        title={project?.name || 'Project overview'}
-        description={
-          project?.slug
-            ? `/${project.slug} — summary, shortcuts, and recent activity.`
-            : 'Summary, shortcuts, and recent activity.'
-        }
-        actions={
-          project ? (
-            <div className="platform-actions">
-              <Link className="platform-btn platform-btn--primary" href={adminProjectSectionPath(projectId, 'pages')}>
-                Manage pages
-              </Link>
-              <Link className="platform-btn" href={adminBuilderPagePath(project.slug, 'home')}>
-                Open builder
-              </Link>
-            </div>
-          ) : null
-        }
-      />
-
+    <div className="proj-overview">
       {loading ? (
-        <div className="platform-skeleton-grid" aria-hidden="true">
-          <div className="platform-skeleton platform-skeleton--card" />
-          <div className="platform-skeleton platform-skeleton--card" />
-          <div className="platform-skeleton platform-skeleton--card" />
-        </div>
+        <>
+          <div className="proj-overview__hero" aria-hidden="true">
+            <div className="proj-overview__skeleton-block" style={{ height: 120, borderRadius: 20 }} />
+          </div>
+          <div className="proj-overview__skeleton-stats">
+            <div className="proj-overview__skeleton-block" />
+            <div className="proj-overview__skeleton-block" />
+            <div className="proj-overview__skeleton-block" />
+            <div className="proj-overview__skeleton-block" />
+          </div>
+        </>
       ) : null}
 
       {error ? (
@@ -82,22 +135,56 @@ export default function AdminProjectOverview({ projectId }) {
 
       {project ? (
         <>
-          <div className="platform-grid">
-            <div className="platform-card">
-              <div className="platform-card__score">{pages.length}</div>
-              <div>Pages</div>
+          <header className="proj-overview__hero">
+            <div className="proj-overview__hero-main">
+              <span className="proj-overview__avatar" aria-hidden="true">
+                {projectInitial(project.name)}
+              </span>
+              <div className="proj-overview__hero-text">
+                <p className="proj-overview__badge">Workspace · Overview</p>
+                <h1 className="proj-overview__title">{project.name}</h1>
+                <p className="proj-overview__meta">
+                  <span className="proj-overview__slug">/{project.slug}</span>
+                  <span className="proj-overview__type">{project.type || 'website'}</span>
+                  <span>· summary & recent activity</span>
+                </p>
+              </div>
             </div>
-            <div className="platform-card">
-              <div className="platform-card__score">{publishedCount}</div>
-              <div>Published</div>
+            <div className="proj-overview__actions">
+              <Link className="proj-overview__btn proj-overview__btn--primary" href={adminProjectSectionPath(projectId, 'pages')}>
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M3 4.5h10v9H3v-9z" stroke="currentColor" strokeWidth="1.4" />
+                  <path d="M6 7.5h4M6 10h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                </svg>
+                Manage pages
+              </Link>
+              <Link className="proj-overview__btn" href={adminBuilderPagePath(project.slug, 'home')}>
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M3 12.5l8.5-8.5 2 2L5 14.5H3v-2z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+                </svg>
+                Open builder
+              </Link>
+              <Link className="proj-overview__btn" href={adminProjectSectionPath(projectId, 'domains')}>
+                Domains
+              </Link>
             </div>
-            <div className="platform-card">
-              <div className="platform-card__score">{domains.length}</div>
-              <div>Domains</div>
-            </div>
+          </header>
+
+          <div className="proj-overview__stats" aria-label="Project summary">
+            {STAT_CARDS.map((card) => (
+              <article key={card.key} className={`proj-overview__stat proj-overview__stat--${card.tone}`}>
+                <div className="proj-overview__stat-top">
+                  <span className="proj-overview__stat-label">{card.label}</span>
+                  <span className="proj-overview__stat-icon">{card.icon}</span>
+                </div>
+                <span className="proj-overview__stat-value">{statValues[card.key]}</span>
+              </article>
+            ))}
           </div>
 
-          <AdminActivityLogPanel projectId={projectId} title="Recent activity" limit={10} showToolbar={false} />
+          <div className="proj-overview__activity">
+            <AdminActivityLogPanel projectId={projectId} title="Recent activity" limit={10} showToolbar={false} />
+          </div>
         </>
       ) : null}
     </div>

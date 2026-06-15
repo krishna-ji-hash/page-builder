@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ADMIN_DASHBOARD_PATH,
   ADMIN_PLATFORM_HEALTH_PATH,
@@ -18,14 +18,56 @@ import {
 import { NAV_ICONS, SETTINGS_ICON, workspaceIcon } from '@/lib/admin/navIcons';
 import AdminTopbarTools from '@/components/admin/AdminTopbarTools';
 import AdminChangePasswordModal from '@/components/admin/AdminChangePasswordModal';
+import { readAdminTheme, persistAdminTheme } from '@/lib/admin/adminTheme';
 import '@/styles/admin/shell.css';
 
 const MAX_SIDEBAR_PROJECTS = 4;
+const SIDEBAR_COLLAPSED_KEY = 'admin-sidebar-collapsed';
 
-function NavItem({ href, active, icon, children }) {
+function readSidebarCollapsed() {
+  if (typeof window === 'undefined') return false;
+  try {
+    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+const SIDEBAR_COLLAPSE_ICON = (
+  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+    <path
+      d="M7.5 4.5H15M7.5 4.5v11M7.5 4.5L5 7M7.5 15.5L5 13"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <rect x="3.5" y="4.5" width="4" height="11" rx="1" stroke="currentColor" strokeWidth="1.5" />
+  </svg>
+);
+
+const SIDEBAR_EXPAND_ICON = (
+  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+    <path
+      d="M12.5 4.5H5M12.5 4.5v11M12.5 4.5L15 7M12.5 15.5L15 13"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <rect x="12.5" y="4.5" width="4" height="11" rx="1" stroke="currentColor" strokeWidth="1.5" />
+  </svg>
+);
+
+function NavItem({ href, active, icon, children, collapsed }) {
+  const label = typeof children === 'string' ? children : '';
   return (
     <li className="admin-shell__nav-item">
-      <Link href={href} className={`admin-shell__nav-link${active ? ' is-active' : ''}`}>
+      <Link
+        href={href}
+        className={`admin-shell__nav-link${active ? ' is-active' : ''}`}
+        data-tooltip={collapsed && label ? label : undefined}
+      >
         <span className="admin-shell__nav-icon">{icon}</span>
         <span className="admin-shell__nav-text">{children}</span>
       </Link>
@@ -33,28 +75,78 @@ function NavItem({ href, active, icon, children }) {
   );
 }
 
-function ProjectsNavDropdown({ parsed, projects }) {
+function ProjectsNavDropdown({ parsed, projects, sidebarCollapsed }) {
   const isProjectsArea =
     parsed.kind === 'projects' ||
     parsed.kind === 'project-new' ||
     parsed.kind === 'project';
 
   const [open, setOpen] = useState(isProjectsArea);
+  const toggleRef = useRef(null);
+  const [flyoutTop, setFlyoutTop] = useState(0);
 
   useEffect(() => {
     if (isProjectsArea) setOpen(true);
   }, [isProjectsArea]);
 
+  useEffect(() => {
+    if (sidebarCollapsed) setOpen(false);
+  }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    if (!open || !sidebarCollapsed) return undefined;
+    function syncFlyoutTop() {
+      const rect = toggleRef.current?.getBoundingClientRect();
+      if (rect) setFlyoutTop(rect.top);
+    }
+    syncFlyoutTop();
+    window.addEventListener('resize', syncFlyoutTop);
+    window.addEventListener('scroll', syncFlyoutTop, true);
+    return () => {
+      window.removeEventListener('resize', syncFlyoutTop);
+      window.removeEventListener('scroll', syncFlyoutTop, true);
+    };
+  }, [open, sidebarCollapsed]);
+
+  useEffect(() => {
+    if (!open || !sidebarCollapsed) return undefined;
+    function onDocClick(e) {
+      if (!e.target.closest('.admin-shell__nav-item--dropdown')) setOpen(false);
+    }
+    document.addEventListener('click', onDocClick);
+    return () => document.removeEventListener('click', onDocClick);
+  }, [open, sidebarCollapsed]);
+
+  useEffect(() => {
+    if (!open || !sidebarCollapsed) return undefined;
+    function onKeyDown(e) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [open, sidebarCollapsed]);
+
   const visibleProjects = projects.slice(0, MAX_SIDEBAR_PROJECTS);
   const moreCount = projects.length - visibleProjects.length;
 
+  function toggleOpen() {
+    setOpen((v) => !v);
+  }
+
   return (
-    <li className={`admin-shell__nav-item admin-shell__nav-item--dropdown${open ? ' is-open' : ''}`}>
+    <li
+      className={`admin-shell__nav-item admin-shell__nav-item--dropdown${open ? ' is-open' : ''}${
+        sidebarCollapsed ? ' is-collapsed-sidebar' : ''
+      }`}
+    >
       <button
+        ref={toggleRef}
         type="button"
         className={`admin-shell__nav-link admin-shell__nav-toggle${isProjectsArea ? ' is-active' : ''}`}
         aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
+        aria-controls="admin-projects-subnav"
+        data-tooltip={sidebarCollapsed ? 'Projects' : undefined}
+        onClick={toggleOpen}
       >
         <span className="admin-shell__nav-leading">
           <span className="admin-shell__nav-icon">{NAV_ICONS.projects}</span>
@@ -65,12 +157,23 @@ function ProjectsNavDropdown({ parsed, projects }) {
         </svg>
       </button>
 
-      {open ? (
-        <ul className="admin-shell__subnav">
+      <div
+        className={`admin-shell__subnav-wrap${open ? ' is-open' : ''}${sidebarCollapsed ? ' is-flyout' : ''}`}
+        aria-hidden={!open}
+        style={sidebarCollapsed && open ? { top: `${flyoutTop}px` } : undefined}
+      >
+        {sidebarCollapsed ? (
+          <div className="admin-shell__flyout-head">
+            <span className="admin-shell__flyout-title">Projects</span>
+            <span className="admin-shell__flyout-meta">{projects.length} total</span>
+          </div>
+        ) : null}
+        <ul id="admin-projects-subnav" className="admin-shell__subnav">
           <li className="admin-shell__subnav-item">
             <Link
               href={ADMIN_PROJECTS_PATH}
               className={`admin-shell__subnav-link${parsed.kind === 'projects' ? ' is-active' : ''}`}
+              onClick={() => sidebarCollapsed && setOpen(false)}
             >
               All sites
             </Link>
@@ -79,8 +182,10 @@ function ProjectsNavDropdown({ parsed, projects }) {
             <Link
               href={ADMIN_PROJECT_NEW_PATH}
               className={`admin-shell__subnav-link admin-shell__subnav-link--accent${parsed.kind === 'project-new' ? ' is-active' : ''}`}
+              onClick={() => sidebarCollapsed && setOpen(false)}
             >
-              + New project
+              <span className="admin-shell__subnav-plus" aria-hidden="true">+</span>
+              New project
             </Link>
           </li>
           {visibleProjects.length ? (
@@ -95,6 +200,7 @@ function ProjectsNavDropdown({ parsed, projects }) {
                         parsed.kind === 'project' && parsed.projectId === project.id ? ' is-active' : ''
                       }`}
                       title={project.name || project.slug}
+                      onClick={() => sidebarCollapsed && setOpen(false)}
                     >
                       <span className="admin-shell__subnav-dot" aria-hidden="true" />
                       <span className="admin-shell__subnav-name">{project.name || project.slug}</span>
@@ -103,7 +209,11 @@ function ProjectsNavDropdown({ parsed, projects }) {
                 ))}
                 {moreCount > 0 ? (
                   <li className="admin-shell__subnav-item">
-                    <Link href={ADMIN_PROJECTS_PATH} className="admin-shell__subnav-link admin-shell__subnav-link--more">
+                    <Link
+                      href={ADMIN_PROJECTS_PATH}
+                      className="admin-shell__subnav-link admin-shell__subnav-link--more"
+                      onClick={() => sidebarCollapsed && setOpen(false)}
+                    >
                       +{moreCount} more
                     </Link>
                   </li>
@@ -112,7 +222,7 @@ function ProjectsNavDropdown({ parsed, projects }) {
             </li>
           ) : null}
         </ul>
-      ) : null}
+      </div>
     </li>
   );
 }
@@ -259,7 +369,34 @@ export default function AdminShell({ children }) {
   const parsed = useMemo(() => parseAdminPathname(pathname), [pathname]);
   const crumbs = useMemo(() => breadcrumbLabels(parsed), [parsed]);
   const [projects, setProjects] = useState([]);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [theme, setTheme] = useState('light');
   const pageTitle = crumbs[crumbs.length - 1]?.label || 'Admin';
+
+  useEffect(() => {
+    setSidebarCollapsed(readSidebarCollapsed());
+    setTheme(readAdminTheme());
+  }, []);
+
+  function toggleTheme() {
+    setTheme((prev) => {
+      const next = prev === 'dark' ? 'light' : 'dark';
+      persistAdminTheme(next);
+      return next;
+    });
+  }
+
+  function toggleSidebarCollapsed() {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? '1' : '0');
+      } catch {
+        /* ignore storage errors */
+      }
+      return next;
+    });
+  }
 
   useEffect(() => {
     fetch('/api/projects', { cache: 'no-store' })
@@ -271,7 +408,11 @@ export default function AdminShell({ children }) {
   const isProjectRoute = parsed.kind === 'project';
 
   return (
-    <div className="admin-shell" data-admin-theme="light">
+    <div
+      className="admin-shell"
+      data-admin-theme={theme}
+      data-sidebar-collapsed={sidebarCollapsed ? 'true' : 'false'}
+    >
       <aside className="admin-shell__sidebar">
         <div className="admin-shell__sidebar-head">
           <Link href={ADMIN_DASHBOARD_PATH} className="admin-shell__brand">
@@ -288,14 +429,29 @@ export default function AdminShell({ children }) {
         <nav className="admin-shell__nav" aria-label="Admin navigation">
           <ul className="admin-shell__nav-sections">
             <NavSection label="Platform">
-              <NavItem href={ADMIN_DASHBOARD_PATH} active={parsed.kind === 'dashboard'} icon={NAV_ICONS.dashboard}>
+              <NavItem
+                href={ADMIN_DASHBOARD_PATH}
+                active={parsed.kind === 'dashboard'}
+                icon={NAV_ICONS.dashboard}
+                collapsed={sidebarCollapsed}
+              >
                 Dashboard
               </NavItem>
-              <ProjectsNavDropdown parsed={parsed} projects={projects} />
-              <NavItem href={ADMIN_PUBLISHING_PATH} active={parsed.kind === 'publishing'} icon={NAV_ICONS.publishing}>
+              <ProjectsNavDropdown parsed={parsed} projects={projects} sidebarCollapsed={sidebarCollapsed} />
+              <NavItem
+                href={ADMIN_PUBLISHING_PATH}
+                active={parsed.kind === 'publishing'}
+                icon={NAV_ICONS.publishing}
+                collapsed={sidebarCollapsed}
+              >
                 Publishing
               </NavItem>
-              <NavItem href={ADMIN_PLATFORM_HEALTH_PATH} active={parsed.kind === 'platform-health'} icon={NAV_ICONS.health}>
+              <NavItem
+                href={ADMIN_PLATFORM_HEALTH_PATH}
+                active={parsed.kind === 'platform-health'}
+                icon={NAV_ICONS.health}
+                collapsed={sidebarCollapsed}
+              >
                 Platform health
               </NavItem>
             </NavSection>
@@ -308,6 +464,7 @@ export default function AdminShell({ children }) {
                     href={adminProjectSectionPath(parsed.projectId, section.id)}
                     active={parsed.section === section.id}
                     icon={workspaceIcon(section.id)}
+                    collapsed={sidebarCollapsed}
                   >
                     {section.label}
                   </NavItem>
@@ -322,6 +479,7 @@ export default function AdminShell({ children }) {
                   href={section.href}
                   active={parsed.kind === 'settings' && parsed.section === section.id}
                   icon={SETTINGS_ICON[section.id] || NAV_ICONS.system}
+                  collapsed={sidebarCollapsed}
                 >
                   {section.label}
                 </NavItem>
@@ -329,18 +487,46 @@ export default function AdminShell({ children }) {
             </NavSection>
           </ul>
         </nav>
+
+        <div className="admin-shell__sidebar-foot">
+          <button
+            type="button"
+            className="admin-shell__sidebar-collapse-btn"
+            onClick={toggleSidebarCollapsed}
+            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-expanded={!sidebarCollapsed}
+            data-tooltip={sidebarCollapsed ? 'Expand sidebar' : undefined}
+          >
+            <span className="admin-shell__sidebar-collapse-icon">
+              {sidebarCollapsed ? SIDEBAR_EXPAND_ICON : SIDEBAR_COLLAPSE_ICON}
+            </span>
+            <span className="admin-shell__sidebar-collapse-label">
+              {sidebarCollapsed ? 'Expand' : 'Collapse'}
+            </span>
+          </button>
+        </div>
       </aside>
 
       <div className="admin-shell__main">
         <header className="admin-shell__topbar">
           <div className="admin-shell__topbar-left">
+            {sidebarCollapsed ? (
+              <button
+                type="button"
+                className="admin-shell__topbar-menu-btn"
+                onClick={toggleSidebarCollapsed}
+                aria-label="Expand sidebar"
+              >
+                {SIDEBAR_EXPAND_ICON}
+              </button>
+            ) : null}
             <div className="admin-shell__topbar-title-wrap">
               <h1 className="admin-shell__page-title">{pageTitle}</h1>
               <AdminBreadcrumb crumbs={crumbs} />
             </div>
             <ProjectSwitcher parsed={parsed} projects={projects} />
           </div>
-          <AdminTopbarTools projects={projects} />
+          <AdminTopbarTools projects={projects} theme={theme} onToggleTheme={toggleTheme} />
           <div className="admin-shell__topbar-right">
             <UserMenu />
           </div>

@@ -1,9 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import AdminPageHeader from '@/components/admin/AdminPageHeader';
 import '@/styles/admin/platform.css';
-import '@/styles/admin/forms.css';
 import '@/styles/admin/cms.css';
 
 async function fetchJson(url, opts) {
@@ -27,22 +25,40 @@ function safeSlug(s) {
 }
 
 export default function AdminProjectCms({ projectId }) {
+  const [project, setProject] = useState(null);
   const [collections, setCollections] = useState([]);
   const [activeSlug, setActiveSlug] = useState('');
   const [items, setItems] = useState([]);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [query, setQuery] = useState('');
 
   const active = useMemo(() => collections.find((c) => c.slug === activeSlug) || null, [collections, activeSlug]);
+
+  const filteredItems = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter(
+      (it) =>
+        String(it.title || '').toLowerCase().includes(q) ||
+        String(it.slug || '').toLowerCase().includes(q)
+    );
+  }, [items, query]);
 
   const load = async () => {
     setBusy(true);
     setError('');
     try {
-      const data = await fetchJson(`/api/projects/${projectId}/cms/collections`);
-      setCollections(Array.isArray(data.collections) ? data.collections : []);
-      const first = Array.isArray(data.collections) && data.collections[0] ? data.collections[0].slug : '';
+      const pid = Number(projectId);
+      const [cmsData, projectsData] = await Promise.all([
+        fetchJson(`/api/projects/${projectId}/cms/collections`),
+        fetch('/api/projects', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : { projects: [] })),
+      ]);
+      setCollections(Array.isArray(cmsData.collections) ? cmsData.collections : []);
+      const found = (projectsData.projects || []).find((p) => Number(p.id) === pid);
+      setProject(found || null);
+      const first = Array.isArray(cmsData.collections) && cmsData.collections[0] ? cmsData.collections[0].slug : '';
       setActiveSlug((cur) => cur || first || '');
     } catch (e) {
       setError(e?.message || 'Failed to load collections');
@@ -61,6 +77,7 @@ export default function AdminProjectCms({ projectId }) {
         `/api/projects/${projectId}/cms/collections/${slug}/items?status=published&limit=50`
       );
       setItems(Array.isArray(data.items) ? data.items : []);
+      setQuery('');
     } catch (e) {
       setError(e?.message || 'Failed to load items');
     } finally {
@@ -124,30 +141,47 @@ export default function AdminProjectCms({ projectId }) {
   };
 
   return (
-    <div className="platform-shell">
-      <AdminPageHeader
-        badge="Workspace · CMS"
-        title="Collections"
-        description="Manage content collections and published items for this project."
-        actions={
-          <div className="platform-actions">
-            <button type="button" className="platform-btn" onClick={onCreateCollection} disabled={busy}>
-              New collection
-            </button>
-            <button
-              type="button"
-              className="platform-btn platform-btn--primary"
-              onClick={onCreateItem}
-              disabled={busy || !activeSlug}
-            >
-              New item
-            </button>
-          </div>
-        }
-      />
+    <div className="proj-cms">
+      <header className="proj-cms__hero">
+        <div className="proj-cms__hero-main">
+          <p className="proj-cms__badge">Workspace · CMS</p>
+          <h1 className="proj-cms__title">Collections</h1>
+          <p className="proj-cms__sub">
+            {project?.name ? (
+              <>
+                <strong>{project.name}</strong> — manage content collections and published items.
+              </>
+            ) : (
+              'Manage content collections and published items for this project.'
+            )}
+          </p>
+        </div>
+        <div className="proj-cms__actions">
+          <button type="button" className="proj-cms__btn" onClick={onCreateCollection} disabled={busy}>
+            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M8 3.5v9M3.5 8h9" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+            </svg>
+            New collection
+          </button>
+          <button
+            type="button"
+            className="proj-cms__btn proj-cms__btn--primary"
+            onClick={onCreateItem}
+            disabled={busy || !activeSlug}
+          >
+            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M3 12.5l8.5-8.5 2 2L5 14.5H3v-2z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+            </svg>
+            New item
+          </button>
+        </div>
+      </header>
 
       {loading ? (
-        <div className="platform-skeleton platform-skeleton--card" style={{ height: 280 }} aria-hidden="true" />
+        <div className="proj-cms__skeleton" aria-hidden="true">
+          <div className="proj-cms__skeleton-block" style={{ height: 320 }} />
+          <div className="proj-cms__skeleton-block" style={{ height: 320 }} />
+        </div>
       ) : null}
 
       {error ? (
@@ -157,54 +191,112 @@ export default function AdminProjectCms({ projectId }) {
       ) : null}
 
       {!loading ? (
-        <div className="admin-cms-layout">
-          <section className="platform-panel admin-cms-collections">
-            <div className="platform-panel__head">
-              <h2 className="platform-panel__title">Collections</h2>
-              <p className="platform-panel__sub">{collections.length} total</p>
+        <div className="proj-cms__layout">
+          <aside className="proj-cms__panel proj-cms__collections">
+            <div className="proj-cms__panel-head">
+              <h2 className="proj-cms__panel-title">Collections</h2>
+              <p className="proj-cms__panel-sub">{collections.length} total</p>
             </div>
-            <ul className="admin-cms-list">
-              {collections.map((c) => (
-                <li key={c.id}>
-                  <button
-                    type="button"
-                    className={`admin-cms-list__btn${c.slug === activeSlug ? ' is-active' : ''}`}
-                    onClick={() => setActiveSlug(c.slug)}
-                  >
-                    <span className="admin-cms-list__name">{c.name}</span>
-                    <span className="admin-cms-list__slug">{c.slug}</span>
-                  </button>
-                </li>
-              ))}
-              {!collections.length ? (
-                <li className="admin-cms-list__empty">No collections yet.</li>
-              ) : null}
-            </ul>
-          </section>
-
-          <section className="platform-panel admin-cms-items">
-            <div className="platform-panel__head">
-              <div>
-                <h2 className="platform-panel__title">Items</h2>
-                <p className="platform-panel__sub">
-                  {active ? active.slug : 'Select a collection'}
-                </p>
-              </div>
-            </div>
-            <div className="platform-panel__body platform-panel__body--padded">
-              {!activeSlug ? (
-                <p className="admin-cms-list__empty">Select a collection to view items.</p>
-              ) : !items.length ? (
-                <p className="admin-cms-list__empty">No published items yet.</p>
-              ) : (
-                <ul className="admin-cms-items-list">
-                  {items.map((it) => (
-                    <li key={it.id} className="admin-cms-item">
-                      <span className="admin-cms-item__title">{it.title || it.slug}</span>
-                      <span className="admin-cms-item__slug">{it.slug}</span>
+            <div className="proj-cms__collections-body">
+              {collections.length ? (
+                <ul className="proj-cms__collections-list">
+                  {collections.map((c) => (
+                    <li key={c.id}>
+                      <button
+                        type="button"
+                        className={`proj-cms__collection-btn${c.slug === activeSlug ? ' is-active' : ''}`}
+                        onClick={() => setActiveSlug(c.slug)}
+                      >
+                        <span className="proj-cms__collection-name">{c.name}</span>
+                        <span className="proj-cms__collection-slug">{c.slug}</span>
+                      </button>
                     </li>
                   ))}
                 </ul>
+              ) : (
+                <div className="proj-cms__empty proj-cms__empty--inline">
+                  <p className="proj-cms__empty-title">No collections</p>
+                  <p className="proj-cms__empty-text">Create a collection to start adding content items.</p>
+                  <button type="button" className="proj-cms__btn proj-cms__btn--primary" onClick={onCreateCollection} disabled={busy}>
+                    New collection
+                  </button>
+                </div>
+              )}
+            </div>
+          </aside>
+
+          <section className="proj-cms__panel proj-cms__items">
+            <div className="proj-cms__panel-head">
+              <h2 className="proj-cms__panel-title">Published items</h2>
+              <p className="proj-cms__panel-sub">
+                {active ? (
+                  <>
+                    <code className="proj-cms__active-slug">{active.slug}</code>
+                    {' · '}
+                    {items.length} item{items.length === 1 ? '' : 's'}
+                  </>
+                ) : (
+                  'Select a collection'
+                )}
+              </p>
+            </div>
+            <div className="proj-cms__items-body">
+              {!activeSlug ? (
+                <div className="proj-cms__empty">
+                  <p className="proj-cms__empty-title">Select a collection</p>
+                  <p className="proj-cms__empty-text">Choose a collection on the left to view and manage its items.</p>
+                </div>
+              ) : !items.length ? (
+                <div className="proj-cms__empty">
+                  <p className="proj-cms__empty-title">No published items</p>
+                  <p className="proj-cms__empty-text">Add your first item to this collection.</p>
+                  <button type="button" className="proj-cms__btn proj-cms__btn--primary" onClick={onCreateItem} disabled={busy}>
+                    New item
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="proj-cms__items-toolbar">
+                    <span className="proj-cms__items-meta">
+                      {query.trim() ? `${filteredItems.length} of ${items.length}` : `${items.length} items`}
+                    </span>
+                    <label className="proj-cms__search">
+                      <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                        <circle cx="7" cy="7" r="4.25" stroke="currentColor" strokeWidth="1.5" />
+                        <path d="M10.5 10.5L13 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                      </svg>
+                      <input
+                        type="search"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder="Search items…"
+                        aria-label="Search items"
+                      />
+                    </label>
+                  </div>
+                  {query.trim() && !filteredItems.length ? (
+                    <p className="proj-cms__empty-text" style={{ textAlign: 'center', padding: '16px 0' }}>
+                      No items match &ldquo;{query.trim()}&rdquo;.
+                    </p>
+                  ) : (
+                    <ul className="proj-cms__items-list">
+                      {filteredItems.map((it) => (
+                        <li key={it.id} className="proj-cms__item">
+                          <span className="proj-cms__item-icon" aria-hidden="true">
+                            <svg viewBox="0 0 16 16" fill="none">
+                              <path d="M4 3.5h8v9H4v-9z" stroke="currentColor" strokeWidth="1.4" />
+                              <path d="M6 6.5h4M6 9h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                            </svg>
+                          </span>
+                          <span className="proj-cms__item-text">
+                            <span className="proj-cms__item-title">{it.title || it.slug}</span>
+                            <span className="proj-cms__item-slug">{it.slug}</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
               )}
             </div>
           </section>

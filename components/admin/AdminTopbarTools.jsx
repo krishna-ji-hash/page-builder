@@ -8,18 +8,19 @@ import { ADMIN_DASHBOARD_PATH } from '@/lib/admin/adminRoutes';
 import { buildAdminSearchIndex, searchAdminIndex } from '@/lib/admin/adminSearchIndex';
 import '@/styles/admin/topbar.css';
 
-const THEME_STORAGE_KEY = 'admin-theme';
 const NOTIF_SEEN_KEY = 'admin-notifications-last-seen';
+
+const CLOCK_LOCALE = 'en-US';
 
 function formatLiveClock(date) {
   return {
-    time: date.toLocaleTimeString(undefined, {
+    time: date.toLocaleTimeString(CLOCK_LOCALE, {
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
       hour12: false,
     }),
-    date: date.toLocaleDateString(undefined, {
+    date: date.toLocaleDateString(CLOCK_LOCALE, {
       weekday: 'short',
       day: 'numeric',
       month: 'short',
@@ -54,19 +55,21 @@ function describeNotification(entry) {
 }
 
 function AdminLiveClock() {
-  const [now, setNow] = useState(() => new Date());
+  const [display, setDisplay] = useState(null);
 
   useEffect(() => {
-    const id = window.setInterval(() => setNow(new Date()), 1000);
+    function tick() {
+      setDisplay(formatLiveClock(new Date()));
+    }
+    tick();
+    const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
   }, []);
 
-  const { time, date } = formatLiveClock(now);
-
   return (
     <div className="admin-topbar__clock" aria-live="polite">
-      <span className="admin-topbar__clock-time">{time}</span>
-      <span className="admin-topbar__clock-date">{date}</span>
+      <span className="admin-topbar__clock-time">{display?.time ?? '--:--:--'}</span>
+      <span className="admin-topbar__clock-date">{display?.date ?? '\u00a0'}</span>
     </div>
   );
 }
@@ -95,8 +98,12 @@ function AdminThemeToggle({ theme, onToggle }) {
       ) : (
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
           <path
-            d="M21 14.5A7.5 7.5 0 0 1 9.5 3 6.5 6.5 0 1 0 21 14.5z"
-            fill="currentColor"
+            d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.75"
+            strokeLinecap="round"
+            strokeLinejoin="round"
           />
         </svg>
       )}
@@ -386,28 +393,12 @@ function AdminNotifications() {
   );
 }
 
-export default function AdminTopbarTools({ projects = [] }) {
-  const [theme, setTheme] = useState('light');
-
-  useEffect(() => {
-    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-    const initial = stored === 'dark' ? 'dark' : 'light';
-    setTheme(initial);
-    document.querySelector('.admin-shell')?.setAttribute('data-admin-theme', initial);
-  }, []);
-
-  function toggleTheme() {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    setTheme(next);
-    window.localStorage.setItem(THEME_STORAGE_KEY, next);
-    document.querySelector('.admin-shell')?.setAttribute('data-admin-theme', next);
-  }
-
+export default function AdminTopbarTools({ projects = [], theme = 'light', onToggleTheme }) {
   return (
     <div className="admin-topbar__tools">
       <AdminGlobalSearch projects={projects} />
       <AdminLiveClock />
-      <AdminThemeToggle theme={theme} onToggle={toggleTheme} />
+      <AdminThemeToggle theme={theme} onToggle={onToggleTheme} />
       <AdminNotifications />
     </div>
   );

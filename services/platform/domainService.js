@@ -5,18 +5,10 @@ import {
   checkTxtVerification,
   DomainVerificationError,
 } from '@/lib/platform/domainVerification';
+import { validateDomainInput, normalizeDomain } from '@/lib/platform/domainValidation';
 import { getDbPool, withTransaction } from '@/lib/db';
 
 const PLATFORM_HOSTS = new Set(['dispatch.in', 'acenest.in', 'myshop.in']);
-
-export function normalizeDomain(domain) {
-  return String(domain || '')
-    .trim()
-    .toLowerCase()
-    .replace(/^https?:\/\//, '')
-    .replace(/\/.*$/, '')
-    .replace(/:\d+$/, '');
-}
 
 function makeVerificationToken() {
   return crypto.randomBytes(16).toString('hex');
@@ -64,8 +56,9 @@ export async function listProjectDomains(projectId) {
 
 export async function addProjectDomain(projectId, domainInput) {
   const pid = Number(projectId);
-  const domain = normalizeDomain(domainInput);
-  if (!domain || !domain.includes('.')) throw new Error('Invalid domain');
+  const validated = validateDomainInput(domainInput);
+  if (!validated.ok) throw new Error(validated.error);
+  const domain = validated.domain;
   const token = makeVerificationToken();
 
   return withTransaction(async (connection) => {

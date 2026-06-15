@@ -14,6 +14,7 @@ import { DEFAULT_THEME_TOKENS, createModePalettesFromFlat, normalizeThemeTokens 
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
 import { isSectionLockedFlagValue, metaRepresentsExplicitSectionUnlock } from '@/lib/rowLayoutMeta';
 import { freezeGlobalSectionsForPublish } from '@/lib/globalSectionSnapshot';
+import { applyHomeHeaderNavToGlobal, findPageHeaderRow } from '@/lib/globalHeaderNavSync';
 import { applyResponsiveDefaultsToTree } from '@/lib/applyPageResponsiveDefaults';
 import { isBrandFontNormalizeStyleJson } from '@/lib/projectBrand.js';
 import { normalizeSiteTheme } from '@/lib/siteDesignTheme';
@@ -1850,9 +1851,30 @@ export async function publishPage(pageId) {
       [draft.id]
     );
     const draftSnapshot = parseSnapshot(versionRows[0]?.snapshot_json) || { nodes: [] };
+
+    let projectConfig = page.projectConfig || {};
+    if (page.slug === 'home') {
+      const homeHeader = findPageHeaderRow(draftSnapshot.nodes);
+      const globalHeader = projectConfig?.globalSections?.header;
+      if (homeHeader && globalHeader) {
+        const syncedHeader = applyHomeHeaderNavToGlobal(globalHeader, homeHeader);
+        projectConfig = {
+          ...projectConfig,
+          globalSections: {
+            ...(projectConfig.globalSections || {}),
+            header: syncedHeader,
+          },
+        };
+        await connection.query(`UPDATE projects SET config_json = ? WHERE id = ?`, [
+          JSON.stringify(projectConfig),
+          page.project_id,
+        ]);
+      }
+    }
+
     const publishSnapshot = {
       nodes: Array.isArray(draftSnapshot.nodes) ? draftSnapshot.nodes : [],
-      globalSections: freezeGlobalSectionsForPublish(page.projectConfig),
+      globalSections: freezeGlobalSectionsForPublish(projectConfig),
     };
     const snapshotJson = JSON.stringify(publishSnapshot);
     const nextVersionNumber = await getNextPageVersionNumber(pageId, connection);

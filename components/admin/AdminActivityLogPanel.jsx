@@ -88,6 +88,7 @@ export default function AdminActivityLogPanel({
   title = 'Activity logs',
   limit = 25,
   showToolbar = true,
+  variant = 'default',
 }) {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -164,7 +165,14 @@ export default function AdminActivityLogPanel({
   }, [logs]);
 
   return (
-    <section className="platform-panel activity-feed" aria-labelledby={title ? 'activity-feed-title' : undefined}>
+    <section
+      className={
+        variant === 'embedded'
+          ? 'activity-feed activity-feed--embedded'
+          : 'platform-panel activity-feed'
+      }
+      aria-labelledby={title ? 'activity-feed-title' : undefined}
+    >
       {title ? (
         <div className="platform-panel__head">
           <div>

@@ -143,7 +143,7 @@ function UploadQueue({ projectId, folder, onUploaded, onUploadedItem }) {
             type="file"
             className="bld-media-upload__file"
             multiple
-            accept="image/*,video/*,image/svg+xml,application/pdf"
+            accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml,video/mp4,video/webm,application/pdf,.webp"
             onChange={(e) => {
               addFiles(e.target.files);
               e.target.value = '';

@@ -6,7 +6,18 @@ import path from 'path';
 import sharp from 'sharp';
 import { fileTypeFromBuffer } from 'file-type';
 import { createMediaAsset, listMediaAssets } from '@/services/builder/mediaService';
-import { ALLOWED, kindForMime, MEDIA_LIMITS, randomStorageName, safeExtFromName, sanitizeSvgText } from '@/lib/media/mediaUtils';
+import {
+  ALLOWED,
+  kindForMime,
+  MEDIA_LIMITS,
+  randomStorageName,
+  resolveUploadMime,
+  safeExtFromName,
+  sanitizeSvgText,
+  shouldConvertRasterToWebp,
+  EXT_FROM_MIME,
+  inferMimeFromFilename,
+} from '@/lib/media/mediaUtils';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -93,15 +104,27 @@ export async function POST(request, { params }) {
   const detected = await fileTypeFromBuffer(buf).catch(() => null);
   const detectedMime = detected?.mime || '';
   const detectedExt = detected?.ext || '';
-
-  const mime = detectedMime || providedMime;
-  const kind = kindForMime(mime);
-  if (!kind) return fail('Unsupported file type', 415, { mime });
-
-  // Extension mismatch (best-effort): if we could detect and it differs from the filename extension.
   const nameFromClient = typeof file.name === 'string' ? file.name : 'upload';
   const filenameExt = safeExtFromName(nameFromClient);
-  if (detectedExt && filenameExt && detectedExt !== filenameExt && mime !== 'image/svg+xml') {
+
+  let mime = resolveUploadMime({
+    detectedMime,
+    providedMime,
+    filename: nameFromClient,
+  });
+  let kind = kindForMime(mime);
+  if (!kind) return fail('Unsupported file type', 415, { mime: mime || providedMime || detectedMime });
+
+  // Extension mismatch — allow when MIME was resolved from filename (.webp on Windows, etc.).
+  const mimeFromName = inferMimeFromFilename(nameFromClient);
+  const trustedFilenameMime = Boolean(mimeFromName && mimeFromName === mime);
+  if (
+    detectedExt &&
+    filenameExt &&
+    detectedExt !== filenameExt &&
+    mime !== 'image/svg+xml' &&
+    !trustedFilenameMime
+  ) {
     return fail('File extension mismatch', 400, { detectedExt, filenameExt });
   }
 
@@ -120,12 +143,30 @@ export async function POST(request, { params }) {
     }
   }
 
+  // JPEG/PNG → optimized WebP by default (keeps GIF as-is). Set MEDIA_KEEP_ORIGINAL=true to disable.
+  if (kind === 'image' && shouldConvertRasterToWebp(mime)) {
+    try {
+      const webpBuf = await sharp(buf, { failOn: 'none' })
+        .webp({ quality: 82, effort: 4 })
+        .toBuffer();
+      if (webpBuf?.length) {
+        buf = webpBuf;
+        mime = 'image/webp';
+      }
+    } catch {
+      // keep original bytes if conversion fails
+    }
+  }
+
   const projectDir = path.join(uploadRootDir(), `p${projectId}`);
   const thumbDir = path.join(projectDir, 'thumbs');
   await ensureDir(projectDir);
   await ensureDir(thumbDir);
 
-  const ext = mime === 'image/svg+xml' ? 'svg' : detectedExt || filenameExt || '';
+  const ext =
+    mime === 'image/svg+xml'
+      ? 'svg'
+      : EXT_FROM_MIME[mime] || detectedExt || filenameExt || '';
   const storageName = randomStorageName(ext);
   const absPath = path.join(projectDir, storageName);
 
@@ -139,7 +180,7 @@ export async function POST(request, { params }) {
   let height = null;
   let thumbUrl = null;
 
-  // Thumbnails for images + svg only.
+  // Thumbnails for raster images + svg.
   if (kind === 'image' || kind === 'svg') {
     try {
       const image = sharp(buf, { failOn: 'none' });
@@ -151,13 +192,15 @@ export async function POST(request, { params }) {
       const thumbAbs = path.join(thumbDir, thumbName);
       await sharp(buf, { failOn: 'none' })
         .resize({ width: 320, height: 320, fit: 'inside', withoutEnlargement: true })
-        .webp({ quality: 72 })
+        .webp({ quality: 72, effort: 4 })
         .toFile(thumbAbs);
 
       thumbUrl = `${publicBase(projectId)}/thumbs/${thumbName}`;
     } catch {
-      // thumb is best-effort; proceed without
-      thumbUrl = null;
+      // WebP thumb failed — for webp originals, use main file as preview fallback
+      if (mime === 'image/webp') {
+        thumbUrl = `${publicBase(projectId)}/${storageName}`;
+      }
     }
   }
 

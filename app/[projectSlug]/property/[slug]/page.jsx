@@ -38,6 +38,7 @@ export async function generateMetadata({ params }) {
     pageName: page.name,
     currentPath,
     pageSeo: page.seo,
+    cmsItemSeo: item.seo,
     cmsContext: { item, sys: { slug, collection: 'properties' } },
   });
   return metadata;
@@ -69,6 +70,7 @@ export default async function PropertyRoute({ params }) {
     pageName: page.name,
     currentPath,
     pageSeo: page.seo,
+    cmsItemSeo: item.seo,
     cmsContext: { item, sys: { slug, collection: 'properties' } },
   });
 

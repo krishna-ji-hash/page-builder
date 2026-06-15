@@ -7,8 +7,10 @@ import {
   hasModePalettes,
   normalizeThemeTokens,
   resolveActiveThemeTokens,
+  syncThemeTokenPaletteFromSiteTheme,
   themeTokensToCssVariableStyle,
 } from '../lib/themeTokens.js';
+import { normalizeSiteTheme, SITE_THEME_PRESETS } from '../lib/siteDesignTheme.js';
 
 test('legacy flat tokens: mode does not change resolved colors until palettes exist', () => {
   const legacy = normalizeThemeTokens({
@@ -90,4 +92,17 @@ test('status and gradient keys map to kebab CSS variables', () => {
   assert.equal(vars['--token-color-success-bg'], '#ecfdf5');
   assert.equal(vars['--token-color-on-primary'], '#ffffff');
   assert.match(vars['--token-gradient-section'], /linear-gradient/i);
+});
+
+test('syncThemeTokenPaletteFromSiteTheme copies brand colors to active palette', () => {
+  const site = normalizeSiteTheme({
+    ...SITE_THEME_PRESETS.dark,
+    colors: { ...SITE_THEME_PRESETS.dark.colors, primary: '#ff0000' },
+  });
+  const tokens = normalizeThemeTokens(DEFAULT_THEME_TOKENS);
+  const synced = syncThemeTokenPaletteFromSiteTheme(site, tokens);
+  assert.equal(synced.mode, 'dark');
+  const active = resolveActiveThemeTokens(synced);
+  assert.equal(active.colors.primary, '#ff0000');
+  assert.equal(active.colors.background, SITE_THEME_PRESETS.dark.colors.background);
 });

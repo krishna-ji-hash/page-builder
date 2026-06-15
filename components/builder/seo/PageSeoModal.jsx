@@ -418,6 +418,14 @@ export default function PageSeoModal({
                     Length: <strong>{descLen}</strong> (target {DESC_MIN}–{DESC_MAX})
                   </p>
                 </div>
+                <div className="bld-field">
+                  <label className="bld-label">Keywords</label>
+                  <input className="bld-input" value={(form.keywords || []).join(', ')} onChange={(e) => setForm((p) => ({ ...p, keywords: e.target.value.split(/[,;]+/).map((k) => k.trim()).filter(Boolean) }))} placeholder="keyword one, keyword two" />
+                </div>
+                <div className="bld-field">
+                  <label className="bld-label">Focus keyword</label>
+                  <input className="bld-input" value={form.focusKeyword || ''} onChange={(e) => setForm((p) => ({ ...p, focusKeyword: e.target.value }))} />
+                </div>
                 <div className="bld-field-grid">
                   <div className="bld-field">
                     <label className="bld-label">OG title</label>
@@ -445,6 +453,34 @@ export default function PageSeoModal({
                     <label className="bld-label">Canonical URL</label>
                     <input className="bld-input" value={form.canonicalUrl} onChange={(e) => setForm((p) => ({ ...p, canonicalUrl: e.target.value }))} placeholder="/project/page or https://..." />
                   </div>
+                </div>
+                <div className="bld-field-grid">
+                  <div className="bld-field">
+                    <label className="bld-label">Twitter title</label>
+                    <input className="bld-input" value={form.twitterTitle || ''} onChange={(e) => setForm((p) => ({ ...p, twitterTitle: e.target.value }))} />
+                  </div>
+                  <div className="bld-field">
+                    <label className="bld-label">Twitter image</label>
+                    <input className="bld-input" value={form.twitterImage || ''} onChange={(e) => setForm((p) => ({ ...p, twitterImage: e.target.value }))} placeholder="/media/..." />
+                  </div>
+                </div>
+                <div className="bld-field">
+                  <label className="bld-label">Twitter description</label>
+                  <textarea className="bld-input" rows={2} value={form.twitterDescription || ''} onChange={(e) => setForm((p) => ({ ...p, twitterDescription: e.target.value }))} />
+                </div>
+                <div className="bld-field">
+                  <label className="bld-label">Schema type (auto JSON-LD)</label>
+                  <select className="bld-input" value={form.schemaType || ''} onChange={(e) => setForm((p) => ({ ...p, schemaType: e.target.value }))}>
+                    <option value="">(none — use raw JSON-LD below)</option>
+                    <option value="WebPage">WebPage</option>
+                    <option value="Service">Service</option>
+                    <option value="Organization">Organization</option>
+                    <option value="FAQ">FAQ</option>
+                    <option value="Article">Article</option>
+                    <option value="Product">Product</option>
+                    <option value="LocalBusiness">LocalBusiness</option>
+                    <option value="Breadcrumb">Breadcrumb</option>
+                  </select>
                 </div>
                 <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 6 }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
