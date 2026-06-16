@@ -1,0 +1,96 @@
+/**
+ * Full-bleed section background + boxed inner column — builder, preview, live.
+ * Parity surface: :is(.live-doc, .bld-canvas__live-mirror)
+ */
+
+/* Builder artboard: never use 100vw breakout (shifts content off-canvas). */
+.bld-builder-root .bld-canvas__page .live-doc > [data-live-root-strip='full'],
+:is(.live-doc, .bld-canvas__live-mirror) > .live-node.bld-row.section-full-bg[data-live-root-strip='full'] {
+  width: 100% !important;
+  max-width: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  left: auto !important;
+  right: auto !important;
+  box-sizing: border-box;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror) > .live-node.bld-row.section-full-bg {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror) > .live-node.bld-row.section-full-bg > .site-container.section-inner {
+  width: min(calc(100% - 48px), var(--live-section-content-max-width, var(--live-content-max-width, 1280px)));
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  box-sizing: border-box;
+  min-width: 0;
+  justify-content: flex-start;
+  align-items: stretch;
+}
+
+@media (max-width: 768px) {
+  :is(.live-doc, .bld-canvas__live-mirror) > .live-node.bld-row.section-full-bg > .site-container.section-inner {
+    width: min(calc(100% - 32px), var(--live-section-content-max-width, var(--live-content-max-width, 1280px)));
+  }
+}
+
+:is(.live-doc, .bld-canvas__live-mirror) > .live-node.bld-row.section-full-bg > .site-container.section-inner > .live-node.bld-column {
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  flex: 1 1 auto;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  align-self: stretch !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror) > .live-node.bld-row.section-full-bg > .site-container.section-inner figure.live-node,
+:is(.live-doc, .bld-canvas__live-mirror) > .live-node.bld-row.section-full-bg > .site-container.section-inner figure.live-node img {
+  max-width: 100%;
+}
+
+/* Split hero carousel: single column + carousel fills the boxed shell (no right drift). */
+:is(.live-doc, .bld-canvas__live-mirror)
+  > .live-node.bld-row.section-full-bg[data-section-template='splitHeroCarousel']
+  > .site-container.section-inner
+  > .live-node.bld-column {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='splitHeroCarousel']
+  .site-container.section-inner
+  .live-carousel--splitHero {
+  width: 100%;
+  max-width: 100%;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+/* Content band alignment (flex layout lives on inner shell). */
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row).section-full-bg[data-live-content-band='true']:not(
+    [data-site-header='true']
+  ):not([data-site-footer='true']):not([data-section-template]):not(:has(.live-carousel--ticker)):not(
+    :has(.live-carousel--marquee)
+  ):not(:has(.live-carousel--logo))
+  > .site-container.section-inner {
+  align-items: flex-start !important;
+  align-content: flex-start;
+  min-height: min-content;
+  height: auto;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row).section-full-bg[data-live-content-band='true']:not([data-section-template])
+  > .site-container.section-inner
+  > .live-node.bld-column {
+  align-self: flex-start !important;
+  min-height: min-content;
+  height: auto;
+  max-width: 100%;
+}

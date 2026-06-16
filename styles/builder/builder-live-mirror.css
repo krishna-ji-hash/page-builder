@@ -76,15 +76,7 @@
   box-sizing: border-box;
 }
 
-/* Section inner column: artboard-relative inset (not 100vw) so builder matches publish proportions. */
-.bld-builder-root .bld-canvas__live-mirror .live-doc > [data-live-section-content='boxed'].live-node.bld-row {
-  --live-section-content-inset-x: calc(
-    (100% - min(100%, var(--live-section-content-max-width, var(--live-content-max-width, 1280px)))) / 2
-  );
-  padding-left: max(var(--live-content-padding-x, clamp(16px, 3vw, 40px)), var(--live-section-content-inset-x)) !important;
-  padding-right: max(var(--live-content-padding-x, clamp(16px, 3vw, 40px)), var(--live-section-content-inset-x)) !important;
-  box-sizing: border-box;
-}
+/* Section inner shell: styles/shared/section-content-shell.css */
 
 /* Reset builder demo chrome inside live mirror (inline node styles still win). */
 .bld-builder-root .bld-canvas__live-mirror .bld-demo-heading,
