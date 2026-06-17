@@ -179,7 +179,7 @@ function ProjectCard({ project, pages }) {
             </div>
           </div>
         </div>
-        <Link className="projects-card__workspace" href={adminProjectSectionPath(project.id, 'overview')}>
+        <Link className="projects-card__workspace" href={adminProjectSectionPath(project, 'overview')}>
           Workspace
           <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M6 3.5h6.5V10M6 10L10.5 5.5 6 10z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -190,7 +190,7 @@ function ProjectCard({ project, pages }) {
       {!pages.length ? (
         <p className="projects-card__empty">
           No pages yet —{' '}
-          <Link href={adminProjectSectionPath(project.id, 'pages')}>add a page</Link> or open{' '}
+          <Link href={adminProjectSectionPath(project, 'pages')}>add a page</Link> or open{' '}
           <Link href={adminBuilderPagePath(project.slug, 'home')}>builder</Link>.
         </p>
       ) : (
@@ -383,7 +383,7 @@ export default function AdminSitesHub({ showHero = false, limit = null, hideHead
                   </div>
                   <Link
                     className="platform-btn platform-btn--ghost"
-                    href={adminProjectSectionPath(project.id, 'overview')}
+                    href={adminProjectSectionPath(project, 'overview')}
                   >
                     Workspace
                   </Link>
@@ -391,7 +391,7 @@ export default function AdminSitesHub({ showHero = false, limit = null, hideHead
                 {!pages.length ? (
                   <p className="sites-hub__empty-project">
                     No pages yet —{' '}
-                    <Link href={adminProjectSectionPath(project.id, 'pages')}>add a page</Link> or open{' '}
+                    <Link href={adminProjectSectionPath(project, 'pages')}>add a page</Link> or open{' '}
                     <Link href={adminBuilderPagePath(project.slug, 'home')}>builder</Link>.
                   </p>
                 ) : (

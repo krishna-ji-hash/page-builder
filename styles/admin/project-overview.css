@@ -249,6 +249,24 @@
   color: var(--admin-text, #2e2b3d);
 }
 
+.proj-overview__stat--link {
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.proj-overview__stat--link:hover {
+  border-color: var(--po-brand-border);
+  box-shadow: 0 4px 6px rgba(124, 117, 168, 0.05), 0 12px 28px rgba(167, 139, 250, 0.08);
+  transform: translateY(-1px);
+}
+
+.proj-overview__stat--link:focus-visible {
+  outline: 2px solid var(--po-brand);
+  outline-offset: 2px;
+}
+
 /* Activity section */
 .proj-overview__activity {
   border-radius: 18px;

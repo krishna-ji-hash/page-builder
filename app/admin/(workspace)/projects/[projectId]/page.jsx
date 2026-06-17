@@ -1,10 +1,8 @@
-import { notFound, redirect } from 'next/navigation';
-import { resolveMaybeAsyncParams } from '@/lib/routeParams';
+import { redirect } from 'next/navigation';
 import { adminProjectSectionPath } from '@/lib/admin/adminRoutes';
+import { resolveAdminProjectRoute } from '@/lib/admin/adminProjectPage';
 
 export default async function ProjectIndexPage({ params }) {
-  const resolved = await resolveMaybeAsyncParams(params);
-  const projectId = Number(resolved.projectId);
-  if (!Number.isInteger(projectId) || projectId <= 0) notFound();
-  redirect(adminProjectSectionPath(projectId, 'overview'));
+  const { projectSlug } = await resolveAdminProjectRoute(params, 'overview');
+  redirect(adminProjectSectionPath(projectSlug, 'overview'));
 }

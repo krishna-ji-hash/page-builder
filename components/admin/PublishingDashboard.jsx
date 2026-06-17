@@ -260,13 +260,13 @@ export default function PublishingDashboard() {
                             <div className="platform-actions">
                               <Link
                                 className="platform-btn"
-                                href={adminProjectSectionPath(p.id, 'pages')}
+                                href={adminProjectSectionPath(p, 'pages')}
                               >
                                 Pages
                               </Link>
                               <Link
                                 className="platform-btn"
-                                href={adminProjectSectionPath(p.id, 'publishing')}
+                                href={adminProjectSectionPath(p, 'publishing')}
                               >
                                 Publishing
                               </Link>

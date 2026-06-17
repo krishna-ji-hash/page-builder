@@ -59,7 +59,7 @@ export default function AdminProjectsList() {
                 <td>{p.pages_count ?? p.pageCount ?? '—'}</td>
                 <td>
                   <div className="platform-actions">
-                    <Link className="platform-btn" href={adminProjectSectionPath(p.id, 'overview')}>
+                    <Link className="platform-btn" href={adminProjectSectionPath(p, 'overview')}>
                       Overview
                     </Link>
                     <Link

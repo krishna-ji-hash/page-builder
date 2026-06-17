@@ -1,5 +1,4 @@
-import { notFound } from 'next/navigation';
-import { resolveMaybeAsyncParams } from '@/lib/routeParams';
+import { resolveAdminProjectRoute } from '@/lib/admin/adminProjectPage';
 import AdminProjectTheme from '@/components/admin/workspace/AdminProjectTheme';
 
 export const runtime = 'nodejs';
@@ -10,8 +9,6 @@ export const metadata = {
 };
 
 export default async function ProjectThemePage({ params }) {
-  const resolved = await resolveMaybeAsyncParams(params);
-  const projectId = Number(resolved.projectId);
-  if (!Number.isInteger(projectId) || projectId <= 0) notFound();
+  const { projectId } = await resolveAdminProjectRoute(params, 'theme');
   return <AdminProjectTheme projectId={projectId} />;
 }

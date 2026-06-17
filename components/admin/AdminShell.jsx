@@ -14,6 +14,7 @@ import {
   adminProjectSectionPath,
   breadcrumbLabels,
   parseAdminPathname,
+  projectSlugFromParsed,
 } from '@/lib/admin/adminRoutes';
 import { NAV_ICONS, SETTINGS_ICON, workspaceIcon } from '@/lib/admin/navIcons';
 import AdminTopbarTools from '@/components/admin/AdminTopbarTools';
@@ -73,6 +74,13 @@ function NavItem({ href, active, icon, children, collapsed }) {
       </Link>
     </li>
   );
+}
+
+function isActiveProject(parsed, project) {
+  if (parsed.kind !== 'project') return false;
+  if (parsed.projectSlug && project.slug === parsed.projectSlug) return true;
+  if (parsed.projectId && Number(project.id) === Number(parsed.projectId)) return true;
+  return false;
 }
 
 function ProjectsNavDropdown({ parsed, projects, sidebarCollapsed }) {
@@ -195,9 +203,9 @@ function ProjectsNavDropdown({ parsed, projects, sidebarCollapsed }) {
                 {visibleProjects.map((project) => (
                   <li key={project.id} className="admin-shell__subnav-item">
                     <Link
-                      href={adminProjectSectionPath(project.id, 'overview')}
+                      href={adminProjectSectionPath(project, 'overview')}
                       className={`admin-shell__subnav-link admin-shell__subnav-link--project${
-                        parsed.kind === 'project' && parsed.projectId === project.id ? ' is-active' : ''
+                        isActiveProject(parsed, project) ? ' is-active' : ''
                       }`}
                       title={project.name || project.slug}
                       onClick={() => sidebarCollapsed && setOpen(false)}
@@ -263,22 +271,24 @@ function AdminBreadcrumb({ crumbs }) {
 
 function ProjectSwitcher({ parsed, projects }) {
   const router = useRouter();
-  if (parsed.kind !== 'project' || !parsed.projectId) return null;
+  if (parsed.kind !== 'project') return null;
+
+  const activeSlug = projectSlugFromParsed(parsed, projects) || parsed.projectSlug || '';
 
   return (
     <div className="admin-shell__project-switcher">
       <select
         id="admin-project-switcher"
         aria-label="Switch project"
-        value={String(parsed.projectId)}
+        value={activeSlug}
         onChange={(e) => {
-          const nextId = Number(e.target.value);
-          if (!Number.isInteger(nextId) || nextId <= 0) return;
-          router.push(adminProjectSectionPath(nextId, parsed.section || 'overview'));
+          const nextSlug = String(e.target.value || '').trim();
+          if (!nextSlug) return;
+          router.push(adminProjectSectionPath(nextSlug, parsed.section || 'overview'));
         }}
       >
         {(projects || []).map((p) => (
-          <option key={p.id} value={p.id}>
+          <option key={p.id} value={p.slug}>
             {p.name || p.slug || `Project ${p.id}`}
           </option>
         ))}
@@ -366,9 +376,9 @@ function UserMenu() {
 
 export default function AdminShell({ children }) {
   const pathname = usePathname();
-  const parsed = useMemo(() => parseAdminPathname(pathname), [pathname]);
-  const crumbs = useMemo(() => breadcrumbLabels(parsed), [parsed]);
   const [projects, setProjects] = useState([]);
+  const parsed = useMemo(() => parseAdminPathname(pathname), [pathname]);
+  const crumbs = useMemo(() => breadcrumbLabels(parsed, projects), [parsed, projects]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [theme, setTheme] = useState('light');
   const pageTitle = crumbs[crumbs.length - 1]?.label || 'Admin';
@@ -461,7 +471,10 @@ export default function AdminShell({ children }) {
                 {PROJECT_SECTIONS.map((section) => (
                   <NavItem
                     key={section.id}
-                    href={adminProjectSectionPath(parsed.projectId, section.id)}
+                    href={adminProjectSectionPath(
+                      projectSlugFromParsed(parsed, projects) || parsed.projectSlug || parsed.projectKey,
+                      section.id
+                    )}
                     active={parsed.section === section.id}
                     icon={workspaceIcon(section.id)}
                     collapsed={sidebarCollapsed}

@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { resolveMaybeAsyncParams } from '@/lib/routeParams';
+import { resolveAdminProjectRoute } from '@/lib/admin/adminProjectPage';
 import GlobalComponentEditorShell from '@/components/builder/GlobalComponentEditorShell';
 
 export const runtime = 'nodejs';
@@ -11,10 +12,9 @@ export const metadata = {
 };
 
 export default async function GlobalComponentEditorPage({ params, searchParams }) {
+  const { projectId } = await resolveAdminProjectRoute(params, 'overview');
   const resolved = await resolveMaybeAsyncParams(params);
-  const projectId = Number(resolved.projectId);
   const componentId = Number(resolved.componentId);
-  if (!Number.isInteger(projectId) || projectId <= 0) notFound();
   if (!Number.isInteger(componentId) || componentId <= 0) notFound();
   const returnTo =
     typeof searchParams?.returnTo === 'string' && searchParams.returnTo.trim()
@@ -22,4 +22,3 @@ export default async function GlobalComponentEditorPage({ params, searchParams }
       : '/admin/builder';
   return <GlobalComponentEditorShell projectId={projectId} componentId={componentId} returnTo={returnTo} />;
 }
-

@@ -1,5 +1,4 @@
-import { notFound } from 'next/navigation';
-import { resolveMaybeAsyncParams } from '@/lib/routeParams';
+import { resolveAdminProjectRoute } from '@/lib/admin/adminProjectPage';
 import AdminProjectSeo from '@/components/admin/workspace/AdminProjectSeo';
 
 export const runtime = 'nodejs';
@@ -11,8 +10,6 @@ export const metadata = {
 };
 
 export default async function ProjectSeoPage({ params }) {
-  const resolved = await resolveMaybeAsyncParams(params);
-  const projectId = Number(resolved.projectId);
-  if (!Number.isInteger(projectId) || projectId <= 0) notFound();
+  const { projectId } = await resolveAdminProjectRoute(params, 'seo');
   return <AdminProjectSeo projectId={projectId} />;
 }

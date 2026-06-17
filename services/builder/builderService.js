@@ -1356,6 +1356,66 @@ export async function listPagesForBuilder() {
   return rows;
 }
 
+export async function getProjectById(projectId) {
+  const pid = Number(projectId);
+  if (!Number.isInteger(pid) || pid <= 0) return null;
+  const [rows] = await getDbPool().query(
+    `SELECT
+       id,
+       COALESCE(NULLIF(name, ''), 'Untitled Project') AS name,
+       slug,
+       type,
+       config_json,
+       created_at,
+       updated_at
+     FROM projects
+     WHERE id = ?
+     LIMIT 1`,
+    [pid]
+  );
+  if (!rows.length) return null;
+  const row = rows[0];
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    type: row.type || 'website',
+    configJson: parseJsonColumn(row.config_json),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function getProjectBySlug(slug) {
+  const normalized = String(slug ?? '').trim();
+  if (!normalized) return null;
+  const [rows] = await getDbPool().query(
+    `SELECT
+       id,
+       COALESCE(NULLIF(name, ''), 'Untitled Project') AS name,
+       slug,
+       type,
+       config_json,
+       created_at,
+       updated_at
+     FROM projects
+     WHERE slug = ?
+     LIMIT 1`,
+    [normalized]
+  );
+  if (!rows.length) return null;
+  const row = rows[0];
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    type: row.type || 'website',
+    configJson: parseJsonColumn(row.config_json),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 export async function listProjectsWithPageCount() {
   const [rows] = await getDbPool().query(
     `SELECT

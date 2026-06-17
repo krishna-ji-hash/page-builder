@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import AdminActivityLogPanel from '@/components/admin/AdminActivityLogPanel';
-import { adminProjectSectionPath } from '@/lib/admin/adminRoutes';
+import { adminProjectPagesAddPath, adminProjectSectionPath } from '@/lib/admin/adminRoutes';
 import { adminBuilderPagePath } from '@/lib/builder/adminBuilderRoutes';
 import '@/styles/admin/platform.css';
 import '@/styles/admin/project-overview.css';
@@ -151,12 +151,21 @@ export default function AdminProjectOverview({ projectId }) {
               </div>
             </div>
             <div className="proj-overview__actions">
-              <Link className="proj-overview__btn proj-overview__btn--primary" href={adminProjectSectionPath(projectId, 'pages')}>
+              <Link
+                className="proj-overview__btn proj-overview__btn--primary"
+                href={adminProjectPagesAddPath(project)}
+              >
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M8 3.5v9M3.5 8h9" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+                </svg>
+                Add page
+              </Link>
+              <Link className="proj-overview__btn" href={adminProjectSectionPath(project, 'pages')}>
                 <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
                   <path d="M3 4.5h10v9H3v-9z" stroke="currentColor" strokeWidth="1.4" />
                   <path d="M6 7.5h4M6 10h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
                 </svg>
-                Manage pages
+                All pages
               </Link>
               <Link className="proj-overview__btn" href={adminBuilderPagePath(project.slug, 'home')}>
                 <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -164,22 +173,55 @@ export default function AdminProjectOverview({ projectId }) {
                 </svg>
                 Open builder
               </Link>
-              <Link className="proj-overview__btn" href={adminProjectSectionPath(projectId, 'domains')}>
+              <Link className="proj-overview__btn" href={adminProjectSectionPath(project, 'domains')}>
                 Domains
               </Link>
             </div>
           </header>
 
           <div className="proj-overview__stats" aria-label="Project summary">
-            {STAT_CARDS.map((card) => (
-              <article key={card.key} className={`proj-overview__stat proj-overview__stat--${card.tone}`}>
-                <div className="proj-overview__stat-top">
-                  <span className="proj-overview__stat-label">{card.label}</span>
-                  <span className="proj-overview__stat-icon">{card.icon}</span>
-                </div>
-                <span className="proj-overview__stat-value">{statValues[card.key]}</span>
-              </article>
-            ))}
+            {STAT_CARDS.map((card) => {
+              const statBody = (
+                <>
+                  <div className="proj-overview__stat-top">
+                    <span className="proj-overview__stat-label">{card.label}</span>
+                    <span className="proj-overview__stat-icon">{card.icon}</span>
+                  </div>
+                  <span className="proj-overview__stat-value">{statValues[card.key]}</span>
+                </>
+              );
+
+              if (card.key === 'pages') {
+                return (
+                  <Link
+                    key={card.key}
+                    className={`proj-overview__stat proj-overview__stat--${card.tone} proj-overview__stat--link`}
+                    href={adminProjectPagesAddPath(project)}
+                    title="Add or manage pages"
+                  >
+                    {statBody}
+                  </Link>
+                );
+              }
+
+              if (card.key === 'domains') {
+                return (
+                  <Link
+                    key={card.key}
+                    className={`proj-overview__stat proj-overview__stat--${card.tone} proj-overview__stat--link`}
+                    href={adminProjectSectionPath(project, 'domains')}
+                  >
+                    {statBody}
+                  </Link>
+                );
+              }
+
+              return (
+                <article key={card.key} className={`proj-overview__stat proj-overview__stat--${card.tone}`}>
+                  {statBody}
+                </article>
+              );
+            })}
           </div>
 
           <div className="proj-overview__activity">

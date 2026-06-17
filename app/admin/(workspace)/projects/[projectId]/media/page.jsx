@@ -1,5 +1,4 @@
-import { notFound } from 'next/navigation';
-import { resolveMaybeAsyncParams } from '@/lib/routeParams';
+import { resolveAdminProjectRoute } from '@/lib/admin/adminProjectPage';
 import AdminProjectMedia from '@/components/admin/workspace/AdminProjectMedia';
 
 export const runtime = 'nodejs';
@@ -11,8 +10,6 @@ export const metadata = {
 };
 
 export default async function ProjectMediaPage({ params }) {
-  const resolved = await resolveMaybeAsyncParams(params);
-  const projectId = Number(resolved.projectId);
-  if (!Number.isInteger(projectId) || projectId <= 0) notFound();
+  const { projectId } = await resolveAdminProjectRoute(params, 'media');
   return <AdminProjectMedia projectId={projectId} />;
 }

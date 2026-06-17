@@ -1,5 +1,4 @@
-import { notFound } from 'next/navigation';
-import { resolveMaybeAsyncParams } from '@/lib/routeParams';
+import { resolveAdminProjectRoute } from '@/lib/admin/adminProjectPage';
 import AdminProjectOverview from '@/components/admin/workspace/AdminProjectOverview';
 
 export const runtime = 'nodejs';
@@ -10,8 +9,6 @@ export const metadata = {
 };
 
 export default async function ProjectOverviewPage({ params }) {
-  const resolved = await resolveMaybeAsyncParams(params);
-  const projectId = Number(resolved.projectId);
-  if (!Number.isInteger(projectId) || projectId <= 0) notFound();
+  const { projectId } = await resolveAdminProjectRoute(params, 'overview');
   return <AdminProjectOverview projectId={projectId} />;
 }
