@@ -52,7 +52,19 @@
   max-width: 100%;
 }
 
-/* Split hero carousel: single column + carousel fills the boxed shell (no right drift). */
+/* Split hero carousel: full boxed width + carousel grid fills the shell (matches published live). */
+:is(.live-doc, .bld-canvas__live-mirror)
+  > .live-node.bld-row.section-full-bg[data-section-template='splitHeroCarousel'] {
+  --live-section-content-max-width: var(--live-content-max-width, 1280px) !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  > .live-node.bld-row.section-full-bg[data-section-template='splitHeroCarousel']
+  > .site-container.section-inner {
+  justify-content: flex-start !important;
+  align-items: stretch;
+}
+
 :is(.live-doc, .bld-canvas__live-mirror)
   > .live-node.bld-row.section-full-bg[data-section-template='splitHeroCarousel']
   > .site-container.section-inner
@@ -69,6 +81,12 @@
   max-width: 100%;
   margin-left: 0;
   margin-right: 0;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='splitHeroCarousel']
+  .live-carousel__split-panel-inner {
+  align-items: center;
 }
 
 /* Content band alignment (flex layout lives on inner shell). */

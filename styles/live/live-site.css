@@ -1254,21 +1254,21 @@
 }
 
 @media (max-width: 768px) {
-  .live-carousel__split-panel-inner {
+  :is(.live-doc, .bld-canvas__live-mirror):not([data-bld-device='desktop']) .live-carousel__split-panel-inner {
     grid-template-columns: 1fr;
   }
 
-  .live-carousel__split-copy {
+  :is(.live-doc, .bld-canvas__live-mirror):not([data-bld-device='desktop']) .live-carousel__split-copy {
     order: 1;
   }
 
-  .live-carousel__split-visual {
+  :is(.live-doc, .bld-canvas__live-mirror):not([data-bld-device='desktop']) .live-carousel__split-visual {
     order: 2;
     min-height: clamp(200px, 52vw, 320px);
   }
 
-  .live-carousel__split-img,
-  .live-carousel__split-img-placeholder {
+  :is(.live-doc, .bld-canvas__live-mirror):not([data-bld-device='desktop']) .live-carousel__split-img,
+  :is(.live-doc, .bld-canvas__live-mirror):not([data-bld-device='desktop']) .live-carousel__split-img-placeholder {
     min-height: clamp(200px, 52vw, 320px);
   }
 }
@@ -2140,6 +2140,12 @@
   padding-left: max(var(--live-content-padding-x, clamp(16px, 3vw, 40px)), var(--live-section-content-inset-x)) !important;
   padding-right: max(var(--live-content-padding-x, clamp(16px, 3vw, 40px)), var(--live-section-content-inset-x)) !important;
   box-sizing: border-box;
+}
+
+/* Split hero: always use full boxed column (ignore accidental 480px content-width caps). */
+.live-doc > :where(section.live-node, main.live-node).bld-row[data-section-template='splitHeroCarousel'][data-live-section-content='boxed'],
+.live-doc > [data-section-template='splitHeroCarousel'][data-live-section-content='boxed'].live-node.bld-row {
+  --live-section-content-max-width: var(--live-content-max-width, 1280px) !important;
 }
 
 .live-doc > [data-live-section-content='boxed'].live-node.bld-row > .live-node.bld-column {

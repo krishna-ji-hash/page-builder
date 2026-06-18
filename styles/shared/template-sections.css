@@ -448,6 +448,52 @@
   }
 }
 
+/* —— Split hero carousel (copy left, visual right) —— */
+:is(.live-doc, .bld-canvas__live-mirror)
+  .live-node.bld-row[data-section-template='splitHeroCarousel'][data-live-section-content='boxed'] {
+  --live-section-content-max-width: var(--live-content-max-width, 1280px) !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  .live-node.bld-row[data-section-template='splitHeroCarousel']
+  > .live-node.bld-column {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='splitHeroCarousel']
+  .live-carousel--splitHero {
+  width: 100%;
+  max-width: 100%;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='splitHeroCarousel']
+  .live-carousel__split-panel-inner {
+  align-items: center;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='splitHeroCarousel']
+  .live-carousel__split-visual,
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='splitHeroCarousel']
+  .live-carousel__split-visual-media {
+  width: 100%;
+  min-width: 0;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='splitHeroCarousel']
+  .live-carousel__split-img:not(.live-carousel__split-img--custom-size) {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  object-fit: var(--carousel-image-fit, contain);
+}
+
 /* —— Logo carousel —— */
 [data-section-template='brandsLogoSlider'] img {
   object-fit: contain;
