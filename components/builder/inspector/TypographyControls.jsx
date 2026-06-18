@@ -4,15 +4,23 @@ import FontSizeStepper, { clampFontSizePx } from '@/components/builder/FontSizeS
 import TextAlignToolbarGroup from '@/components/builder/TextAlignToolbarGroup';
 import FontFamilySelect from '@/components/builder/inspector/FontFamilySelect';
 
-const FONT_WEIGHTS = ['400', '500', '600', '700'];
+export const FONT_WEIGHT_OPTIONS = ['300', '400', '500', '600', '700', '800', '900'];
+
 const WHITE_SPACE_OPTIONS = [
   { value: 'nowrap', label: 'No wrap — single line' },
   { value: 'normal', label: 'Wrap — normal (headings)' },
   { value: 'pre-wrap', label: 'Wrap — keep line breaks (text blocks)' },
 ];
 
+function normalizeFontWeightValue(value, fallback = '400') {
+  const n = Math.round(Number(value));
+  if (Number.isFinite(n) && n >= 100 && n <= 900) return String(n);
+  return String(fallback);
+}
+
 export default function TypographyControls({ form, onUpdate, selectedNodeType = '' }) {
   const showWhitespace = selectedNodeType === 'text' || selectedNodeType === 'heading' || selectedNodeType === 'rich_text';
+  const fontWeightValue = normalizeFontWeightValue(form.fontWeight, '400');
 
   return (
     <div className="bld-control-stack">
@@ -37,8 +45,12 @@ export default function TypographyControls({ form, onUpdate, selectedNodeType = 
         </div>
         <div className="bld-field">
           <label className="bld-label">Font Weight</label>
-          <select className="bld-input" value={form.fontWeight} onChange={(e) => onUpdate('fontWeight', e.target.value)}>
-            {FONT_WEIGHTS.map((item) => (
+          <select
+            className="bld-input"
+            value={fontWeightValue}
+            onChange={(e) => onUpdate('fontWeight', e.target.value)}
+          >
+            {FONT_WEIGHT_OPTIONS.map((item) => (
               <option key={item} value={item}>
                 {item}
               </option>
@@ -118,4 +130,3 @@ export default function TypographyControls({ form, onUpdate, selectedNodeType = 
     </div>
   );
 }
-

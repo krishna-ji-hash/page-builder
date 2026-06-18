@@ -140,6 +140,11 @@ export default function StylePanel({
 
       {caps.supportsTypography !== false ? (
         <InspectorSection title="Typography" defaultOpen keywords="font size weight line height text">
+          {selectedNode?.nodeType === 'column' || selectedNode?.nodeType === 'stack' || selectedNode?.nodeType === 'row' ? (
+            <p className="bld-field-note" style={{ marginTop: 0, marginBottom: 10 }}>
+              Column/section <strong>heading block</strong> enabled ho to font weight us title par lagta hai. Widget text ke liye canvas par text/heading select karo.
+            </p>
+          ) : null}
           <TypographyControls form={form} onUpdate={onChange} selectedNodeType={selectedNode?.nodeType || ''} />
         </InspectorSection>
       ) : null}

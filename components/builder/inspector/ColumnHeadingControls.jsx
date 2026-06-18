@@ -2,6 +2,7 @@
 
 import { InspectorNumField, inspectorNumStringChange } from '@/components/builder/inspector/InspectorNumeric';
 import { InspectorSection } from '@/components/builder/inspector/InspectorUi';
+import { FONT_WEIGHT_OPTIONS } from '@/components/builder/inspector/TypographyControls';
 
 export default function ColumnHeadingControls({ form, onChange }) {
   return (
@@ -55,6 +56,23 @@ export default function ColumnHeadingControls({ form, onChange }) {
           value={form.columnHeadingSpacingBottom ?? 20}
           onChange={inspectorNumStringChange(onChange, 'columnHeadingSpacingBottom')}
         />
+      </div>
+      <div className="bld-field">
+        <label className="bld-label" htmlFor="column-heading-font-weight">
+          Font weight
+        </label>
+        <select
+          id="column-heading-font-weight"
+          className="bld-input"
+          value={String(form.columnHeadingFontWeight || '800')}
+          onChange={(e) => onChange('columnHeadingFontWeight', e.target.value)}
+        >
+          {FONT_WEIGHT_OPTIONS.map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
+        </select>
       </div>
       <button type="button" className="bld-chip" onClick={() => onChange('columnHeadingReset', '1')}>
         Reset column heading

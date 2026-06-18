@@ -38,11 +38,13 @@ import {
 } from '@/lib/compoundChromeInspector';
 import { isCompoundWidgetType } from '@/lib/compoundWidgetRegistry';
 import {
+  columnHeadingFromProps,
   columnHeadingInspectorFields,
   isColumnHeadingInspectorKey,
   isSectionHeadingInspectorKey,
   patchColumnHeadingFromKey,
   patchSectionHeadingFromKey,
+  sectionHeadingFromProps,
   sectionHeadingInspectorFields,
 } from '@/lib/contentComposer';
 import {
@@ -1156,7 +1158,19 @@ export default function BuilderInspector({
       imageHeightPx: Number(selectedNode.props?.imageHeightPx || 0),
       fontFamily: style?.typography?.fontFamily || '',
       fontSizePx: parsePxValue(style?.typography?.fontSize, 16),
-      fontWeight: style?.typography?.fontWeight || '400',
+      fontWeight: (() => {
+        if (selectedNode.nodeType === 'column' || selectedNode.nodeType === 'stack') {
+          const ch = columnHeadingFromProps(selectedNode.props);
+          if (ch.enabled) return String(ch.fontWeight || '800');
+        }
+        if (selectedNode.nodeType === 'row') {
+          const sh = sectionHeadingFromProps(selectedNode.props);
+          if (sh.enabled) return String(sh.fontWeight || '800');
+        }
+        const raw = style?.typography?.fontWeight;
+        if (raw == null || raw === '') return '400';
+        return String(raw);
+      })(),
       lineHeight: style?.typography?.lineHeight || '1.4',
       letterSpacingPx: parsePxValue(style?.typography?.letterSpacing, 0),
       textTransform: style?.typography?.textTransform || 'none',
@@ -3316,6 +3330,43 @@ export default function BuilderInspector({
         [fieldKey]: { value: fieldValue, ts: Date.now() },
       };
     };
+
+    if (key === 'fontWeight') {
+      if (selectedNode.nodeType === 'row') {
+        const sh = sectionHeadingFromProps(selectedNode.props);
+        if (sh.enabled) {
+          const next = patchSectionHeadingFromKey('sectionHeadingFontWeight', value, selectedNode.props?.sectionHeading);
+          if (next) {
+            recordStylePending(key, value);
+            styleChangeInFlightRef.current += 1;
+            setForm((prev) => ({ ...prev, fontWeight: String(value), sectionHeadingFontWeight: String(value) }));
+            try {
+              await updateProps({ sectionHeading: next });
+            } finally {
+              styleChangeInFlightRef.current = Math.max(0, styleChangeInFlightRef.current - 1);
+            }
+            return;
+          }
+        }
+      }
+      if (selectedNode.nodeType === 'column' || selectedNode.nodeType === 'stack') {
+        const ch = columnHeadingFromProps(selectedNode.props);
+        if (ch.enabled) {
+          const next = patchColumnHeadingFromKey('columnHeadingFontWeight', value, selectedNode.props?.columnHeading);
+          if (next) {
+            recordStylePending(key, value);
+            styleChangeInFlightRef.current += 1;
+            setForm((prev) => ({ ...prev, fontWeight: String(value), columnHeadingFontWeight: String(value) }));
+            try {
+              await updateProps({ columnHeading: next });
+            } finally {
+              styleChangeInFlightRef.current = Math.max(0, styleChangeInFlightRef.current - 1);
+            }
+            return;
+          }
+        }
+      }
+    }
 
     recordStylePending(key, value);
     if (key === 'layoutGapScale' && GAP_SCALE_IDS.includes(String(value))) {

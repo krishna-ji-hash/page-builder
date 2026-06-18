@@ -2,6 +2,7 @@
 
 import { InspectorNumField, inspectorNumStringChange } from '@/components/builder/inspector/InspectorNumeric';
 import { InspectorSection } from '@/components/builder/inspector/InspectorUi';
+import { FONT_WEIGHT_OPTIONS } from '@/components/builder/inspector/TypographyControls';
 
 export default function SectionHeadingControls({ form, onChange }) {
   return (
@@ -85,6 +86,23 @@ export default function SectionHeadingControls({ form, onChange }) {
           value={form.sectionHeadingSpacingBottom ?? 32}
           onChange={inspectorNumStringChange(onChange, 'sectionHeadingSpacingBottom')}
         />
+      </div>
+      <div className="bld-field">
+        <label className="bld-label" htmlFor="section-heading-font-weight">
+          Title font weight
+        </label>
+        <select
+          id="section-heading-font-weight"
+          className="bld-input"
+          value={String(form.sectionHeadingFontWeight || '800')}
+          onChange={(e) => onChange('sectionHeadingFontWeight', e.target.value)}
+        >
+          {FONT_WEIGHT_OPTIONS.map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
+        </select>
       </div>
       <button type="button" className="bld-chip" onClick={() => onChange('sectionHeadingReset', '1')}>
         Reset section heading
