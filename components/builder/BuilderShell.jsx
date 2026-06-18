@@ -67,7 +67,6 @@ import { fulfillInsertTarget } from '@/lib/fulfillInsertTarget';
 import { buildReusableBulkOrderedNodes } from '@/lib/reusableBlockInsert';
 import PageSeoModal from './seo/PageSeoModal';
 import AuditModal from './audits/AuditModal';
-import PublishChecklistModal from './publish/PublishChecklistModal';
 import VersionHistoryModal from '@/components/platform/VersionHistoryModal';
 import AuditBadgesOverlay from './audits/AuditBadgesOverlay';
 import ProjectBrandPanel from './inspector/ProjectBrandPanel';
@@ -518,10 +517,6 @@ export default function BuilderShell({ pageId }) {
   const [hasUnpublishedEdits, setHasUnpublishedEdits] = useState(false);
   const [saveAckVisible, setSaveAckVisible] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
-  const [publishChecklistOpen, setPublishChecklistOpen] = useState(false);
-  const [publishChecklistLoading, setPublishChecklistLoading] = useState(false);
-  const [publishChecklistError, setPublishChecklistError] = useState('');
-  const [publishChecklist, setPublishChecklist] = useState(null);
   const [isSyncingDraft, setIsSyncingDraft] = useState(false);
   const [undoStack, setUndoStack] = useState([]); // { ts:number, tree:any[] }[]
   const [redoStack, setRedoStack] = useState([]); // { ts:number, tree:any[] }[]
@@ -3172,13 +3167,15 @@ export default function BuilderShell({ pageId }) {
     }
   };
 
-  const executePublish = async () => {
+  const handlePublish = async () => {
     if (!pageIdValid) return;
     setIsPublishing(true);
     setErrorMessage('');
     try {
       await flushActiveCanvasInlineEdits();
       await siteThemePersistFlushRef.current?.();
+      // Always publish from authoritative draft nodes in DB to avoid
+      // client-tree snapshot drift, duplicate blocks, or style conflicts.
       const treeForSync = prepareTreeForBulkSave(autoFixTree(reconcileStructuralParents(tree)));
       validateTree(treeForSync);
       const syncResponse = await fetch('/api/nodes/update-bulk', {
@@ -3202,31 +3199,6 @@ export default function BuilderShell({ pageId }) {
     } finally {
       setIsPublishing(false);
     }
-  };
-
-  const openPublishChecklist = async () => {
-    if (!pageIdValid) return;
-    setPublishChecklistOpen(true);
-    setPublishChecklistLoading(true);
-    setPublishChecklistError('');
-    setPublishChecklist(null);
-    try {
-      const response = await fetch(`/api/pages/${pid}/publish-checklist`, { cache: 'no-store' });
-      const data = await readJsonSafe(response);
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to load publish checklist');
-      }
-      setPublishChecklist(data.checklist || null);
-    } catch (error) {
-      setPublishChecklistError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setPublishChecklistLoading(false);
-    }
-  };
-
-  const handlePublishConfirmed = async () => {
-    setPublishChecklistOpen(false);
-    await executePublish();
   };
 
   const handleSaveGlobalSection = async ({ rowId, role }) => {
@@ -4368,7 +4340,7 @@ export default function BuilderShell({ pageId }) {
           device={device}
           onDeviceChange={setDevice}
           onSave={handleSave}
-          onPublish={openPublishChecklist}
+          onPublish={handlePublish}
           onPreview={handlePreview}
           onLivePreview={handleLivePreview}
           previewUrl={previewUrl}
@@ -4417,18 +4389,6 @@ export default function BuilderShell({ pageId }) {
             setSelectedNodeId(Number(nodeId));
             setLeftPanelTab('layers');
           }}
-        />
-
-        <PublishChecklistModal
-          open={publishChecklistOpen}
-          loading={publishChecklistLoading}
-          error={publishChecklistError}
-          pageTitle={page?.title}
-          checklist={publishChecklist}
-          isPublishing={isPublishing}
-          onClose={() => setPublishChecklistOpen(false)}
-          onPublish={handlePublishConfirmed}
-          onPublishAnyway={handlePublishConfirmed}
         />
 
         <AuditModal

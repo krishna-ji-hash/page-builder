@@ -2,7 +2,6 @@
 @import '../shared/site-header-bar.css';
 @import '../shared/feature-tabs.css';
 @import '../shared/section-template-parity.css';
-@import '../shared/section-content-shell.css';
 @import '../shared/inline-font-size.css';
 @import '../shared/faq-accordion.css';
 @import '../shared/stats-counter.css';
@@ -2130,14 +2129,27 @@
 }
 
 /*
- * Full-bleed section background + centered inner column.
- * Inner shell: styles/shared/section-content-shell.css
+ * Full-bleed section background + centered inner column (default for hero / content strips).
+ * Matches header `data-live-header-content='boxed'` inset math on the live site (100vw).
  */
-.live-doc > :where(section.live-node, main.live-node).bld-row.section-full-bg[data-live-section-content='boxed'],
-.live-doc > [data-live-section-content='boxed'].live-node.bld-row.section-full-bg {
-  padding-left: 0 !important;
-  padding-right: 0 !important;
+.live-doc > :where(section.live-node, main.live-node).bld-row[data-live-section-content='boxed'],
+.live-doc > [data-live-section-content='boxed'].live-node.bld-row {
+  --live-section-content-inset-x: calc(
+    (100vw - min(100vw, var(--live-section-content-max-width, var(--live-content-max-width, 1280px)))) / 2
+  );
+  padding-left: max(var(--live-content-padding-x, clamp(16px, 3vw, 40px)), var(--live-section-content-inset-x)) !important;
+  padding-right: max(var(--live-content-padding-x, clamp(16px, 3vw, 40px)), var(--live-section-content-inset-x)) !important;
   box-sizing: border-box;
+}
+
+.live-doc > [data-live-section-content='boxed'].live-node.bld-row > .live-node.bld-column {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.live-doc > [data-live-section-content='boxed'].live-node.bld-row figure.live-node,
+.live-doc > [data-live-section-content='boxed'].live-node.bld-row figure.live-node img {
+  max-width: 100%;
 }
 
 /* Nested section rows: same meta key; no viewport breakout — width is relative to parent column/stack. */

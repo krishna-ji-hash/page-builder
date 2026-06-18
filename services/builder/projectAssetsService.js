@@ -387,15 +387,3 @@ export async function saveAnimationPresets({ projectId, animationPresets, ifRevi
   return normalized;
 }
 
-/** Load normalized site theme + theme tokens from project config. */
-export async function getProjectThemeAssets(projectId) {
-  const prid = Number(projectId);
-  if (!Number.isInteger(prid) || prid <= 0) throw new Error('Invalid projectId');
-  const project = await getProjectConfig(prid);
-  if (!project) throw new Error('Project not found');
-  return {
-    siteTheme: normalizeSiteTheme(project.config?.siteTheme),
-    themeTokens: normalizeThemeTokens(project.config?.themeTokens),
-  };
-}
-

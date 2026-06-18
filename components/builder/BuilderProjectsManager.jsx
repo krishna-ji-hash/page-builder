@@ -7,8 +7,8 @@ import { publicPagePath } from '@/lib/publicSiteUrls';
 import {
   isDuplicatePageSlugInProject,
   isLivePagePublished,
-  normalizeBuilderSlug,
 } from '@/lib/builder/projectPageRules';
+import ProjectWizard from '@/components/platform/ProjectWizard';
 import '@/styles/builder/projects-manager.css';
 
 async function readJsonSafe(response) {
@@ -27,13 +27,17 @@ function buildApiErrorMessage(data, fallback) {
   return details ? `${base} (${details})` : base;
 }
 
-function slugFromTitle(title) {
-  return normalizeBuilderSlug(String(title || ''));
+function defaultSlugFromTitle(title) {
+  return String(title || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 
 function validatePageDraft(draft, pagesInProject) {
   const title = String(draft?.title || '').trim();
-  const slug = normalizeBuilderSlug(draft?.slug) || slugFromTitle(title);
+  const slug = defaultSlugFromTitle(draft?.slug);
   if (!title) return 'Page title is required.';
   if (!slug) return 'Page slug is required (use letters, numbers, and hyphens).';
   if (
@@ -77,6 +81,7 @@ export default function BuilderProjectsManager() {
   const [editPageError, setEditPageError] = useState('');
   const [editProjectDraft, setEditProjectDraft] = useState(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const [projectSearch, setProjectSearch] = useState('');
 
   const openProject = useMemo(
@@ -171,9 +176,7 @@ export default function BuilderProjectsManager() {
 
   const handleCreatePage = async (projectId) => {
     const draft = newPageByProject[projectId];
-    const title = String(draft?.title || '').trim();
-    const slug = normalizeBuilderSlug(draft?.slug) || slugFromTitle(title);
-    if (!title || !slug) return;
+    if (!draft?.title || !draft?.slug) return;
     setCreatingPageProjectId(projectId);
     setError('');
     setSuccessMessage('');
@@ -181,7 +184,7 @@ export default function BuilderProjectsManager() {
       const response = await fetch(`/api/projects/${projectId}/pages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, slug }),
+        body: JSON.stringify({ title: draft.title, slug: draft.slug }),
       });
       const data = await readJsonSafe(response);
       if (!response.ok) throw new Error(data.error || 'Failed to create page');
@@ -250,7 +253,7 @@ export default function BuilderProjectsManager() {
     }
 
     const title = String(editPageDraft.title).trim();
-    const slug = normalizeBuilderSlug(editPageDraft.slug) || slugFromTitle(title);
+    const slug = defaultSlugFromTitle(editPageDraft.slug);
 
     setIsUpdatingPage(true);
     setError('');
@@ -443,7 +446,7 @@ export default function BuilderProjectsManager() {
                         setNewProject((prev) => ({
                           ...prev,
                           name: e.target.value,
-                          slug: prev.slug ? prev.slug : slugFromTitle(e.target.value),
+                          slug: prev.slug ? prev.slug : defaultSlugFromTitle(e.target.value),
                         }))
                       }
                     />
@@ -455,7 +458,7 @@ export default function BuilderProjectsManager() {
                       placeholder="my-website"
                       value={newProject.slug}
                       onChange={(e) =>
-                        setNewProject((prev) => ({ ...prev, slug: normalizeBuilderSlug(e.target.value) }))
+                        setNewProject((prev) => ({ ...prev, slug: defaultSlugFromTitle(e.target.value) }))
                       }
                     />
                   </label>
@@ -475,9 +478,31 @@ export default function BuilderProjectsManager() {
                   <button className="pm-btn pm-btn--primary pm-btn--block" type="submit" disabled={isCreatingProject}>
                     {isCreatingProject ? 'Creating…' : 'Create project'}
                   </button>
+                  <button
+                    type="button"
+                    className="pm-btn pm-btn--block"
+                    style={{ marginTop: 8 }}
+                    onClick={() => setWizardOpen(true)}
+                  >
+                    Website wizard…
+                  </button>
                 </form>
               ) : null}
             </section>
+
+            <ProjectWizard
+              open={wizardOpen}
+              onClose={() => setWizardOpen(false)}
+              onComplete={async (data) => {
+                await loadProjects();
+                if (data?.project?.id) {
+                  setOpenProjectId(data.project.id);
+                  await loadPages(data.project.id);
+                }
+                setSuccessMessage('Project generated with pages, SEO, and global sections.');
+                setWizardOpen(false);
+              }}
+            />
 
             <aside className="pm-sidebar">
             <div className="pm-sidebar__head">
@@ -631,7 +656,7 @@ export default function BuilderProjectsManager() {
                                 [openProject.id]: {
                                   ...current,
                                   title: nextTitle,
-                                  slug: slugFromTitle(nextTitle),
+                                  slug: current.slug ? current.slug : defaultSlugFromTitle(nextTitle),
                                 },
                               };
                             })
@@ -651,7 +676,7 @@ export default function BuilderProjectsManager() {
                                 ...prev,
                                 [openProject.id]: {
                                   ...current,
-                                  slug: normalizeBuilderSlug(e.target.value),
+                                  slug: defaultSlugFromTitle(e.target.value),
                                 },
                               };
                             })
@@ -830,7 +855,7 @@ export default function BuilderProjectsManager() {
                     setEditProjectDraft((prev) => ({
                       ...prev,
                       name: e.target.value,
-                      slug: prev.slug ? prev.slug : slugFromTitle(e.target.value),
+                      slug: prev.slug ? prev.slug : defaultSlugFromTitle(e.target.value),
                     }))
                   }
                   disabled={isUpdatingProject}
@@ -845,7 +870,7 @@ export default function BuilderProjectsManager() {
                   onChange={(e) =>
                     setEditProjectDraft((prev) => ({
                       ...prev,
-                      slug: normalizeBuilderSlug(e.target.value),
+                      slug: defaultSlugFromTitle(e.target.value),
                     }))
                   }
                   disabled={isUpdatingProject}
@@ -888,7 +913,7 @@ export default function BuilderProjectsManager() {
             <p className="pm-muted pm-path-hint">
               Status: <strong>{editPageDraft.status}</strong>
               {editPageDraft.initialSlug &&
-              normalizeBuilderSlug(editPageDraft.slug) !== editPageDraft.initialSlug ? (
+              defaultSlugFromTitle(editPageDraft.slug) !== editPageDraft.initialSlug ? (
                 <>
                   {' '}
                   · URL will change from <code>/{editPageDraft.projectSlug}/{editPageDraft.initialSlug}</code>
@@ -900,7 +925,7 @@ export default function BuilderProjectsManager() {
                 <dt>Public URL</dt>
                 <dd>
                   <code>
-                    /{editPageDraft.projectSlug}/{normalizeBuilderSlug(editPageDraft.slug) || 'page-slug'}
+                    /{editPageDraft.projectSlug}/{defaultSlugFromTitle(editPageDraft.slug) || 'page-slug'}
                   </code>
                 </dd>
               </div>
@@ -910,7 +935,7 @@ export default function BuilderProjectsManager() {
                   <code>
                     {adminBuilderPagePath(
                       editPageDraft.projectSlug,
-                      normalizeBuilderSlug(editPageDraft.slug) || 'page-slug'
+                      defaultSlugFromTitle(editPageDraft.slug) || 'page-slug'
                     )}
                   </code>
                 </dd>
@@ -921,7 +946,7 @@ export default function BuilderProjectsManager() {
                   <code>
                     {previewPagePath(
                       editPageDraft.projectSlug,
-                      normalizeBuilderSlug(editPageDraft.slug) || 'page-slug'
+                      defaultSlugFromTitle(editPageDraft.slug) || 'page-slug'
                     )}
                   </code>
                 </dd>
@@ -937,11 +962,9 @@ export default function BuilderProjectsManager() {
                   value={editPageDraft.title}
                   onChange={(e) => {
                     setEditPageError('');
-                    const nextTitle = e.target.value;
                     setEditPageDraft((prev) => ({
                       ...prev,
-                      title: nextTitle,
-                      slug: slugFromTitle(nextTitle),
+                      title: e.target.value,
                     }));
                   }}
                   disabled={isUpdatingPage}
@@ -958,7 +981,7 @@ export default function BuilderProjectsManager() {
                     setEditPageError('');
                     setEditPageDraft((prev) => ({
                       ...prev,
-                      slug: normalizeBuilderSlug(e.target.value),
+                      slug: defaultSlugFromTitle(e.target.value),
                     }));
                   }}
                   disabled={isUpdatingPage}
@@ -972,7 +995,7 @@ export default function BuilderProjectsManager() {
                   setEditPageError('');
                   setEditPageDraft((prev) => ({
                     ...prev,
-                    slug: slugFromTitle(prev.title),
+                    slug: defaultSlugFromTitle(prev.title),
                   }));
                 }}
               >

@@ -14,7 +14,6 @@ import { DEFAULT_THEME_TOKENS, createModePalettesFromFlat, normalizeThemeTokens 
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
 import { isSectionLockedFlagValue, metaRepresentsExplicitSectionUnlock } from '@/lib/rowLayoutMeta';
 import { freezeGlobalSectionsForPublish } from '@/lib/globalSectionSnapshot';
-import { applyHomeHeaderNavToGlobal, findPageHeaderRow } from '@/lib/globalHeaderNavSync';
 import { applyResponsiveDefaultsToTree } from '@/lib/applyPageResponsiveDefaults';
 import { isBrandFontNormalizeStyleJson } from '@/lib/projectBrand.js';
 import { normalizeSiteTheme } from '@/lib/siteDesignTheme';
@@ -1911,30 +1910,9 @@ export async function publishPage(pageId) {
       [draft.id]
     );
     const draftSnapshot = parseSnapshot(versionRows[0]?.snapshot_json) || { nodes: [] };
-
-    let projectConfig = page.projectConfig || {};
-    if (page.slug === 'home') {
-      const homeHeader = findPageHeaderRow(draftSnapshot.nodes);
-      const globalHeader = projectConfig?.globalSections?.header;
-      if (homeHeader && globalHeader) {
-        const syncedHeader = applyHomeHeaderNavToGlobal(globalHeader, homeHeader);
-        projectConfig = {
-          ...projectConfig,
-          globalSections: {
-            ...(projectConfig.globalSections || {}),
-            header: syncedHeader,
-          },
-        };
-        await connection.query(`UPDATE projects SET config_json = ? WHERE id = ?`, [
-          JSON.stringify(projectConfig),
-          page.project_id,
-        ]);
-      }
-    }
-
     const publishSnapshot = {
       nodes: Array.isArray(draftSnapshot.nodes) ? draftSnapshot.nodes : [],
-      globalSections: freezeGlobalSectionsForPublish(projectConfig),
+      globalSections: freezeGlobalSectionsForPublish(page.projectConfig),
     };
     const snapshotJson = JSON.stringify(publishSnapshot);
     const nextVersionNumber = await getNextPageVersionNumber(pageId, connection);
@@ -1966,47 +1944,6 @@ export async function publishPage(pageId) {
       versionNumber: nextVersionNumber,
       draftVersionId: draft.id,
       snapshot: publishSnapshot,
-    };
-  });
-}
-
-/**
- * Take page offline: clear live pointer, archive the live snapshot row, keep all page_versions.
- * Draft tree remains editable; live reads return unpublished (no published_version_id).
- */
-export async function unpublishPage(pageId) {
-  return withTransaction(async (connection) => {
-    const page = await getPageById(pageId, connection);
-    if (!page) return null;
-
-    const liveVersionId = page.published_version_id;
-    if (!liveVersionId) {
-      return {
-        pageId,
-        alreadyUnpublished: true,
-        unpublishedVersionId: null,
-        status: 'draft',
-      };
-    }
-
-    await connection.query(
-      `UPDATE page_versions
-       SET status = 'archived'
-       WHERE id = ? AND page_id = ? AND status = 'published'`,
-      [liveVersionId, pageId]
-    );
-
-    await connection.query(
-      `UPDATE pages
-       SET published_version_id = NULL, status = 'draft', updated_at = CURRENT_TIMESTAMP
-       WHERE id = ?`,
-      [pageId]
-    );
-
-    return {
-      pageId,
-      unpublishedVersionId: liveVersionId,
-      status: 'draft',
     };
   });
 }
