@@ -4022,6 +4022,13 @@
   max-height: min(88vh, 680px);
 }
 
+.bld-modal.bld-modal--seo {
+  width: min(1320px, calc(100vw - 20px));
+  max-width: calc(100vw - 20px);
+  height: min(920px, calc(100vh - 20px));
+  max-height: calc(100vh - 20px);
+}
+
 .bld-modal__head {
   display: flex;
   align-items: center;

@@ -34,6 +34,7 @@ const PUBLIC_API_PREFIXES = [
   '/api/forms/submit',
   '/api/runtime/',
   '/api/platform/resolve-host',
+  '/api/public/resolve-redirect',
   '/api/auth/login',
   '/api/auth/session-check',
 ];
@@ -82,6 +83,31 @@ async function hasValidSession(request) {
 export async function middleware(request) {
   const host = normalizeHost(request.headers.get('host'));
   const { pathname } = request.nextUrl;
+
+  if (
+    !pathname.startsWith('/admin') &&
+    !pathname.startsWith('/api') &&
+    !pathname.startsWith('/_next') &&
+    !pathname.startsWith('/preview')
+  ) {
+    try {
+      const origin = request.nextUrl.origin;
+      const res = await fetch(
+        `${origin}/api/public/resolve-redirect?path=${encodeURIComponent(pathname)}&host=${encodeURIComponent(host)}`,
+        { headers: { 'x-middleware-resolve': '1' } }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.redirect?.destination) {
+          const dest = String(data.redirect.destination);
+          const target = dest.startsWith('http') ? dest : new URL(dest, request.url).toString();
+          return NextResponse.redirect(target, data.redirect.status || 301);
+        }
+      }
+    } catch {
+      /* continue */
+    }
+  }
 
   if (!isAuthDisabled()) {
     if (isProtectedAdminPath(pathname)) {

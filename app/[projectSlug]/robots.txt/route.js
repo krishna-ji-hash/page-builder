@@ -48,14 +48,24 @@ export async function GET(request, { params }) {
   const sitemapUrl = base ? joinUrl(base, `/${projectSlug}/sitemap.xml`) : '';
 
   const allowIndexing = projectSeo.indexingEnabled && projectSeo.robots.index !== false;
+  const robotsMode = projectSeo.robotsMode || 'allow_all';
+  const customDisallow = Array.isArray(projectSeo.robotsDisallowPaths) ? projectSeo.robotsDisallowPaths : [];
+  const crawlDelay = Number(projectSeo.crawlDelay) > 0 ? Number(projectSeo.crawlDelay) : null;
 
   const lines = [];
   lines.push('User-agent: *');
-  if (!allowIndexing) {
+  if (!allowIndexing || robotsMode === 'disallow_all') {
     lines.push('Disallow: /');
+  } else if (robotsMode === 'custom' && customDisallow.length) {
+    lines.push('Allow: /');
+    for (const rule of customDisallow) {
+      const p = String(rule || '').trim();
+      if (p) lines.push(`Disallow: ${p.startsWith('/') ? p : `/${p}`}`);
+    }
   } else {
     lines.push('Allow: /');
   }
+  if (crawlDelay) lines.push(`Crawl-delay: ${crawlDelay}`);
   if (sitemapUrl) lines.push(`Sitemap: ${sitemapUrl}`);
   lines.push('');
 

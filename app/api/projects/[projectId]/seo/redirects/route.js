@@ -1,7 +1,13 @@
 import { ok, fail } from '@/lib/api';
 import { guardAdminApi } from '@/lib/auth/guardAdminApi';
 import { resolveMaybeAsyncParams } from '@/lib/routeParams';
-import { runExtendedSeoAudit, applySeoQuickFix, applyBulkSeoQuickFix } from '@/services/seo/seoAuditService';
+import {
+  listSeoRedirects,
+  createSeoRedirect,
+  updateSeoRedirect,
+  deleteSeoRedirect,
+  validateRedirectLoops,
+} from '@/services/seo/seoRedirectService';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -13,11 +19,12 @@ export async function GET(request, { params }) {
   if (auth.error) return auth.error;
   if (!Number.isInteger(projectId) || projectId <= 0) return fail('Invalid projectId', 400);
   try {
-    const audit = await runExtendedSeoAudit(projectId);
-    return ok({ audit });
+    const redirects = await listSeoRedirects(projectId);
+    const loops = validateRedirectLoops(redirects.filter((r) => r.active));
+    return ok({ redirects, loops });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    return fail('Failed to run SEO audit', 500, message);
+    return fail('Failed to load redirects', 500, message);
   }
 }
 
@@ -29,14 +36,10 @@ export async function POST(request, { params }) {
   if (!Number.isInteger(projectId) || projectId <= 0) return fail('Invalid projectId', 400);
   try {
     const body = await request.json().catch(() => ({}));
-    if (body?.bulk && body?.type) {
-      const result = await applyBulkSeoQuickFix(projectId, body.type);
-      return ok({ result });
-    }
-    const seo = await applySeoQuickFix(projectId, body);
-    return ok({ seo });
+    const redirect = await createSeoRedirect(projectId, body);
+    return ok({ redirect });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    return fail('Failed to apply SEO fix', 500, message);
+    return fail('Failed to create redirect', 400, message);
   }
 }

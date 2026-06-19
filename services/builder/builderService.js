@@ -1947,3 +1947,32 @@ export async function publishPage(pageId) {
     };
   });
 }
+
+/**
+ * Unpublish live page: archive frozen snapshot, clear live pointer.
+ * Draft version and all page_versions rows are retained.
+ */
+export async function unpublishPage(pageId) {
+  return withTransaction(async (connection) => {
+    const page = await getPageById(pageId, connection);
+    if (!page) return null;
+
+    const publishedVersionId = page.published_version_id;
+    if (!publishedVersionId) {
+      return { pageId, unpublishedVersionId: null, alreadyUnpublished: true };
+    }
+
+    await connection.query(`UPDATE page_versions SET status = 'archived' WHERE id = ?`, [
+      publishedVersionId,
+    ]);
+
+    await connection.query(
+      `UPDATE pages
+       SET published_version_id = NULL, status = 'draft', updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [pageId]
+    );
+
+    return { pageId, unpublishedVersionId: publishedVersionId };
+  });
+}

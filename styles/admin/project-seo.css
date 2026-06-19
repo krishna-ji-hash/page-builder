@@ -114,6 +114,18 @@
   box-shadow: 0 4px 14px rgba(91, 184, 168, 0.35);
 }
 
+.proj-seo__save--ghost {
+  background: transparent;
+  color: var(--admin-text-soft, #5c5870);
+  border: 1px solid var(--ps-brand-border, #e4deff);
+  box-shadow: none;
+}
+
+.proj-seo__save--ghost:hover:not(:disabled) {
+  background: var(--ps-brand-soft, #f3f0ff);
+  transform: none;
+}
+
 .proj-seo__save svg {
   width: 15px;
   height: 15px;
