@@ -6,8 +6,14 @@ export async function fetchJson(url, opts) {
   const res = await fetch(url, opts);
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data?.ok === false) {
-    const msg = typeof data?.error === 'string' ? data.error : `Request failed: ${res.status}`;
-    throw new Error(msg);
+    const base = typeof data?.error === 'string' ? data.error : `Request failed: ${res.status}`;
+    const detail =
+      typeof data?.details === 'string'
+        ? data.details
+        : data?.details != null
+          ? JSON.stringify(data.details)
+          : '';
+    throw new Error(detail && !base.includes(detail) ? `${base}: ${detail}` : base);
   }
   return data;
 }
@@ -22,6 +28,9 @@ export const SEO_TABS = [
   { id: 'robots', label: 'Robots' },
   { id: 'redirects', label: 'Redirects' },
   { id: 'audit', label: 'Audit' },
+  { id: 'enterprise', label: 'Enterprise Suite' },
+  { id: 'llm', label: 'LLM SEO' },
+  { id: 'ai', label: 'AI Automation' },
   { id: 'social', label: 'Social Preview' },
   { id: 'search-console', label: 'Search Console Ready' },
 ];

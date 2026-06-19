@@ -4,6 +4,9 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import SeoDefaultsForm from '@/components/admin/seo/SeoDefaultsForm';
 import SeoPageEditorModal from '@/components/admin/seo/SeoPageEditorModal';
+import EnterpriseSeoSuite from '@/components/admin/seo/EnterpriseSeoSuite';
+import LlmSeoPanel from '@/components/admin/seo/LlmSeoPanel';
+import AiSeoAutomation from '@/components/admin/seo/AiSeoAutomation';
 import {
   IndexingBadge,
   ScoreBadge,
@@ -41,6 +44,21 @@ const DEFAULT_SCHEMA_TEMPLATE = {
   url: '{{url}}',
   logo: '{{image}}',
 };
+
+const REDIRECT_TYPES = [
+  {
+    value: '301',
+    label: '301 — Permanent (final)',
+    short: 'Permanent',
+    hint: 'Final redirect — old URL permanently moved. Use for slug changes, HTTPS, or domain moves. Google passes SEO value to the new URL.',
+  },
+  {
+    value: '302',
+    label: '302 — Temporary',
+    short: 'Temporary',
+    hint: 'Temporary redirect — old URL may return later. Use for maintenance, campaigns, or short-term tests. Google keeps the old URL as primary.',
+  },
+];
 
 export default function SeoControlCenter({ projectId }) {
   const [tab, setTab] = useState('overview');
@@ -116,7 +134,7 @@ export default function SeoControlCenter({ projectId }) {
 
   useEffect(() => {
     setError('');
-    if (tab === 'pages' || tab === 'social') {
+    if (tab === 'pages' || tab === 'social' || tab === 'ai') {
       loadPages().catch((e) => setError(e?.message || 'Pages failed'));
       if (tab === 'social') loadBlog().catch(() => {});
     }
@@ -618,22 +636,117 @@ export default function SeoControlCenter({ projectId }) {
       ) : null}
 
       {!loading && tab === 'redirects' ? (
-        <section className="seo-cc__panel">
-          <div className="seo-cc__redirect-form">
-            <input placeholder="Source /old-page" value={redirectForm.sourcePath} onChange={(e) => setRedirectForm((p) => ({ ...p, sourcePath: e.target.value }))} />
-            <input placeholder="Destination /new-page" value={redirectForm.destinationPath} onChange={(e) => setRedirectForm((p) => ({ ...p, destinationPath: e.target.value }))} />
-            <select value={redirectForm.redirectType} onChange={(e) => setRedirectForm((p) => ({ ...p, redirectType: e.target.value }))}><option value="301">301</option><option value="302">302</option></select>
-            <button type="button" className="proj-seo__save" onClick={createRedirect} disabled={busy}>Add redirect</button>
+        <section className="seo-cc__panel seo-cc__redirects">
+          <div className="seo-cc__redirect-card">
+            <div className="seo-cc__redirect-card-head">
+              <h3 className="seo-cc__redirect-title">Add redirect</h3>
+              <p className="proj-seo__hint seo-cc__redirect-intro">
+                Send visitors from an old URL to a new one. Use <strong>301</strong> when the move is final; use{' '}
+                <strong>302</strong> only for short-term redirects.
+              </p>
+            </div>
+
+            <div className="seo-cc__redirect-form-row">
+              <label className="seo-cc__redirect-field">
+                <span className="seo-cc__redirect-label">Source</span>
+                <input
+                  className="seo-cc__input"
+                  placeholder="/old-page"
+                  value={redirectForm.sourcePath}
+                  onChange={(e) => setRedirectForm((p) => ({ ...p, sourcePath: e.target.value }))}
+                />
+              </label>
+              <label className="seo-cc__redirect-field">
+                <span className="seo-cc__redirect-label">Destination</span>
+                <input
+                  className="seo-cc__input"
+                  placeholder="/new-page"
+                  value={redirectForm.destinationPath}
+                  onChange={(e) => setRedirectForm((p) => ({ ...p, destinationPath: e.target.value }))}
+                />
+              </label>
+              <label className="seo-cc__redirect-field seo-cc__redirect-field--type">
+                <span className="seo-cc__redirect-label">Redirect type</span>
+                <select
+                  className="seo-cc__input seo-ai__select"
+                  value={redirectForm.redirectType}
+                  onChange={(e) => setRedirectForm((p) => ({ ...p, redirectType: e.target.value }))}
+                >
+                  {REDIRECT_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" className="proj-seo__save seo-cc__redirect-submit" onClick={createRedirect} disabled={busy}>
+                Add redirect
+              </button>
+            </div>
+            <p className="seo-cc__redirect-type-hint">
+              {REDIRECT_TYPES.find((t) => t.value === redirectForm.redirectType)?.hint}
+            </p>
           </div>
-          <table className="seo-cc__table">
-            <thead><tr><th>Source</th><th>Destination</th><th>Type</th><th>Active</th><th></th></tr></thead>
-            <tbody>
-              {redirects.map((r) => (
-                <tr key={r.id}><td>{r.sourcePath}</td><td>{r.destinationPath}</td><td>{r.redirectType}</td><td>{r.active ? 'yes' : 'no'}</td>
-                  <td><button type="button" onClick={() => deleteRedirect(r.id)}>Delete</button></td></tr>
-              ))}
-            </tbody>
-          </table>
+
+          <div className="seo-cc__redirect-list-head">
+            <h3 className="seo-cc__redirect-title">Active redirects</h3>
+            <span className="proj-seo__hint">{redirects.length} total</span>
+          </div>
+
+          <div className="seo-cc__table-wrap">
+            <table className="seo-cc__table">
+              <thead>
+                <tr>
+                  <th>Source</th>
+                  <th>Destination</th>
+                  <th>Type</th>
+                  <th>Active</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {redirects.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="seo-cc__redirect-empty">
+                      No redirects yet. Add your first redirect above.
+                    </td>
+                  </tr>
+                ) : (
+                  redirects.map((r) => {
+                    const typeMeta = REDIRECT_TYPES.find((t) => t.value === String(r.redirectType));
+                    return (
+                      <tr key={r.id}>
+                        <td>
+                          <code className="seo-cc__redirect-path">{r.sourcePath}</code>
+                        </td>
+                        <td>
+                          <code className="seo-cc__redirect-path">{r.destinationPath}</code>
+                        </td>
+                        <td>
+                          <span
+                            className={`seo-cc__redirect-badge seo-cc__redirect-badge--${r.redirectType === '302' ? 'temp' : 'perm'}`}
+                            title={typeMeta?.hint}
+                          >
+                            {r.redirectType} · {typeMeta?.short || r.redirectType}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={`seo-cc__redirect-status${r.active ? ' seo-cc__redirect-status--on' : ''}`}>
+                            {r.active ? 'Active' : 'Off'}
+                          </span>
+                        </td>
+                        <td className="seo-cc__redirect-delete-cell">
+                          <button type="button" className="seo-cc__redirect-delete" onClick={() => deleteRedirect(r.id)}>
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </section>
       ) : null}
 
@@ -657,6 +770,12 @@ export default function SeoControlCenter({ projectId }) {
           {(audit.issues || []).length ? <div className="seo-cc__extended-issues"><h3>Extended checks</h3><IssueList issues={audit.issues} /></div> : null}
         </section>
       ) : null}
+
+      {!loading && tab === 'enterprise' ? <EnterpriseSeoSuite projectId={projectId} /> : null}
+
+      {!loading && tab === 'llm' ? <LlmSeoPanel projectId={projectId} /> : null}
+
+      {!loading && tab === 'ai' ? <AiSeoAutomation projectId={projectId} pages={pages} /> : null}
 
       {!loading && tab === 'social' ? (
         <section className="seo-cc__panel">

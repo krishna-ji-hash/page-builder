@@ -553,6 +553,12 @@
   border: 1px solid #fde68a;
 }
 
+.platform-alert--success {
+  color: #166534;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+
 /* Loading skeleton */
 .platform-skeleton-grid {
   display: grid;
