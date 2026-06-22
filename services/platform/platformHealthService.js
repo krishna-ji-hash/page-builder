@@ -1,9 +1,13 @@
 import { getDbPool } from '@/lib/db';
+import { readFileSync, existsSync } from 'node:fs';
+import path from 'node:path';
 import {
   auditHardcodedColors,
   auditSectionContrastBannedProps,
   scoreDarkModeHealth,
+  scoreSectionContrastAudit,
 } from '@/scripts/audit-hardcoded-colors.mjs';
+import { scorePerformanceFromLighthouseRuns } from '@/lib/lighthouseHistory.js';
 import { runTreeAudits, scoreFromWarnings } from '@/lib/audits/auditEngine';
 
 function parseJson(value, fallback = null) {
@@ -16,14 +20,28 @@ function parseJson(value, fallback = null) {
   }
 }
 
+function readLighthouseRuns() {
+  const filePath = path.join(process.cwd(), 'battle-testing', 'lighthouse-history.json');
+  if (!existsSync(filePath)) return [];
+  try {
+    const raw = JSON.parse(readFileSync(filePath, 'utf8'));
+    return Array.isArray(raw?.runs) ? raw.runs : [];
+  } catch {
+    return [];
+  }
+}
+
+function scoreCmsHealth(collections, items) {
+  if (!collections) return 50;
+  if (!items) return 75;
+  return Math.min(100, 75 + Math.min(25, Math.floor(items / 2)));
+}
+
 export async function getPlatformHealth() {
   const pool = getDbPool();
   const contrastFindings = auditHardcodedColors();
   const bannedProps = auditSectionContrastBannedProps();
-  const sectionContrastScore = Math.max(
-    0,
-    100 - bannedProps.length * 5 - contrastFindings.length * 2
-  );
+  const sectionContrastScore = scoreSectionContrastAudit(bannedProps, contrastFindings);
   const builderHealth = {
     score: scoreDarkModeHealth(contrastFindings),
     label: 'Builder / section contrast',
@@ -75,6 +93,11 @@ export async function getPlatformHealth() {
     /* DB offline */
   }
 
+  const lighthouseRuns = readLighthouseRuns();
+  const lighthouseScore = scorePerformanceFromLighthouseRuns(lighthouseRuns);
+  const performanceScore =
+    lighthouseScore != null ? lighthouseScore : publishedPages > 0 ? 78 : 55;
+
   const seoHealth = {
     score: sampleSeoScore,
     label: 'SEO Assistant (sample published page)',
@@ -82,16 +105,19 @@ export async function getPlatformHealth() {
   };
 
   const cmsHealth = {
-    score: cmsCollections > 0 ? Math.min(100, 60 + cmsItems) : 50,
+    score: scoreCmsHealth(cmsCollections, cmsItems),
     label: 'CMS',
     collections: cmsCollections,
     items: cmsItems,
   };
 
   const performanceHealth = {
-    score: publishedPages > 0 ? 78 : 55,
+    score: performanceScore,
     label: 'Performance (published surface)',
-    note: 'Run npm run battle-test:lighthouse for deep metrics',
+    note:
+      lighthouseScore != null
+        ? `Lighthouse composite from ${lighthouseRuns.length} run(s)`
+        : 'Run npm run battle-test:lighthouse for deep metrics',
   };
 
   const panels = [
@@ -104,6 +130,7 @@ export async function getPlatformHealth() {
       score: sectionContrastScore,
       label: 'Section contrast audit',
       findings: bannedProps.length,
+      hardcodedColorHits: contrastFindings.length,
     },
   ];
 

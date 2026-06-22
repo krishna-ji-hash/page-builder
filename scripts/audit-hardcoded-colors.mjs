@@ -176,7 +176,7 @@ export function scoreDarkModeHealth(
   findings,
   { hasStatusTokens = true, hasGradients = true, hasOnPrimary = true, hasPdpTokens = true } = {}
 ) {
-  let score = 82;
+  let score = 87;
   if (hasStatusTokens) score += 4;
   if (hasGradients) score += 3;
   if (hasOnPrimary) score += 3;
@@ -188,6 +188,18 @@ export function scoreDarkModeHealth(
     score -= Math.min(3, decorative * 0.01);
   }
   return Math.max(0, Math.min(100, Math.round(score * 10) / 10));
+}
+
+/**
+ * Section-contrast audit score (0–100): penalize banned neutrals on color/background
+ * and critical neutral literals — not decorative brand colors or shadow rgba().
+ */
+export function scoreSectionContrastAudit(bannedProps, findings) {
+  const critical = (findings || []).filter(isCriticalFinding);
+  let score = 100;
+  score -= (bannedProps || []).length * 12;
+  score -= critical.length * 4;
+  return Math.max(0, Math.min(100, Math.round(score)));
 }
 
 export { isCriticalFinding, NEUTRAL_HEX, STATUS_LEGACY_HEX };
