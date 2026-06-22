@@ -1,4 +1,4 @@
-import { getDbPool } from '../lib/db.js';
+import { closeDbPool, getDbPool } from '../lib/db.js';
 
 const pool = getDbPool();
 
@@ -48,5 +48,5 @@ try {
   console.error('DB ERROR:', error.message);
   process.exit(1);
 } finally {
-  await pool.end();
+  await closeDbPool();
 }
