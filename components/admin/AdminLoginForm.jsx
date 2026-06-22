@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { resolveAdminLoginRedirectTarget } from '@/lib/admin/adminRoutes';
 
 const DEV_EMAIL = 'admin@localhost';
 const DEV_PASSWORD = 'changeme';
@@ -14,6 +15,30 @@ export default function AdminLoginForm() {
   const [password, setPassword] = useState(DEV_PASSWORD);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch('/api/auth/session-check');
+        if (cancelled) return;
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.valid) return;
+
+        const target = resolveAdminLoginRedirectTarget(searchParams.get('next'));
+        router.replace(target);
+        router.refresh();
+      } catch {
+        /* remain on login */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router, searchParams]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -30,8 +55,9 @@ export default function AdminLoginForm() {
         setError(data?.error || 'Login failed');
         return;
       }
-      const next = searchParams.get('next') || '/admin/dashboard';
-      router.replace(next);
+
+      const target = resolveAdminLoginRedirectTarget(searchParams.get('next'));
+      router.replace(target);
       router.refresh();
     } catch (err) {
       setError(err?.message || 'Network error');
