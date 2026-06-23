@@ -1,4 +1,10 @@
 import { NextResponse } from 'next/server';
+import {
+  isAuthDisabled,
+  isProtectedAdminPath,
+  isProtectedApiPath,
+} from './lib/auth/publicPaths.js';
+import { requestHasAdminSessionCookie } from './lib/auth/sessionCookie.js';
 
 const RESERVED = new Set([
   'admin',
@@ -26,54 +32,12 @@ function isLocalDevHost(host) {
   return false;
 }
 
-function isAuthDisabled() {
-  return process.env.AUTH_DISABLED === 'true' || process.env.AUTH_DISABLED === '1';
-}
-
-const PUBLIC_API_PREFIXES = [
-  '/api/forms/submit',
-  '/api/runtime/',
-  '/api/platform/resolve-host',
-  '/api/public/resolve-redirect',
-  '/api/auth/login',
-  '/api/auth/session-check',
-];
-
-function isPublicApiPath(pathname, method = 'GET') {
-  const verb = String(method || 'GET').toUpperCase();
-  if (pathname === '/api/forms/analytics' && verb === 'POST') return true;
-  if (pathname.startsWith('/api/forms/analytics')) return false;
-  return PUBLIC_API_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix));
-}
-
-function isProtectedAdminPath(pathname) {
-  return (pathname === '/admin' || pathname.startsWith('/admin/')) && pathname !== '/admin/login';
-}
-
-function isProtectedApiPath(pathname, method = 'GET') {
-  if (!pathname.startsWith('/api/')) return false;
-  if (isPublicApiPath(pathname, method)) return false;
-  if (pathname.startsWith('/api/auth/')) {
-    return (
-      pathname === '/api/auth/logout' ||
-      pathname === '/api/auth/me' ||
-      pathname === '/api/auth/change-password'
-    );
-  }
-  return true;
-}
-
-async function hasValidSession(request) {
-  const origin = request.nextUrl.origin;
-  try {
-    const res = await fetch(`${origin}/api/auth/session-check`, {
-      headers: { cookie: request.headers.get('cookie') || '' },
-      cache: 'no-store',
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
+function forwardAdminPathname(request, pathname) {
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-admin-pathname', pathname);
+  return NextResponse.next({
+    request: { headers: requestHeaders },
+  });
 }
 
 /**
@@ -111,18 +75,17 @@ export async function middleware(request) {
 
   if (!isAuthDisabled()) {
     if (isProtectedAdminPath(pathname)) {
-      const valid = await hasValidSession(request);
-      if (!valid) {
+      if (!requestHasAdminSessionCookie(request)) {
         const loginUrl = request.nextUrl.clone();
         loginUrl.pathname = '/admin/login';
         loginUrl.searchParams.set('next', pathname);
         return NextResponse.redirect(loginUrl);
       }
+      return forwardAdminPathname(request, pathname);
     }
 
     if (isProtectedApiPath(pathname, request.method)) {
-      const valid = await hasValidSession(request);
-      if (!valid) {
+      if (!requestHasAdminSessionCookie(request)) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
       }
     }

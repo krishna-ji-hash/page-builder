@@ -21,7 +21,10 @@ export default function AdminLoginForm() {
 
     (async () => {
       try {
-        const res = await fetch('/api/auth/session-check');
+        const res = await fetch('/api/auth/session-check', {
+          credentials: 'same-origin',
+          cache: 'no-store',
+        });
         if (cancelled) return;
 
         const data = await res.json().catch(() => ({}));
@@ -48,6 +51,7 @@ export default function AdminLoginForm() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json().catch(() => ({}));
