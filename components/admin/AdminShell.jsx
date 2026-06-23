@@ -320,9 +320,17 @@ function UserMenu() {
   }, [open]);
 
   async function logout() {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    router.replace('/admin/login');
-    router.refresh();
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'same-origin',
+      });
+    } catch {
+      /* redirect to login even when the request fails */
+    } finally {
+      router.replace('/admin/login');
+      router.refresh();
+    }
   }
 
   const label = user?.displayName || user?.email || 'Account';

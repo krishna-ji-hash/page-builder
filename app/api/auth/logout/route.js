@@ -1,29 +1,37 @@
 import { cookies } from 'next/headers';
-import { fail, ok } from '@/lib/api';
+import { ok } from '@/lib/api';
 import { ACTIVITY_ACTIONS } from '@/lib/admin/activityActions';
-import { guardAdminApi } from '@/lib/auth/guardAdminApi';
 import { SESSION_COOKIE } from '@/lib/auth/constants';
+import { resolveSessionFromToken, sessionCookieOptions } from '@/lib/auth/session';
 import { logoutAdmin } from '@/services/admin/authService';
 import { recordAdminActivity } from '@/services/admin/activityLogService';
-import { sessionCookieOptions } from '@/lib/auth/session';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function POST(request) {
-  const auth = await guardAdminApi(request, { action: 'read' });
-  if (auth.error) return auth.error;
+function clearSessionCookie(store) {
+  store.set(SESSION_COOKIE, '', { ...sessionCookieOptions(new Date(0)), maxAge: 0 });
+}
+
+export async function POST() {
   const store = await cookies();
-  const token = store.get(SESSION_COOKIE)?.value;
+  const token = store.get(SESSION_COOKIE)?.value || null;
+
   try {
-    if (token) await logoutAdmin(token);
-    void recordAdminActivity({
-      userId: auth.user.id,
-      action: ACTIVITY_ACTIONS.LOGOUT,
-    });
-    store.set(SESSION_COOKIE, '', { ...sessionCookieOptions(new Date(0)), maxAge: 0 });
-    return ok({ loggedOut: true });
-  } catch (error) {
-    return fail('Logout failed', 500, error.message);
+    if (token) {
+      const user = await resolveSessionFromToken(token);
+      await logoutAdmin(token);
+      if (user?.id) {
+        void recordAdminActivity({
+          userId: user.id,
+          action: ACTIVITY_ACTIONS.LOGOUT,
+        });
+      }
+    }
+  } catch {
+    /* still clear cookie below */
   }
+
+  clearSessionCookie(store);
+  return ok({ loggedOut: true });
 }
