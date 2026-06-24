@@ -1,4 +1,28 @@
-/* Workspace pages — dark mode (settings, project hub, CMS, SEO, etc.) */
+/* Projects page — dark theme */
+.admin-shell[data-admin-theme='dark'] .d-projects__stat,
+.admin-shell[data-admin-theme='dark'] .d-projects__toolbar,
+.admin-shell[data-admin-theme='dark'] .d-projects__table-wrap {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+  box-shadow: none;
+}
+
+.admin-shell[data-admin-theme='dark'] .d-projects__live-banner {
+  background: linear-gradient(135deg, var(--admin-accent-soft) 0%, var(--admin-surface) 100%);
+  border-color: var(--admin-border);
+}
+
+.admin-shell[data-admin-theme='dark'] .d-projects__search input {
+  background: var(--admin-input-bg);
+  border-color: var(--admin-border);
+  color: var(--admin-text);
+}
+
+.admin-shell[data-admin-theme='dark'] .d-projects__menu-panel {
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+}
+
 
 .admin-shell[data-admin-theme='dark'] .admin-shell__main {
   /* Soften light semantic chips on project / hub pages */

@@ -1,12 +1,12 @@
-import DProjectMenus from '@/components/admin/d/DProjectMenus';
+import { redirect } from 'next/navigation';
+import { adminProjectSectionPath } from '@/lib/admin/adminRoutes';
+import { resolveAdminProjectKey } from '@/lib/admin/resolveAdminProject';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata = {
-  title: 'Project menus | Builder',
-};
-
-export default async function DProjectMenusRoute({ params }) {
+export default async function DProjectMenusRedirect({ params }) {
   const { projectId } = await params;
-  return <DProjectMenus projectId={projectId} />;
+  const project = await resolveAdminProjectKey(String(projectId));
+  if (!project) redirect('/admin/projects');
+  redirect(adminProjectSectionPath(project.slug, 'menus'));
 }

@@ -1,11 +1,6 @@
-import DProjectNew from '@/components/admin/d/DProjectNew';
+import { redirect } from 'next/navigation';
+import { D_PROJECT_NEW_PATH } from '@/lib/admin/dProjectRoutes';
 
-export const dynamic = 'force-dynamic';
-
-export const metadata = {
-  title: 'New project | Builder',
-};
-
-export default function DProjectNewPage() {
-  return <DProjectNew />;
+export default function DProjectNewRedirect() {
+  redirect(D_PROJECT_NEW_PATH);
 }

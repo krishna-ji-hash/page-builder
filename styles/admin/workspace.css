@@ -1,0 +1,101 @@
+/* ── Admin workspace content area (all /admin/* pages) ── */
+
+.admin-shell__content {
+  padding: 20px 32px 48px;
+  box-sizing: border-box;
+}
+
+.admin-shell__content > .platform-shell {
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 8px 0 0;
+  box-sizing: border-box;
+}
+
+/* Page header — shared across dashboard, projects, publishing, etc. */
+.admin-shell__content .admin-page__header {
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 32px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--admin-border, #ece8f5);
+}
+
+.admin-shell__content .admin-page__badge {
+  margin: 0 0 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--admin-muted, #9b97ab);
+}
+
+.admin-shell__content .admin-page__title,
+.admin-shell__content .admin-page__header h1,
+.admin-shell__content .admin-page__header h2 {
+  margin: 0 0 10px;
+  font-size: clamp(1.5rem, 2.4vw, 1.875rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  color: var(--admin-title, #2e2b3d);
+}
+
+.admin-shell__content .admin-page__description,
+.admin-shell__content .admin-page__header p {
+  margin: 0;
+  max-width: 640px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--admin-muted, #9b97ab);
+}
+
+.admin-shell__content .admin-page__description code {
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 0.9em;
+  background: var(--admin-code-bg, #f3f0fa);
+  color: var(--admin-code-fg, #5c5870);
+}
+
+.admin-shell__content .admin-page__description strong {
+  color: var(--admin-text, #2e2b3d);
+  font-weight: 600;
+}
+
+.admin-shell__content .admin-page__header-actions {
+  align-self: flex-start;
+  padding-top: 4px;
+}
+
+@media (max-width: 900px) {
+  .admin-shell__content {
+    padding: 16px 20px 32px;
+  }
+
+  .admin-shell__content .admin-page__header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .admin-shell__content .admin-page__header-actions {
+    align-self: stretch;
+  }
+
+  .admin-shell__content .admin-page__header-actions .platform-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-shell__content {
+    padding: 12px 16px 28px;
+  }
+}
