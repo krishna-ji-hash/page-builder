@@ -22,6 +22,20 @@ function buildStatusLabel({
   return `${draft} — in sync with server.`;
 }
 
+function draftSaveStatusLabel(status, { isSyncingDraft, hasUnpublishedEdits } = {}) {
+  if (isSyncingDraft || status === 'saving') return 'Saving...';
+  if (status === 'failed') return 'Save failed';
+  if (status === 'unsaved' || hasUnpublishedEdits) return 'Unsaved changes';
+  return 'Saved';
+}
+
+function draftSaveStatusClass(status, { isSyncingDraft, hasUnpublishedEdits } = {}) {
+  if (isSyncingDraft || status === 'saving') return 'is-saving';
+  if (status === 'failed') return 'is-failed';
+  if (status === 'unsaved' || hasUnpublishedEdits) return 'is-dirty';
+  return 'is-clean';
+}
+
 export default function BuilderTopbar({
   projectName,
   pageName,
@@ -43,6 +57,7 @@ export default function BuilderTopbar({
   isPublishing,
   isSyncingDraft,
   hasUnpublishedEdits,
+  draftSaveStatus = 'saved',
   isFreeMode = false,
   onToggleFreeMode,
   onUndo,
@@ -50,6 +65,7 @@ export default function BuilderTopbar({
   canUndo = false,
   canRedo = false,
   onOpenHistory,
+  historyLabel = 'Timeline',
   onResetToBlank,
   isLayoutDebug = false,
   onToggleLayoutDebug,
@@ -63,10 +79,11 @@ export default function BuilderTopbar({
     draftVersionNumber,
     publishedVersionId,
   });
+  const saveStatusText = draftSaveStatusLabel(draftSaveStatus, { isSyncingDraft, hasUnpublishedEdits });
+  const saveStatusClass = draftSaveStatusClass(draftSaveStatus, { isSyncingDraft, hasUnpublishedEdits });
   const modeLabel = isFreeMode ? 'Layout: Free' : 'Layout: Strict';
   const debugLabel = isLayoutDebug ? 'Debug: On' : 'Debug: Off';
   const gridLabel = showGrid ? 'Grid: On' : 'Grid: Off';
-  const dirtyLabel = hasUnpublishedEdits ? 'Unsaved changes' : 'Saved';
 
   return (
     <header className="bld-topbar">
@@ -81,7 +98,13 @@ export default function BuilderTopbar({
           ) : null}
         </div>
         <div className="bld-topbar__status" title={previewUrl || liveUrl || undefined}>
-          <span className={`bld-topbar__state-pill ${hasUnpublishedEdits ? 'is-dirty' : 'is-clean'}`}>{dirtyLabel}</span>
+          <span
+            className={`bld-topbar__state-pill ${saveStatusClass}`}
+            role="status"
+            aria-live="polite"
+          >
+            {saveStatusText}
+          </span>
           {saveAckVisible ? (
             <span className="bld-topbar__save-ack" role="status" aria-live="polite">
               Draft saved
@@ -134,7 +157,7 @@ export default function BuilderTopbar({
             Redo
           </button>
           <button type="button" className="bld-btn bld-btn--ghost" onClick={onOpenHistory} title="Restore a previous snapshot">
-            Timeline
+            {historyLabel}
           </button>
           <button type="button" className="bld-btn bld-btn--ghost" onClick={onResetToBlank}>
             Reset

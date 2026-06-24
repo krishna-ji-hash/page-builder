@@ -13,6 +13,7 @@ export default function AdvancedElementControls({
   jsonErrors = {},
   canUseMedia = false,
   onOpenLogoMedia,
+  onOpenContentCardMedia,
   onLogoFileUpload,
 }) {
   const t = selectedNode?.nodeType;
@@ -74,6 +75,16 @@ export default function AdvancedElementControls({
         <div className="bld-field">
           <label className="bld-label">Image URL</label>
           <input className="bld-input" value={form.contentCardImageSrc || ''} onChange={(e) => onChange('contentCardImageSrc', e.target.value)} />
+          <button
+            type="button"
+            className="bld-chip"
+            style={{ marginTop: 8 }}
+            disabled={!canUseMedia}
+            title={canUseMedia ? 'Choose from project media library' : 'Save project first'}
+            onClick={() => onOpenContentCardMedia?.()}
+          >
+            Choose from Media
+          </button>
         </div>
         <div className="bld-field">
           <label className="bld-label">Image alt</label>

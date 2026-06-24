@@ -18,6 +18,9 @@ import { flushActiveCanvasInlineEdits } from '@/lib/canvasInlineEditFlush.js';
 import { buildReduceAnimationIntensityStyleJson, collectAnimatedNodeIds } from '@/lib/audits/auditQuickFix.js';
 import { prepareTreeForBulkSave } from '@/lib/inlineImagePersist.js';
 import { adminBuilderPagePath, previewPagePath } from '@/lib/builder/adminBuilderRoutes';
+import { dPreviewPagePath } from '@/lib/admin/dBuilderRoutes';
+import { buildDraftContentFromTree, extractTreeFromDraftJson, normalizeDraftJsonObject } from '@/lib/admin/dBuilderDraftJson';
+import { buildPublicPreviewUrl } from '@/lib/admin/publicPreviewUrl';
 import { publicPagePath } from '@/lib/publicSiteUrls';
 import { isValidNodeHierarchy } from '@/lib/builderHierarchy';
 import { normalizeResponsiveStyle } from '@/lib/styleNormalizer';
@@ -68,6 +71,7 @@ import { buildReusableBulkOrderedNodes } from '@/lib/reusableBlockInsert';
 import PageSeoModal from './seo/PageSeoModal';
 import AuditModal from './audits/AuditModal';
 import VersionHistoryModal from '@/components/platform/VersionHistoryModal';
+import PageRevisionsModal from '@/components/admin/d/PageRevisionsModal';
 import AuditBadgesOverlay from './audits/AuditBadgesOverlay';
 import ProjectBrandPanel from './inspector/ProjectBrandPanel';
 import {
@@ -478,9 +482,13 @@ function computePastePlacement(tree, selectedId, sourceType) {
   return { parentId: ctx.parentId, newIndex: ctx.index + 1 };
 }
 
-export default function BuilderShell({ pageId }) {
+export default function BuilderShell({ pageId, apiMode = 'legacy' }) {
   const pid = Number(pageId);
   const pageIdValid = Number.isInteger(pid) && pid > 0;
+  const isAdminApi = apiMode === 'admin';
+  const draftJsonRef = useRef({});
+  const [adminProject, setAdminProject] = useState(null);
+  const [adminHasPublished, setAdminHasPublished] = useState(false);
 
   const [device, setDevice] = useState('desktop');
   /** Default Strict so rows (headers) keep flex — Free mode uses absolute coords and breaks space-between. */
@@ -515,9 +523,13 @@ export default function BuilderShell({ pageId }) {
   const siteThemePersistFlushRef = useRef(null);
   const [isReorderingNode, setIsReorderingNode] = useState(false);
   const [hasUnpublishedEdits, setHasUnpublishedEdits] = useState(false);
+  const [draftSaveStatus, setDraftSaveStatus] = useState('saved');
   const [saveAckVisible, setSaveAckVisible] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isSyncingDraft, setIsSyncingDraft] = useState(false);
+  const saveInFlightRef = useRef(false);
+  const treeRef = useRef(tree);
+  treeRef.current = tree;
   const [undoStack, setUndoStack] = useState([]); // { ts:number, tree:any[] }[]
   const [redoStack, setRedoStack] = useState([]); // { ts:number, tree:any[] }[]
   const [copiedNodeId, setCopiedNodeId] = useState(null);
@@ -806,6 +818,58 @@ export default function BuilderShell({ pageId }) {
     setErrorMessage('');
     let response;
     try {
+      if (isAdminApi) {
+        const [adminRes, legacyRes] = await Promise.all([
+          fetch(`/api/admin/pages/${pid}`, { cache: 'no-store', signal }),
+          fetch(`/api/pages/${pid}/builder`, { cache: 'no-store', signal }),
+        ]);
+        const adminData = await readJsonSafe(adminRes);
+        const legacyData = await readJsonSafe(legacyRes);
+        if (!adminRes.ok) {
+          throw new Error(formatLoadError(adminData, adminRes));
+        }
+        if (signal?.aborted) return;
+
+        const adminPage = adminData.page || {};
+        const project = adminData.project || null;
+        draftJsonRef.current = normalizeDraftJsonObject(adminPage.draftJson);
+        setAdminProject(project);
+        setAdminHasPublished(Boolean(adminPage.publishedAt || adminPage.publishedJson));
+
+        let sourceTree = extractTreeFromDraftJson(adminPage.draftJson);
+        if (!sourceTree.length && legacyRes.ok) {
+          sourceTree = Array.isArray(legacyData.tree) ? legacyData.tree : [];
+        }
+
+        const nextTree = repairHeaderRowsInTree(
+          reconcileStructuralParents(autoFixTree(sourceTree))
+        );
+        const legacyPage = legacyRes.ok ? legacyData.page : null;
+
+        setPage({
+          id: adminPage.id,
+          projectId: adminPage.projectId,
+          slug: adminPage.slug,
+          title: adminPage.title,
+          seo: legacyPage?.seo || {},
+          publishedVersionId: legacyPage?.publishedVersionId ?? null,
+          projectSlug: project?.slug || legacyPage?.projectSlug || null,
+          projectType: legacyPage?.projectType || 'website',
+          projectConfig: legacyPage?.projectConfig ?? null,
+        });
+        setDraftVersion(legacyRes.ok ? legacyData.draftVersion || null : null);
+        setProjectPages(legacyRes.ok && Array.isArray(legacyData.projectPages) ? legacyData.projectPages : []);
+        setTree(nextTree);
+        setSelectedNodeId((prev) => {
+          if (prev != null && findNodeInTree(nextTree, prev)) return prev;
+          return nextTree[0]?.id ?? null;
+        });
+        setHasUnpublishedEdits(false);
+        setDraftSaveStatus('saved');
+        blockedNodeUpdateIdsRef.current.clear();
+        return;
+      }
+
       response = await fetch(`/api/pages/${pid}/builder`, { cache: 'no-store', signal });
     } catch (err) {
       if (err?.name === 'AbortError') return;
@@ -826,8 +890,9 @@ export default function BuilderShell({ pageId }) {
       return nextTree[0]?.id ?? null;
     });
     setHasUnpublishedEdits(false);
+    setDraftSaveStatus('saved');
     blockedNodeUpdateIdsRef.current.clear();
-  }, [pid]);
+  }, [isAdminApi, pid]);
 
   useEffect(() => {
     if (!pageIdValid) {
@@ -914,11 +979,21 @@ export default function BuilderShell({ pageId }) {
     [interiorScopeRow]
   );
 
-  const liveUrl =
-    page?.projectSlug && page?.slug ? publicPagePath(page.projectSlug, page.slug) : null;
-  const previewUrl =
-    page?.projectSlug && page?.slug ? previewPagePath(page.projectSlug, page.slug) : null;
-  const canOpenLivePreview = Boolean(liveUrl && page?.publishedVersionId);
+  const liveUrl = isAdminApi
+    ? adminProject && page?.slug
+      ? buildPublicPreviewUrl(adminProject, page.slug)
+      : null
+    : page?.projectSlug && page?.slug
+      ? publicPagePath(page.projectSlug, page.slug)
+      : null;
+  const previewUrl = isAdminApi
+    ? dPreviewPagePath(pid)
+    : page?.projectSlug && page?.slug
+      ? previewPagePath(page.projectSlug, page.slug)
+      : null;
+  const canOpenLivePreview = isAdminApi
+    ? Boolean(liveUrl && adminHasPublished)
+    : Boolean(liveUrl && page?.publishedVersionId);
   const projectTemplates = Array.isArray(page?.projectConfig?.pageTemplates) ? page.projectConfig.pageTemplates : [];
 
   // Auto-seed an empty page with a full-page template once (UX: user can start styling immediately).
@@ -3135,34 +3210,86 @@ export default function BuilderShell({ pageId }) {
     });
   }, [tree, selectedNodeId, copiedNodeId, handleDuplicateNode, handleReorderNode]);
 
-  const handleSave = async () => {
-    if (!pageIdValid) return;
-    setIsSyncingDraft(true);
-    setErrorMessage('');
-    try {
-      await flushActiveCanvasInlineEdits();
-      await siteThemePersistFlushRef.current?.();
-      const fixedTree = prepareTreeForBulkSave(autoFixTree(reconcileStructuralParents(tree)));
+  const persistAdminDraft = useCallback(
+    async (syncTree, { createRevision = false } = {}) => {
+      const fixedTree = prepareTreeForBulkSave(autoFixTree(reconcileStructuralParents(syncTree)));
       validateTree(fixedTree);
-      const response = await fetch('/api/nodes/update-bulk', {
+
+      const syncResponse = await fetch('/api/nodes/update-bulk', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pageId: pid, nodes: fixedTree }),
+      });
+      const syncData = await readJsonSafe(syncResponse);
+      if (!syncResponse.ok) {
+        throw new Error(syncData.error || 'Failed to sync draft nodes');
+      }
+
+      const content = buildDraftContentFromTree(draftJsonRef.current, fixedTree);
+      const response = await fetch(`/api/admin/pages/${pid}/draft`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content, createRevision }),
       });
       const data = await readJsonSafe(response);
       if (!response.ok) {
         throw new Error(data.error || 'Failed to save draft');
       }
-      if (data.tree) {
-        setTree(reconcileStructuralParents(autoFixTree(data.tree)));
+
+      draftJsonRef.current = normalizeDraftJsonObject(data.page?.draftJson ?? content);
+      if (syncData.tree) {
+        setTree(reconcileStructuralParents(autoFixTree(syncData.tree)));
       } else {
-        await reloadBuilder();
+        setTree(fixedTree);
       }
-      setHasUnpublishedEdits(false);
-      setSaveAckVisible(true);
+    },
+    [pid]
+  );
+
+  const handleSave = async () => {
+    if (!pageIdValid) return;
+    if (saveInFlightRef.current) return;
+    saveInFlightRef.current = true;
+    setIsSyncingDraft(true);
+    setDraftSaveStatus('saving');
+    setErrorMessage('');
+    const treeSnapshotBefore = JSON.stringify(treeRef.current);
+    try {
+      await flushActiveCanvasInlineEdits();
+      await siteThemePersistFlushRef.current?.();
+      const fixedTree = prepareTreeForBulkSave(autoFixTree(reconcileStructuralParents(tree)));
+      validateTree(fixedTree);
+
+      if (isAdminApi) {
+        await persistAdminDraft(fixedTree, { createRevision: true });
+      } else {
+        const response = await fetch('/api/nodes/update-bulk', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pageId: pid, nodes: fixedTree }),
+        });
+        const data = await readJsonSafe(response);
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to save draft');
+        }
+        if (data.tree) {
+          setTree(reconcileStructuralParents(autoFixTree(data.tree)));
+        } else {
+          await reloadBuilder();
+        }
+      }
+
+      const treeChangedDuringSave = JSON.stringify(treeRef.current) !== treeSnapshotBefore;
+      setHasUnpublishedEdits(treeChangedDuringSave);
+      setDraftSaveStatus(treeChangedDuringSave ? 'unsaved' : 'saved');
+      if (!treeChangedDuringSave) {
+        setSaveAckVisible(true);
+      }
     } catch (error) {
+      setDraftSaveStatus('failed');
       setErrorMessage(error instanceof Error ? error.message : String(error));
     } finally {
+      saveInFlightRef.current = false;
       setIsSyncingDraft(false);
     }
   };
@@ -3174,8 +3301,6 @@ export default function BuilderShell({ pageId }) {
     try {
       await flushActiveCanvasInlineEdits();
       await siteThemePersistFlushRef.current?.();
-      // Always publish from authoritative draft nodes in DB to avoid
-      // client-tree snapshot drift, duplicate blocks, or style conflicts.
       const treeForSync = prepareTreeForBulkSave(autoFixTree(reconcileStructuralParents(tree)));
       validateTree(treeForSync);
       const syncResponse = await fetch('/api/nodes/update-bulk', {
@@ -3188,11 +3313,33 @@ export default function BuilderShell({ pageId }) {
         throw new Error(syncData.error || 'Failed to sync draft snapshot before publish');
       }
 
-      const response = await fetch(`/api/pages/${pid}/publish`, { method: 'POST' });
-      const data = await readJsonSafe(response);
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to publish');
+      if (isAdminApi) {
+        const content = buildDraftContentFromTree(draftJsonRef.current, treeForSync);
+        const draftResponse = await fetch(`/api/admin/pages/${pid}/draft`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content }),
+        });
+        const draftData = await readJsonSafe(draftResponse);
+        if (!draftResponse.ok) {
+          throw new Error(draftData.error || 'Failed to save draft before publish');
+        }
+
+        const response = await fetch(`/api/admin/pages/${pid}/publish`, { method: 'POST' });
+        const data = await readJsonSafe(response);
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to publish');
+        }
+        draftJsonRef.current = normalizeDraftJsonObject(data.page?.draftJson ?? content);
+        setAdminHasPublished(true);
+      } else {
+        const response = await fetch(`/api/pages/${pid}/publish`, { method: 'POST' });
+        const data = await readJsonSafe(response);
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to publish');
+        }
       }
+
       await reloadBuilder();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : String(error));
@@ -4214,6 +4361,48 @@ export default function BuilderShell({ pageId }) {
   const AUTOSAVE_KEY = useMemo(() => `bld-autosave:${pid}`, [pid]);
 
   useEffect(() => {
+    if (!hasUnpublishedEdits) return;
+    setDraftSaveStatus((prev) => (prev === 'saving' ? prev : 'unsaved'));
+  }, [hasUnpublishedEdits]);
+
+  useEffect(() => {
+    if (!isAdminApi || !pageIdValid || !hasUnpublishedEdits || isLoading) return undefined;
+    if (isPublishing || isSyncingDraft) return undefined;
+
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        if (saveInFlightRef.current) return;
+        saveInFlightRef.current = true;
+        setDraftSaveStatus('saving');
+        const treeSnapshotBefore = JSON.stringify(treeRef.current);
+        try {
+          await flushActiveCanvasInlineEdits();
+          await siteThemePersistFlushRef.current?.();
+          await persistAdminDraft(treeRef.current, { createRevision: false });
+          const treeChangedDuringSave = JSON.stringify(treeRef.current) !== treeSnapshotBefore;
+          setHasUnpublishedEdits(treeChangedDuringSave);
+          setDraftSaveStatus(treeChangedDuringSave ? 'unsaved' : 'saved');
+        } catch {
+          setDraftSaveStatus('failed');
+        } finally {
+          saveInFlightRef.current = false;
+        }
+      })();
+    }, 1500);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    tree,
+    hasUnpublishedEdits,
+    isAdminApi,
+    pageIdValid,
+    isLoading,
+    isPublishing,
+    isSyncingDraft,
+    persistAdminDraft,
+  ]);
+
+  useEffect(() => {
     if (!pid) return undefined;
     if (!tree) return undefined;
     if (!hasUnpublishedEdits) return undefined;
@@ -4331,7 +4520,7 @@ export default function BuilderShell({ pageId }) {
           </div>
         ) : null}
         <BuilderTopbar
-          projectName={page?.projectSlug || 'default'}
+          projectName={isAdminApi ? adminProject?.name || page?.projectSlug || 'default' : page?.projectSlug || 'default'}
           pageName={page?.title || 'Page'}
           onOpenSeo={() => setIsSeoOpen(true)}
           onOpenAudit={() => setIsAuditOpen(true)}
@@ -4351,6 +4540,7 @@ export default function BuilderShell({ pageId }) {
           isPublishing={isPublishing}
           isSyncingDraft={isSyncingDraft}
           hasUnpublishedEdits={hasUnpublishedEdits}
+          draftSaveStatus={draftSaveStatus}
           isFreeMode={isFreeMode}
           onToggleFreeMode={handleToggleFreeMode}
           onUndo={handleUndo}
@@ -4358,6 +4548,7 @@ export default function BuilderShell({ pageId }) {
           canUndo={undoStack.length > 0}
           canRedo={redoStack.length > 0}
           onOpenHistory={handleOpenHistory}
+          historyLabel={isAdminApi ? 'Revisions' : 'Timeline'}
           onResetToBlank={handleResetToBlank}
           isLayoutDebug={isLayoutDebug}
           onToggleLayoutDebug={() => setIsLayoutDebug((prev) => !prev)}
@@ -4365,16 +4556,29 @@ export default function BuilderShell({ pageId }) {
           onToggleGrid={() => setShowGrid((p) => !p)}
         />
 
-        <VersionHistoryModal
-          open={versionHistoryOpen}
-          pageId={pid}
-          pageTitle={page?.title}
-          onClose={() => setVersionHistoryOpen(false)}
-          onRestored={async () => {
-            await reloadBuilder();
-            setHasUnpublishedEdits(true);
-          }}
-        />
+        {isAdminApi ? (
+          <PageRevisionsModal
+            open={versionHistoryOpen}
+            pageId={pid}
+            pageTitle={page?.title}
+            onClose={() => setVersionHistoryOpen(false)}
+            onRestored={async () => {
+              await reloadBuilder();
+              setHasUnpublishedEdits(true);
+            }}
+          />
+        ) : (
+          <VersionHistoryModal
+            open={versionHistoryOpen}
+            pageId={pid}
+            pageTitle={page?.title}
+            onClose={() => setVersionHistoryOpen(false)}
+            onRestored={async () => {
+              await reloadBuilder();
+              setHasUnpublishedEdits(true);
+            }}
+          />
+        )}
 
         <PageSeoModal
           open={isSeoOpen}

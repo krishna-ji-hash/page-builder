@@ -1,32 +1,24 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
+import {
+  isBuilderHost,
+  isClientDomain,
+  readRequestHost,
+} from '@/lib/site/hostUtils';
 
-const RESERVED = new Set([
-  'admin',
-  'api',
-  'preview',
-  '_next',
-  'favicon.ico',
-  'robots.txt',
-  'sitemap.xml',
-]);
-
-function normalizeHost(host) {
-  return String(host || '')
-    .trim()
-    .toLowerCase()
-    .split(':')[0];
+function isAdminOrDPath(pathname: string): boolean {
+  return (
+    pathname === '/admin' ||
+    pathname.startsWith('/admin/') ||
+    pathname === '/d' ||
+    pathname.startsWith('/d/')
+  );
 }
 
-function isLocalDevHost(host) {
-  const h = normalizeHost(host);
-  if (!h || h === 'localhost' || h === '127.0.0.1') return true;
-  if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(h)) return true;
-  if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h)) return true;
-  if (/^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(h)) return true;
-  return false;
+function isAdminApiPath(pathname: string): boolean {
+  return pathname === '/api/admin' || pathname.startsWith('/api/admin/');
 }
 
-function isAuthDisabled() {
+function isAuthDisabled(): boolean {
   return process.env.AUTH_DISABLED === 'true' || process.env.AUTH_DISABLED === '1';
 }
 
@@ -39,18 +31,22 @@ const PUBLIC_API_PREFIXES = [
   '/api/auth/session-check',
 ];
 
-function isPublicApiPath(pathname, method = 'GET') {
+function isPublicApiPath(pathname: string, method = 'GET'): boolean {
   const verb = String(method || 'GET').toUpperCase();
   if (pathname === '/api/forms/analytics' && verb === 'POST') return true;
   if (pathname.startsWith('/api/forms/analytics')) return false;
   return PUBLIC_API_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix));
 }
 
-function isProtectedAdminPath(pathname) {
+function isProtectedAdminPath(pathname: string): boolean {
   return (pathname === '/admin' || pathname.startsWith('/admin/')) && pathname !== '/admin/login';
 }
 
-function isProtectedApiPath(pathname, method = 'GET') {
+function isProtectedDPath(pathname: string): boolean {
+  return pathname === '/d' || pathname.startsWith('/d/');
+}
+
+function isProtectedApiPath(pathname: string, method = 'GET'): boolean {
   if (!pathname.startsWith('/api/')) return false;
   if (isPublicApiPath(pathname, method)) return false;
   if (pathname.startsWith('/api/auth/')) {
@@ -63,7 +59,14 @@ function isProtectedApiPath(pathname, method = 'GET') {
   return true;
 }
 
-async function hasValidSession(request) {
+function redirectToHome(request: NextRequest): NextResponse {
+  const homeUrl = request.nextUrl.clone();
+  homeUrl.pathname = '/';
+  homeUrl.search = '';
+  return NextResponse.redirect(homeUrl);
+}
+
+async function hasValidSession(request: NextRequest): Promise<boolean> {
   const origin = request.nextUrl.origin;
   try {
     const res = await fetch(`${origin}/api/auth/session-check`, {
@@ -77,15 +80,28 @@ async function hasValidSession(request) {
 }
 
 /**
- * Custom domain + platform host routing.
- * Rewrites to /{projectSlug}/{pageSlug} preserving renderTree live pipeline.
+ * SEO redirects, builder-host admin guard, and session protection.
+ * Public pages on client custom domains are never blocked here.
  */
-export async function middleware(request) {
-  const host = normalizeHost(request.headers.get('host'));
+export async function middleware(request: NextRequest) {
+  const host = readRequestHost(
+    request.headers.get('x-forwarded-host'),
+    request.headers.get('host')
+  );
   const { pathname } = request.nextUrl;
+  const onBuilderHost = isBuilderHost(host);
+
+  if (isAdminOrDPath(pathname) && isClientDomain(host)) {
+    return redirectToHome(request);
+  }
+
+  if (isAdminApiPath(pathname) && !onBuilderHost) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
 
   if (
     !pathname.startsWith('/admin') &&
+    !pathname.startsWith('/d') &&
     !pathname.startsWith('/api') &&
     !pathname.startsWith('/_next') &&
     !pathname.startsWith('/preview')
@@ -110,7 +126,7 @@ export async function middleware(request) {
   }
 
   if (!isAuthDisabled()) {
-    if (isProtectedAdminPath(pathname)) {
+    if (isProtectedAdminPath(pathname) || isProtectedDPath(pathname)) {
       const valid = await hasValidSession(request);
       if (!valid) {
         const loginUrl = request.nextUrl.clone();
@@ -128,57 +144,13 @@ export async function middleware(request) {
     }
   }
 
-  if (
-    !host ||
-    isLocalDevHost(host) ||
-    pathname.startsWith('/api') ||
-    pathname.startsWith('/admin') ||
-    pathname.startsWith('/_next') ||
-    pathname.startsWith('/preview')
-  ) {
-    return NextResponse.next();
-  }
-
-  let projectSlug = null;
-  try {
-    const origin = request.nextUrl.origin;
-    const res = await fetch(`${origin}/api/platform/resolve-host?host=${encodeURIComponent(host)}`, {
-      headers: { 'x-middleware-resolve': '1' },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      projectSlug = data?.projectSlug || null;
-    }
-  } catch {
-    return NextResponse.next();
-  }
-
-  if (!projectSlug) return NextResponse.next();
-
-  const segments = pathname.split('/').filter(Boolean);
-  if (segments.length >= 2 && segments[0] === projectSlug) {
-    return NextResponse.next();
-  }
-
-  const pageSlug =
-    segments.length === 0
-      ? 'home'
-      : segments.length === 1 && !RESERVED.has(segments[0].toLowerCase())
-        ? segments[0]
-        : segments.length === 1
-          ? 'home'
-          : null;
-
-  if (!pageSlug) return NextResponse.next();
-
-  const url = request.nextUrl.clone();
-  url.pathname = `/${projectSlug}/${pageSlug}`;
-  const response = NextResponse.rewrite(url);
-  response.headers.set('x-resolved-project-slug', projectSlug);
-  response.headers.set('x-resolved-host', host);
-  return response;
+  return NextResponse.next();
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico).*)',
+    '/admin/:path*',
+    '/d/:path*',
+  ],
 };

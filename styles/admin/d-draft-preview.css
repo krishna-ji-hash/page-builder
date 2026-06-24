@@ -1,0 +1,47 @@
+.d-draft-preview {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.d-draft-preview__bar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.625rem 1.25rem;
+  border-bottom: 1px solid #e2e8f0;
+  background: #0f172a;
+  color: #f8fafc;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  font-size: 0.875rem;
+}
+
+.d-draft-preview__label {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.d-draft-preview__back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem 0.875rem;
+  border-radius: 0.375rem;
+  background: #ffffff;
+  color: #0f172a;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.d-draft-preview__back:hover {
+  background: #f1f5f9;
+}
+
+.d-draft-preview__content {
+  flex: 1;
+}

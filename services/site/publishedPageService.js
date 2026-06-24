@@ -10,7 +10,8 @@ import { publicPagePath } from '@/lib/publicSiteUrls';
 
 /**
  * Data sources (audit):
- * - PUBLIC/LIVE (`getPublishedPageForPublic`): `pages.published_version_id` → `page_versions.snapshot_json` only.
+ * - PUBLIC/LIVE (`getPublishedPageForPublic`): `pages.published_json` first; legacy fallback
+ *   `pages.published_version_id` → `page_versions.snapshot_json`.
  *   Page nodes + frozen `globalSections` (header/footer) come from the published snapshot.
  *   If an older publish omitted `globalSections` but the project still has globals configured, we fall back
  *   to `projects.config_json.globalSections` so live matches builder preview (see merge below).
@@ -58,8 +59,109 @@ async function expandFrozenGlobalSection(section, projectId) {
   return expanded[0] || null;
 }
 
+async function buildPublishedPageFromJsonRow(row, pageContext = null) {
+  const pool = getDbPool();
+  let snapshotPayload = null;
+  try {
+    snapshotPayload =
+      typeof row.published_json === 'object' ? row.published_json : JSON.parse(row.published_json);
+  } catch {
+    snapshotPayload = null;
+  }
+  if (!snapshotPayload) return null;
+
+  let snapshotJson = Array.isArray(snapshotPayload?.nodes)
+    ? snapshotPayload.nodes
+    : Array.isArray(snapshotPayload)
+      ? snapshotPayload
+      : null;
+  let publishedGlobalSections = emptyFrozenGlobalSections();
+  if (snapshotPayload && typeof snapshotPayload === 'object' && snapshotPayload.globalSections) {
+    publishedGlobalSections = snapshotPayload.globalSections || emptyFrozenGlobalSections();
+  }
+
+  const projectConfig = parseJsonValue(row.config_json, {}) || {};
+  const pageSeo = parseJsonValue(row.seo_json, {}) || {};
+  const [pageRows] = await pool.query(
+    `SELECT slug, title
+     FROM pages
+     WHERE project_id = ?
+     ORDER BY created_at ASC, id ASC`,
+    [row.project_id]
+  );
+
+  if (Array.isArray(snapshotJson) && snapshotJson.length) {
+    snapshotJson = await expandNodesWithLinkedGlobals(snapshotJson, row.project_id);
+  }
+
+  const configGlobals =
+    projectConfig && typeof projectConfig === 'object' && projectConfig.globalSections
+      ? projectConfig.globalSections
+      : {};
+  const headerSource =
+    publishedGlobalSections.header ||
+    (configGlobals.header && typeof configGlobals.header === 'object' ? configGlobals.header : null);
+  const footerSource =
+    publishedGlobalSections.footer ||
+    (configGlobals.footer && typeof configGlobals.footer === 'object' ? configGlobals.footer : null);
+
+  publishedGlobalSections = {
+    header: await expandFrozenGlobalSection(headerSource, row.project_id),
+    footer: await expandFrozenGlobalSection(footerSource, row.project_id),
+  };
+
+  if (Array.isArray(snapshotJson) && snapshotJson.length) {
+    snapshotJson = await expandCms(snapshotJson, { projectId: row.project_id, cmsService, pageContext });
+  }
+
+  return {
+    id: row.id,
+    name: row.title,
+    slug: row.slug,
+    projectId: row.project_id,
+    projectSlug: row.project_slug,
+    publishedVersionId: null,
+    seo: pageSeo,
+    snapshot_json: snapshotJson,
+    publishedGlobalSections,
+    projectConfig,
+    projectPages: pageRows.map((page) => ({
+      slug: page.slug,
+      title: page.title,
+      href: publicPagePath(row.project_slug, page.slug),
+    })),
+  };
+}
+
 async function getPublishedPageRaw(projectSlug, pageSlug, pageContext = null) {
   const pool = getDbPool();
+  const [jsonRows] = await pool.query(
+    `
+    SELECT
+      p.id,
+      p.title,
+      p.slug,
+      p.project_id,
+      p.published_json,
+      p.seo_json,
+      pr.slug AS project_slug,
+      pr.config_json
+    FROM pages p
+    JOIN projects pr ON pr.id = p.project_id
+    WHERE pr.slug = ?
+      AND p.slug = ?
+      AND p.status = 'published'
+      AND p.published_json IS NOT NULL
+    LIMIT 1
+    `,
+    [projectSlug, pageSlug]
+  );
+
+  if (jsonRows.length) {
+    const row = jsonRows[0];
+    return buildPublishedPageFromJsonRow(row, pageContext);
+  }
+
   const [rows] = await pool.query(
     `
     SELECT

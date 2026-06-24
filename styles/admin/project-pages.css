@@ -336,6 +336,102 @@
   transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
 
+.proj-pages__row {
+  display: contents;
+}
+
+.proj-pages__seo-panel {
+  grid-column: 1 / -1;
+  margin: 0 0 4px;
+  padding: 14px 18px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--pp-brand-border);
+  background: var(--admin-surface-2, #f8f6ff);
+  box-shadow: var(--pp-shadow);
+}
+
+.proj-pages__seo-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.proj-pages__seo-title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--admin-text, #2e2b3d);
+}
+
+.proj-pages__seo-hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--admin-muted, #9b97ab);
+}
+
+.proj-pages__seo-form {
+  display: grid;
+  gap: 10px;
+}
+
+.proj-pages__seo-field {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--admin-text-soft, #5c5870);
+}
+
+.proj-pages__seo-field input,
+.proj-pages__seo-field textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--admin-border, #ece8f5);
+  background: var(--admin-surface, #fff);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--admin-text, #2e2b3d);
+  box-sizing: border-box;
+}
+
+.proj-pages__seo-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.proj-pages__seo-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--admin-text-soft, #5c5870);
+}
+
+.proj-pages__seo-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.proj-pages__seo-saved {
+  font-size: 12px;
+  font-weight: 700;
+  color: #047857;
+}
+
+.proj-pages__btn--active {
+  border-color: var(--pp-brand);
+  color: var(--pp-brand);
+  background: var(--pp-brand-soft);
+}
+
 .proj-pages__card:hover {
   border-color: var(--pp-brand-border);
   box-shadow: 0 4px 6px rgba(124, 117, 168, 0.05), 0 12px 28px rgba(167, 139, 250, 0.08);
@@ -433,7 +529,7 @@
 
 .proj-pages__actions {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 4px;

@@ -192,6 +192,18 @@
   background: color-mix(in srgb, #f59e0b 12%, transparent);
 }
 
+.bld-topbar__state-pill.is-saving {
+  color: #3b82f6;
+  border-color: color-mix(in srgb, #3b82f6 40%, var(--bld-border));
+  background: color-mix(in srgb, #3b82f6 10%, transparent);
+}
+
+.bld-topbar__state-pill.is-failed {
+  color: #ef4444;
+  border-color: color-mix(in srgb, #ef4444 40%, var(--bld-border));
+  background: color-mix(in srgb, #ef4444 10%, transparent);
+}
+
 .bld-topbar__page-name {
   padding: 4px 8px;
   background: var(--bld-surface-2);

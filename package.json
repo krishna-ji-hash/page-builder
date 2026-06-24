@@ -1,6 +1,9 @@
 {
   "name": "builder-custom",
   "private": true,
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:simple": "node scripts/dev-simple.mjs",
@@ -15,6 +18,10 @@
     "db:reset": "node --env-file=.env scripts/reset-db.mjs",
     "db:migrate": "node --env-file=.env scripts/migrate.mjs",
     "db:seed": "node --env-file=.env scripts/seed.mjs",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:seed": "prisma db seed",
+    "prisma:studio": "prisma studio",
     "db:bootstrap-admin": "node --env-file=.env scripts/bootstrap-admin.mjs",
     "db:recover": "node --env-file=.env scripts/db-recover-connections.mjs",
     "github:fix-remote": "node scripts/ensure-github-remote.mjs page-builder",
@@ -26,20 +33,29 @@
     "test": "node scripts/test-all.mjs",
     "audit:section-contrast": "node scripts/audit-hardcoded-colors.mjs --section-contrast",
     "audit:builder-live-parity": "node scripts/audit-builder-live-parity.mjs",
+    "verify:layout": "node scripts/verify-layout-preservation.mjs",
     "test:pat": "node scripts/production-acceptance.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@prisma/client": "^6.19.3",
     "@tanstack/react-virtual": "^3.13.24",
+    "bcryptjs": "^3.0.3",
     "file-type": "^22.0.1",
     "isomorphic-dompurify": "^3.10.0",
     "jsdom": "^29.1.1",
     "mysql2": "^3.15.2",
     "next": "^15.1.0",
+    "prisma": "^6.19.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "sharp": "^0.34.5"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.17",
+    "tsx": "^4.22.4",
+    "typescript": "6.0.3"
   }
 }

@@ -12,6 +12,6 @@ const BuilderShell = dynamic(() => import('@/components/builder/BuilderShell'), 
   ),
 });
 
-export default function BuilderShellClient(props) {
-  return <BuilderShell {...props} />;
+export default function BuilderShellClient({ pageId, apiMode = 'legacy' }) {
+  return <BuilderShell pageId={pageId} apiMode={apiMode} />;
 }

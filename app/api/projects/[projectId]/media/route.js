@@ -1,38 +1,11 @@
 import { fail, ok } from '@/lib/api';
 import { guardAdminApi } from '@/lib/auth/guardAdminApi';
 import { resolveMaybeAsyncParams } from '@/lib/routeParams';
-import fs from 'fs/promises';
-import path from 'path';
-import sharp from 'sharp';
-import { fileTypeFromBuffer } from 'file-type';
-import { createMediaAsset, listMediaAssets } from '@/services/builder/mediaService';
-import {
-  ALLOWED,
-  kindForMime,
-  MEDIA_LIMITS,
-  randomStorageName,
-  resolveUploadMime,
-  safeExtFromName,
-  sanitizeSvgText,
-  shouldConvertRasterToWebp,
-  EXT_FROM_MIME,
-  inferMimeFromFilename,
-} from '@/lib/media/mediaUtils';
+import { listMediaAssets } from '@/services/builder/mediaService';
+import { processProjectMediaUpload } from '@/lib/media/processProjectMediaUpload';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-function uploadRootDir() {
-  return path.join(process.cwd(), 'public', 'uploads');
-}
-
-function publicBase(projectId) {
-  return `/uploads/p${projectId}`;
-}
-
-async function ensureDir(dir) {
-  await fs.mkdir(dir, { recursive: true });
-}
 
 function clampInt(v, min, max, fallback) {
   const n = Number(v);
@@ -78,159 +51,12 @@ export async function POST(request, { params }) {
     return fail('Invalid form data', 400, error?.message);
   }
 
-  const file = form.get('file');
-  if (!file || typeof file.arrayBuffer !== 'function') return fail('file is required', 400);
-
-  const folder = form.get('folder');
-  const title = form.get('title');
-  const altText = form.get('altText');
-
-  if (typeof file.size === 'number' && file.size > MEDIA_LIMITS.maxBytes) {
-    return fail(`File too large (max ${MEDIA_LIMITS.maxBytes} bytes)`, 413);
-  }
-
-  let buf;
   try {
-    buf = Buffer.from(await file.arrayBuffer());
+    const { item } = await processProjectMediaUpload({ projectId, form });
+    return ok({ item }, 201);
   } catch (error) {
-    return fail('Failed to read file', 400, error?.message);
-  }
-
-  if (buf.length > MEDIA_LIMITS.maxBytes) {
-    return fail(`File too large (max ${MEDIA_LIMITS.maxBytes} bytes)`, 413);
-  }
-
-  const providedMime = typeof file.type === 'string' ? file.type : '';
-  const detected = await fileTypeFromBuffer(buf).catch(() => null);
-  const detectedMime = detected?.mime || '';
-  const detectedExt = detected?.ext || '';
-  const nameFromClient = typeof file.name === 'string' ? file.name : 'upload';
-  const filenameExt = safeExtFromName(nameFromClient);
-
-  let mime = resolveUploadMime({
-    detectedMime,
-    providedMime,
-    filename: nameFromClient,
-  });
-  let kind = kindForMime(mime);
-  if (!kind) return fail('Unsupported file type', 415, { mime: mime || providedMime || detectedMime });
-
-  // Extension mismatch — allow when MIME was resolved from filename (.webp on Windows, etc.).
-  const mimeFromName = inferMimeFromFilename(nameFromClient);
-  const trustedFilenameMime = Boolean(mimeFromName && mimeFromName === mime);
-  if (
-    detectedExt &&
-    filenameExt &&
-    detectedExt !== filenameExt &&
-    mime !== 'image/svg+xml' &&
-    !trustedFilenameMime
-  ) {
-    return fail('File extension mismatch', 400, { detectedExt, filenameExt });
-  }
-
-  // Additional safety: block executables by mime and by extension.
-  const blockedExt = new Set(['exe', 'dll', 'bat', 'cmd', 'sh', 'ps1', 'msi', 'com', 'jar']);
-  if (blockedExt.has(filenameExt)) return fail('Executable uploads are not allowed', 400);
-
-  // SVG sanitization (treat as text).
-  let safeSvgText = null;
-  if (mime === 'image/svg+xml') {
-    try {
-      safeSvgText = sanitizeSvgText(buf.toString('utf8'));
-      buf = Buffer.from(safeSvgText, 'utf8');
-    } catch (error) {
-      return fail('Unsafe SVG', 400, error?.message);
-    }
-  }
-
-  // JPEG/PNG → optimized WebP by default (keeps GIF as-is). Set MEDIA_KEEP_ORIGINAL=true to disable.
-  if (kind === 'image' && shouldConvertRasterToWebp(mime)) {
-    try {
-      const webpBuf = await sharp(buf, { failOn: 'none' })
-        .webp({ quality: 82, effort: 4 })
-        .toBuffer();
-      if (webpBuf?.length) {
-        buf = webpBuf;
-        mime = 'image/webp';
-      }
-    } catch {
-      // keep original bytes if conversion fails
-    }
-  }
-
-  const projectDir = path.join(uploadRootDir(), `p${projectId}`);
-  const thumbDir = path.join(projectDir, 'thumbs');
-  await ensureDir(projectDir);
-  await ensureDir(thumbDir);
-
-  const ext =
-    mime === 'image/svg+xml'
-      ? 'svg'
-      : EXT_FROM_MIME[mime] || detectedExt || filenameExt || '';
-  const storageName = randomStorageName(ext);
-  const absPath = path.join(projectDir, storageName);
-
-  try {
-    await fs.writeFile(absPath, buf);
-  } catch (error) {
-    return fail('Failed to write file', 500, error?.message);
-  }
-
-  let width = null;
-  let height = null;
-  let thumbUrl = null;
-
-  // Thumbnails for raster images + svg.
-  if (kind === 'image' || kind === 'svg') {
-    try {
-      const image = sharp(buf, { failOn: 'none' });
-      const meta = await image.metadata();
-      width = meta?.width || null;
-      height = meta?.height || null;
-
-      const thumbName = storageName.replace(/\.[^.]+$/, '') + '.webp';
-      const thumbAbs = path.join(thumbDir, thumbName);
-      await sharp(buf, { failOn: 'none' })
-        .resize({ width: 320, height: 320, fit: 'inside', withoutEnlargement: true })
-        .webp({ quality: 72, effort: 4 })
-        .toFile(thumbAbs);
-
-      thumbUrl = `${publicBase(projectId)}/thumbs/${thumbName}`;
-    } catch {
-      // WebP thumb failed — for webp originals, use main file as preview fallback
-      if (mime === 'image/webp') {
-        thumbUrl = `${publicBase(projectId)}/${storageName}`;
-      }
-    }
-  }
-
-  const publicUrl = `${publicBase(projectId)}/${storageName}`;
-  try {
-    const created = await createMediaAsset({
-      projectId,
-      folder: typeof folder === 'string' ? folder : null,
-      kind,
-      mimeType: mime,
-      originalName: nameFromClient,
-      storageName,
-      storagePath: absPath,
-      publicUrl,
-      thumbUrl,
-      width,
-      height,
-      bytes: buf.length,
-      title: typeof title === 'string' ? title : null,
-      altText: typeof altText === 'string' ? altText : null,
-    });
-    return ok({ item: created }, 201);
-  } catch (error) {
-    // If DB insert fails, try to delete file to avoid orphaned storage.
-    await fs.unlink(absPath).catch(() => {});
-    if (thumbUrl) {
-      const thumbAbs = path.join(uploadRootDir(), thumbUrl);
-      await fs.unlink(thumbAbs).catch(() => {});
-    }
-    return fail('Failed to save media metadata', 500, error?.message);
+    const status = error?.status || 500;
+    return fail(error?.message || 'Upload failed', status, error?.details);
   }
 }
 

@@ -3,6 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import {
+  adminProjectMediaUploadUrl,
+  deleteProjectMedia,
+  legacyProjectMediaUploadUrl,
+  normalizeMediaItemForBuilder,
+} from '@/lib/media/projectMediaApi';
 
 function humanBytes(bytes) {
   const b = Number(bytes || 0);
@@ -90,7 +96,8 @@ function UploadQueue({ projectId, folder, onUploaded, onUploadedItem }) {
 
     await new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open('POST', `/api/projects/${projectId}/media`);
+      const uploadUrl = adminProjectMediaUploadUrl(projectId);
+      xhr.open('POST', uploadUrl);
       xhr.upload.onprogress = (e) => {
         if (!e.lengthComputable) return;
         const pct = Math.max(0, Math.min(100, Math.round((e.loaded / e.total) * 100)));
@@ -101,11 +108,30 @@ function UploadQueue({ projectId, folder, onUploaded, onUploadedItem }) {
           let item = null;
           try {
             const body = JSON.parse(xhr.responseText || '{}');
-            item = body?.item || body?.data?.item || null;
+            item = normalizeMediaItemForBuilder(body?.item || body?.data?.item || null);
           } catch {
             item = null;
           }
           resolve(item);
+          return;
+        }
+        if (xhr.status === 404) {
+          const legacyXhr = new XMLHttpRequest();
+          legacyXhr.open('POST', legacyProjectMediaUploadUrl(projectId));
+          legacyXhr.onload = () => {
+            if (legacyXhr.status >= 200 && legacyXhr.status < 300) {
+              try {
+                const body = JSON.parse(legacyXhr.responseText || '{}');
+                resolve(normalizeMediaItemForBuilder(body?.item || body?.data?.item || null));
+              } catch {
+                resolve(null);
+              }
+              return;
+            }
+            reject(new Error('Upload failed'));
+          };
+          legacyXhr.onerror = () => reject(new Error('Upload failed'));
+          legacyXhr.send(fd);
           return;
         }
         reject(new Error('Upload failed'));
@@ -229,7 +255,7 @@ export default function MediaLibraryModal({
     setDeletingId(item.id);
     setError('');
     try {
-      const res = await fetch(`/api/projects/${projectId}/media/${item.id}`, { method: 'DELETE' });
+      const res = await deleteProjectMedia(projectId, item.id);
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body?.error || 'Delete failed');
       if (selected?.id === item.id) setSelected(null);
@@ -255,8 +281,19 @@ export default function MediaLibraryModal({
       params.set('page', String(page));
       params.set('pageSize', '48');
       if (recentOnly) params.set('recent', '1');
-      const res = await fetchJson(`/api/projects/${projectId}/media?${params.toString()}`);
-      setData(res);
+      const listUrl = `/api/admin/projects/${projectId}/media?${params.toString()}`;
+      let res = await fetch(listUrl, { cache: 'no-store' });
+      if (res.status === 404) {
+        res = await fetch(`/api/projects/${projectId}/media?${params.toString()}`, { cache: 'no-store' });
+      }
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload?.error || 'Failed to load media');
+      setData({
+        ...payload,
+        items: Array.isArray(payload.items)
+          ? payload.items.map((row) => normalizeMediaItemForBuilder(row))
+          : [],
+      });
     } catch (e) {
       setError(e?.message || 'Failed to load media');
     } finally {

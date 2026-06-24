@@ -156,7 +156,7 @@ function TickerRowBlock({
                     openMedia({ target: { type: 'carouselSlide', index: idx, tickerRow: rowKey }, allowedKinds: ['image', 'svg'] })
                   }
                 >
-                  Choose from Media Library
+                  Choose from Media
                 </button>
               </div>
               <div className="bld-field-grid">

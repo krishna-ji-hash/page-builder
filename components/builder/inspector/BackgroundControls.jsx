@@ -116,7 +116,7 @@ export default function BackgroundControls({ form, onUpdate, projectId, selected
       <div className="bld-field">
         <label className="bld-label">Background image</label>
         <p className="bld-field-note" style={{ marginTop: 0 }}>
-          Upload from device or pick Media Library — no URL required.
+          Upload from device or choose from media — URL field available below.
         </p>
         <div className="bld-field-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
           <button
@@ -128,7 +128,7 @@ export default function BackgroundControls({ form, onUpdate, projectId, selected
             {isReadingFile ? 'Reading…' : 'Upload image'}
           </button>
           <button type="button" className="bld-chip" disabled={!canUseMedia || isReadingFile} onClick={() => setOpen(true)}>
-            Media Library
+            Choose from Media
           </button>
         </div>
         <input

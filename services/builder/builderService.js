@@ -608,12 +608,23 @@ async function refreshVersionSnapshot(versionId, connection) {
     [versionId]
   );
   const tree = buildTree(nodes);
+  const snapshot = { nodes: tree };
   await connection.query(
     `UPDATE page_versions
      SET snapshot_json = ?
      WHERE id = ?`,
-    [JSON.stringify({ nodes: tree }), versionId]
+    [JSON.stringify(snapshot), versionId]
   );
+  const [pageRows] = await connection.query(
+    `SELECT page_id FROM page_versions WHERE id = ? LIMIT 1`,
+    [versionId]
+  );
+  if (pageRows[0]?.page_id) {
+    await connection.query(
+      `UPDATE pages SET draft_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      [JSON.stringify(snapshot), pageRows[0].page_id]
+    );
+  }
   return tree;
 }
 
@@ -1933,9 +1944,11 @@ export async function publishPage(pageId) {
 
     await connection.query(
       `UPDATE pages
-       SET published_version_id = ?, status = 'published', updated_at = CURRENT_TIMESTAMP
+       SET published_version_id = ?, status = 'published',
+           published_json = ?, published_at = CURRENT_TIMESTAMP,
+           updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
-      [publishedVersionId, pageId]
+      [publishedVersionId, snapshotJson, pageId]
     );
 
     return {
@@ -1968,7 +1981,9 @@ export async function unpublishPage(pageId) {
 
     await connection.query(
       `UPDATE pages
-       SET published_version_id = NULL, status = 'draft', updated_at = CURRENT_TIMESTAMP
+       SET published_version_id = NULL, status = 'draft',
+           published_json = NULL, published_at = NULL,
+           updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
       [pageId]
     );

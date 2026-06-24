@@ -18,6 +18,8 @@ export function normalizeMediaRow(row) {
     kind: row.kind,
     mimeType: row.mime_type,
     originalName: row.original_name,
+    storageName: row.storage_name,
+    storagePath: row.storage_path ?? null,
     publicUrl: row.public_url,
     thumbUrl: row.thumb_url ?? null,
     width: row.width ?? null,
