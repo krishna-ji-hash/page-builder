@@ -1,0 +1,2 @@
+-- media_assets table already exists (database/migrations/010_create_media_assets.sql).
+-- Prisma MediaAsset model maps to this table; no schema changes required.

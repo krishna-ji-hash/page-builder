@@ -3,7 +3,7 @@
 import { InspectorSection } from '@/components/builder/inspector/InspectorUi';
 
 /** Tab Hero — panels, default tab, and tab bar alignment. */
-export default function TabHeroControls({ selectedNode, form, onChange }) {
+export default function TabHeroControls({ selectedNode, form, onChange, canUseMedia = false, onOpenMedia }) {
   const panels = Array.isArray(selectedNode?.props?.panels) ? selectedNode.props.panels : [];
   const activePanelId = String(
     form.tabHeroActiveId || selectedNode?.props?.activePanelId || panels[0]?.id || ''
@@ -103,6 +103,16 @@ export default function TabHeroControls({ selectedNode, form, onChange }) {
                 onChange('tabHeroPatch', { panelId: panel?.id, field: 'imageSrc', value: e.target.value })
               }
             />
+            <button
+              type="button"
+              className="bld-chip"
+              style={{ marginTop: 8 }}
+              disabled={!canUseMedia}
+              title={canUseMedia ? 'Choose from project media library' : 'Save project first'}
+              onClick={() => onOpenMedia?.(panel?.id)}
+            >
+              Choose from Media
+            </button>
           </div>
         </details>
       ))}

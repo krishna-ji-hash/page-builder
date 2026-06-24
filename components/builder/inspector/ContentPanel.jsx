@@ -142,6 +142,13 @@ export default function ContentPanel({
           imageAlt: item.altText || '',
         },
       });
+    } else if (typeof target === 'object' && target?.type === 'tabHero') {
+      const panelId = target.panelId;
+      if (!panelId) return;
+      onChange('tabHeroPatch', { panelId, field: 'imageSrc', value: item.publicUrl });
+    } else if (target === 'contentCardImage') {
+      onChange('contentCardImageSrc', item.publicUrl);
+      if (!form.contentCardImageAlt?.trim() && item.altText) onChange('contentCardImageAlt', item.altText);
     }
     setMediaOpen(false);
   };
@@ -600,12 +607,12 @@ export default function ContentPanel({
               type="button"
               className="bld-chip"
               disabled={!canUseMedia}
-              title={!canUseMedia ? 'Media library needs a project context' : 'Choose from Media Library'}
+              title={!canUseMedia ? 'Media library needs a project context' : 'Choose from project media library'}
               onClick={() => openMedia({ target: 'image', allowedKinds: ['image', 'svg'] })}
             >
-              Choose from Media Library
+              Choose from Media
             </button>
-            <p className="bld-field-note">Keeps URL input for compatibility; Media Library stores uploads with metadata.</p>
+            <p className="bld-field-note">URL field is preserved — pick from media or paste any URL.</p>
           </div>
           <div className="bld-field">
             <label className="bld-label">Image URL</label>
@@ -1075,7 +1082,7 @@ export default function ContentPanel({
                         disabled={!canUseMedia}
                         onClick={() => openMedia({ target: { type: 'carouselSlide', index: idx }, allowedKinds: ['image', 'svg'] })}
                       >
-                        Choose from Media Library
+                        Choose from Media
                       </button>
                     </div>
 
@@ -1805,7 +1812,21 @@ export default function ContentPanel({
         />
       ) : null}
       {isStatsCounter ? <StatsCounterControls selectedNode={selectedNode} onChange={onChange} /> : null}
-      {isTabHero ? <TabHeroControls selectedNode={selectedNode} form={form} onChange={onChange} /> : null}
+      {isTabHero ? (
+        <TabHeroControls
+          selectedNode={selectedNode}
+          form={form}
+          onChange={onChange}
+          canUseMedia={canUseMedia}
+          onOpenMedia={(panelId) =>
+            openMedia({
+              target: { type: 'tabHero', panelId },
+              allowedKinds: ['image', 'svg'],
+              folder: 'feature-tabs',
+            })
+          }
+        />
+      ) : null}
       {isAdvancedElement ? (
         <AdvancedElementControls
           selectedNode={selectedNode}
@@ -1815,6 +1836,9 @@ export default function ContentPanel({
           canUseMedia={canUseMedia}
           onOpenLogoMedia={(target) =>
             openMedia({ target, allowedKinds: ['image', 'svg'], folder: 'brand-logos' })
+          }
+          onOpenContentCardMedia={() =>
+            openMedia({ target: 'contentCardImage', allowedKinds: ['image', 'svg'] })
           }
           onLogoFileUpload={handleLogoFileUpload}
         />

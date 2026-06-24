@@ -1,0 +1,94 @@
+.page-revisions {
+  width: min(100%, 560px);
+}
+
+.page-revisions__title {
+  margin: 0 0 4px;
+  font-size: 1.125rem;
+}
+
+.page-revisions__sub {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.page-revisions__error {
+  margin: 0 0 12px;
+  color: #b91c1c;
+  font-size: 13px;
+}
+
+.page-revisions__list {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+  max-height: min(52vh, 420px);
+  overflow: auto;
+}
+
+.page-revisions__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.page-revisions__meta {
+  min-width: 0;
+}
+
+.page-revisions__heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.page-revisions__detail {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.page-revisions__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+.page-revisions__badge--draft {
+  color: #475569;
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.page-revisions__badge--publish {
+  color: #047857;
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}
+
+.page-revisions__badge--restore {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.page-revisions__badge--live {
+  color: #b45309;
+  background: #fffbeb;
+  border-color: #fcd34d;
+}

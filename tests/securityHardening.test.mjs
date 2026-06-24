@@ -50,10 +50,15 @@ try {
   assert.throws(() => validateEnv(), /AUTH_SECRET must be at least 32/);
 
   process.env.AUTH_SECRET = 'x'.repeat(32);
+  process.env.BUILDER_APP_HOST = 'builder.yourdomain.com';
   process.env.ADMIN_BOOTSTRAP_PASSWORD = 'changeme';
+  validateEnv();
+
+  process.env.BUILDER_APP_HOST = 'builder.production.example';
   assert.throws(() => validateEnv(), /too weak/);
 
   process.env.ADMIN_BOOTSTRAP_PASSWORD = 'StrongP@ssw0rd-Phase9';
+  process.env.BUILDER_APP_HOST = 'builder.production.example';
   validateEnv();
 } finally {
   process.env.NODE_ENV = prev.NODE_ENV;
@@ -62,6 +67,7 @@ try {
   process.env.MYSQL_DATABASE = prev.MYSQL_DATABASE;
   process.env.AUTH_SECRET = prev.AUTH_SECRET;
   process.env.ADMIN_BOOTSTRAP_PASSWORD = prev.ADMIN_BOOTSTRAP_PASSWORD;
+  process.env.BUILDER_APP_HOST = prev.BUILDER_APP_HOST;
 }
 
 console.log('securityHardening.test.mjs: ok');

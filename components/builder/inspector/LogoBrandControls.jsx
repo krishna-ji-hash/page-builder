@@ -32,10 +32,10 @@ function LogoUrlField({
           type="button"
           className="bld-chip"
           disabled={!canUseMedia}
-          title={canUseMedia ? 'Pick from Media Library' : mediaDisabledHint || 'Media Library unavailable'}
+          title={canUseMedia ? 'Choose from project media library' : mediaDisabledHint || 'Media unavailable'}
           onClick={onOpenMedia}
         >
-          Media Library
+          Choose from Media
         </button>
         <label className="bld-chip" style={{ cursor: 'pointer', textAlign: 'center', margin: 0 }}>
           Upload

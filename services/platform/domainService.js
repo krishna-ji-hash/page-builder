@@ -117,6 +117,16 @@ export async function verifyProjectDomain(projectId, domainId) {
        WHERE id = ? AND project_id = ?`,
       [did, pid]
     );
+    const [primaryRows] = await pool.query(
+      `SELECT domain, is_primary FROM project_domains WHERE id = ? AND project_id = ? LIMIT 1`,
+      [did, pid]
+    );
+    if (primaryRows[0]?.is_primary && primaryRows[0]?.domain) {
+      await pool.query(
+        `UPDATE projects SET domain = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        [primaryRows[0].domain, pid]
+      );
+    }
     const domains = await listProjectDomains(pid);
     return { domains, verification: { method: 'dns', dnsChecked: true } };
   }
@@ -170,6 +180,10 @@ export async function setPrimaryProjectDomain(projectId, domainId) {
       [did, pid]
     );
     if (rows[0]?.domain) {
+      await connection.query(
+        `UPDATE projects SET domain = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        [rows[0].domain, pid]
+      );
       const [proj] = await connection.query(
         `SELECT config_json FROM projects WHERE id = ? LIMIT 1`,
         [pid]
@@ -221,6 +235,10 @@ export async function removeProjectDomain(projectId, domainId) {
           [next[0].id]
         );
         if (domainRow[0]?.domain) {
+          await connection.query(
+            `UPDATE projects SET domain = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            [domainRow[0].domain, pid]
+          );
           const [proj] = await connection.query(
             `SELECT config_json FROM projects WHERE id = ? LIMIT 1`,
             [pid]
@@ -261,6 +279,10 @@ export async function removeProjectDomain(projectId, domainId) {
             pid,
           ]);
         }
+        await connection.query(
+          `UPDATE projects SET domain = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+          [pid]
+        );
       }
     }
 
@@ -276,11 +298,20 @@ export async function resolveProjectSlugFromHost(hostHeader) {
   if (!host) return null;
 
   try {
+    const [directRows] = await getDbPool().query(
+      `SELECT slug
+       FROM projects
+       WHERE domain = ? AND status = 'ACTIVE'
+       LIMIT 1`,
+      [host]
+    );
+    if (directRows.length) return directRows[0].slug;
+
     const [rows] = await getDbPool().query(
       `SELECT pr.slug
        FROM project_domains pd
        INNER JOIN projects pr ON pr.id = pd.project_id
-       WHERE pd.domain = ? AND pd.verified = 1
+       WHERE pd.domain = ? AND pd.verified = 1 AND pr.status = 'ACTIVE'
        LIMIT 1`,
       [host]
     );

@@ -13,6 +13,8 @@ import {
 import { buildRenderNodesWithGlobals } from '@/lib/globalSectionMerge';
 import { applyHomeHeaderNavToGlobal, syncPageTreeHeaderNavFromHome } from '@/lib/globalHeaderNavSync';
 import { getPublishedHomeHeaderRow } from '@/services/site/homeHeaderNavService';
+import { getPublicProjectMenus } from '@/services/admin/adminMenusService';
+import { injectProjectMenusIntoNodes } from '@/lib/site/injectProjectMenus.js';
 import { isPublicSlug } from '@/lib/routeParams';
 import { publicPagePathForSeo } from '@/lib/publicSiteUrls';
 import { resolveSeoMetadata } from '@/lib/seo/seoEngine';
@@ -106,8 +108,12 @@ export default async function PublicSitePageView({ projectSlug, pageSlug, search
     globalFooter,
     cloneGlobalNode
   );
+  const projectMenus = page.projectId
+    ? await getPublicProjectMenus(BigInt(page.projectId), projectSlug)
+    : null;
+  const nodesWithMenus = injectProjectMenusIntoNodes(mergedNodes, projectMenus);
   const { nodes: renderNodes, siteTheme, themeTokens } = prepareNodesForLiveRender(
-    mergedNodes,
+    nodesWithMenus,
     page.projectConfig
   );
   const currentPath = publicPagePathForSeo(projectSlug, pageSlug);

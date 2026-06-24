@@ -1,0 +1,131 @@
+/**
+ * Minimal fallback styles for sections/blocks when live-site CSS is not used.
+ * Primary public pages use `styles/live/live-site.css` via PublishedLiveTree.
+ */
+.pub-page {
+  --pub-fg: var(--token-text-primary, var(--live-section-fg, #0f172a));
+  --pub-muted: var(--token-text-muted, var(--live-section-muted, #475569));
+  --pub-bg: var(--token-bg, #ffffff);
+  --pub-border: var(--token-border, #e2e8f0);
+  --pub-accent: var(--token-accent, #2563eb);
+  --pub-accent-fg: #ffffff;
+  --pub-max: 72rem;
+  color: var(--pub-fg);
+  background: var(--pub-bg);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.6;
+}
+
+.pub-page__container {
+  width: min(100%, var(--pub-max));
+  margin-inline: auto;
+  padding-inline: 1.25rem;
+}
+
+.pub-page__section {
+  padding-block: 3rem;
+}
+
+.pub-page__section + .pub-page__section {
+  border-top: 1px solid var(--pub-border);
+}
+
+.pub-page__hero {
+  text-align: center;
+}
+
+.pub-page__hero-inner {
+  display: grid;
+  gap: 1rem;
+  justify-items: center;
+}
+
+.pub-page__hero-title {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.pub-page__hero-subtitle {
+  margin: 0;
+  max-width: 42rem;
+  color: var(--pub-muted);
+  font-size: 1.125rem;
+}
+
+.pub-page__hero-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  border-radius: 0.5rem;
+  background: var(--pub-accent);
+  color: var(--pub-accent-fg);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.pub-page__text-inner {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.pub-page__text-heading {
+  margin: 0;
+  font-size: 1.75rem;
+  line-height: 1.25;
+}
+
+.pub-page__text-body {
+  margin: 0;
+  color: var(--pub-muted);
+  font-size: 1.0625rem;
+  white-space: pre-wrap;
+}
+
+.pub-page__image-inner {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: center;
+}
+
+.pub-page__image-el {
+  display: block;
+  width: min(100%, 56rem);
+  height: auto;
+  border-radius: 0.75rem;
+  border: 1px solid var(--pub-border);
+}
+
+.pub-page__image-caption {
+  color: var(--pub-muted);
+  font-size: 0.9375rem;
+  text-align: center;
+}
+
+.pub-page__unsupported {
+  padding: 1rem 1.25rem;
+  border: 1px dashed var(--pub-border);
+  border-radius: 0.5rem;
+  font-size: 0.9375rem;
+}
+
+.pub-page__unsupported code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.pub-page__empty {
+  padding: 3rem 1.25rem;
+  text-align: center;
+  color: var(--pub-muted);
+}
+
+.pub-page__empty p {
+  margin: 0 0 0.5rem;
+}
+
+.pub-page__empty-hint {
+  font-size: 0.875rem;
+}
