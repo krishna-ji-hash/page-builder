@@ -30,7 +30,7 @@ export default function AdminLoginForm() {
         setError(data?.error || 'Login failed');
         return;
       }
-      const next = searchParams.get('next') || '/admin/dashboard';
+      const next = searchParams.get('next') || '/admin/projects';
       router.replace(next);
       router.refresh();
     } catch (err) {
@@ -77,7 +77,7 @@ export default function AdminLoginForm() {
         </p>
       ) : null}
       <button type="submit" className="login-btn" disabled={loading}>
-        {loading ? 'Signing in…' : 'LOGIN TO DASHBOARD'}
+        {loading ? 'Signing in…' : 'LOGIN TO ADMIN'}
       </button>
     </form>
   );

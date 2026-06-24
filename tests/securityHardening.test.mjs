@@ -59,7 +59,15 @@ try {
 
   process.env.ADMIN_BOOTSTRAP_PASSWORD = 'StrongP@ssw0rd-Phase9';
   process.env.BUILDER_APP_HOST = 'builder.production.example';
+  process.env.SITE_URL = 'https://builder.production.example';
   validateEnv();
+
+  delete process.env.SITE_URL;
+  process.env.BUILDER_APP_HOST = 'builder.production.example';
+  assert.throws(() => validateEnv(), /SITE_URL must be set/);
+
+  process.env.SITE_URL = 'https://wrong.example.com';
+  assert.throws(() => validateEnv(), /must match BUILDER_APP_HOST/);
 } finally {
   process.env.NODE_ENV = prev.NODE_ENV;
   process.env.MYSQL_HOST = prev.MYSQL_HOST;
@@ -68,6 +76,7 @@ try {
   process.env.AUTH_SECRET = prev.AUTH_SECRET;
   process.env.ADMIN_BOOTSTRAP_PASSWORD = prev.ADMIN_BOOTSTRAP_PASSWORD;
   process.env.BUILDER_APP_HOST = prev.BUILDER_APP_HOST;
+  process.env.SITE_URL = prev.SITE_URL;
 }
 
 console.log('securityHardening.test.mjs: ok');

@@ -29,16 +29,19 @@ test('active project on localhost without domain uses site root', () => {
   assert.equal(about, 'http://localhost:3000/about');
 });
 
-test('non-active project on localhost falls back to project slug path', () => {
+test('non-active project on localhost without domain has no preview url', () => {
   const home = buildProjectHomePreviewUrl(mainSite, {
     origin: 'http://localhost:3000',
     isActiveProject: false,
   });
-  assert.equal(home, 'http://localhost:3000/main-site/home');
+  assert.equal(home, null);
+});
 
-  const about = buildPublicPreviewUrl(mainSite, 'about', {
+test('active default with domain still uses localhost on dev', () => {
+  const project = { slug: 'd', homeSlug: 'home', domain: 'housethat.com' };
+  const home = buildProjectHomePreviewUrl(project, {
     origin: 'http://localhost:3000',
-    isActiveProject: false,
+    isActiveProject: true,
   });
-  assert.equal(about, 'http://localhost:3000/main-site/about');
+  assert.equal(home, 'http://localhost:3000/');
 });

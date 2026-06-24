@@ -4,8 +4,8 @@ import { mapAdminApiError } from '@/lib/admin/mapAdminApiError';
 import { AdminProjectValidationError } from '@/lib/admin/adminProjectInput';
 import {
   createAdminProject,
-  listAdminProjects,
 } from '@/services/admin/adminProjectsService';
+import { listAdminProjectsWithDomains } from '@/services/admin/adminDomainMapService';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   if (auth.error) return auth.error;
 
   try {
-    const projects = await listAdminProjects();
+    const projects = await listAdminProjectsWithDomains();
     return NextResponse.json({ projects });
   } catch (error) {
     return mapError(error);

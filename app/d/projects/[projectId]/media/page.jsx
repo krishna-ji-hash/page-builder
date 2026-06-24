@@ -1,12 +1,12 @@
-import DProjectMedia from '@/components/admin/d/DProjectMedia';
+import { redirect } from 'next/navigation';
+import { adminProjectSectionPath } from '@/lib/admin/adminRoutes';
+import { resolveAdminProjectKey } from '@/lib/admin/resolveAdminProject';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata = {
-  title: 'Project media | Builder',
-};
-
-export default async function DProjectMediaRoute({ params }) {
+export default async function DProjectMediaRedirect({ params }) {
   const { projectId } = await params;
-  return <DProjectMedia projectId={projectId} />;
+  const project = await resolveAdminProjectKey(String(projectId));
+  if (!project) redirect('/admin/projects');
+  redirect(adminProjectSectionPath(project.slug, 'media'));
 }

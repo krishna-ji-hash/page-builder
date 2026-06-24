@@ -16,6 +16,8 @@ import {
   parseAdminPathname,
   projectSlugFromParsed,
 } from '@/lib/admin/adminRoutes';
+import { ACTIVE_PROJECT_CHANGED } from '@/lib/admin/activeProjectEvents';
+import { PROJECT_LIST_CHANGED } from '@/lib/admin/projectListEvents';
 import { NAV_ICONS, SETTINGS_ICON, workspaceIcon } from '@/lib/admin/navIcons';
 import AdminTopbarTools from '@/components/admin/AdminTopbarTools';
 import AdminChangePasswordModal from '@/components/admin/AdminChangePasswordModal';
@@ -377,6 +379,7 @@ function UserMenu() {
 export default function AdminShell({ children }) {
   const pathname = usePathname();
   const [projects, setProjects] = useState([]);
+  const [activeProjectId, setActiveProjectId] = useState(null);
   const parsed = useMemo(() => parseAdminPathname(pathname), [pathname]);
   const crumbs = useMemo(() => breadcrumbLabels(parsed, projects), [parsed, projects]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -409,10 +412,33 @@ export default function AdminShell({ children }) {
   }
 
   useEffect(() => {
-    fetch('/api/projects', { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : { projects: [] }))
-      .then((data) => setProjects(Array.isArray(data?.projects) ? data.projects : []))
-      .catch(() => setProjects([]));
+    function loadProjects() {
+      fetch('/api/projects', { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : { projects: [] }))
+        .then((data) => setProjects(Array.isArray(data?.projects) ? data.projects : []))
+        .catch(() => setProjects([]));
+    }
+    loadProjects();
+    window.addEventListener(PROJECT_LIST_CHANGED, loadProjects);
+    return () => window.removeEventListener(PROJECT_LIST_CHANGED, loadProjects);
+  }, []);
+
+  const sidebarProjects = useMemo(
+    () => projects.filter((p) => p.status !== 'ARCHIVED'),
+    [projects]
+  );
+
+  useEffect(() => {
+    function loadActiveProject() {
+      fetch('/api/platform/site-settings', { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : {}))
+        .then((data) => setActiveProjectId(data?.settings?.activeProjectId ?? null))
+        .catch(() => setActiveProjectId(null));
+    }
+    loadActiveProject();
+    const onChanged = () => loadActiveProject();
+    window.addEventListener(ACTIVE_PROJECT_CHANGED, onChanged);
+    return () => window.removeEventListener(ACTIVE_PROJECT_CHANGED, onChanged);
   }, []);
 
   const isProjectRoute = parsed.kind === 'project';
@@ -447,7 +473,7 @@ export default function AdminShell({ children }) {
               >
                 Dashboard
               </NavItem>
-              <ProjectsNavDropdown parsed={parsed} projects={projects} sidebarCollapsed={sidebarCollapsed} />
+              <ProjectsNavDropdown parsed={parsed} projects={sidebarProjects} sidebarCollapsed={sidebarCollapsed} />
               <NavItem
                 href={ADMIN_PUBLISHING_PATH}
                 active={parsed.kind === 'publishing'}
@@ -537,9 +563,14 @@ export default function AdminShell({ children }) {
               <h1 className="admin-shell__page-title">{pageTitle}</h1>
               <AdminBreadcrumb crumbs={crumbs} />
             </div>
-            <ProjectSwitcher parsed={parsed} projects={projects} />
+            <ProjectSwitcher parsed={parsed} projects={sidebarProjects} />
           </div>
-          <AdminTopbarTools projects={projects} theme={theme} onToggleTheme={toggleTheme} />
+          <AdminTopbarTools
+            projects={projects}
+            activeProjectId={activeProjectId}
+            theme={theme}
+            onToggleTheme={toggleTheme}
+          />
           <div className="admin-shell__topbar-right">
             <UserMenu />
           </div>

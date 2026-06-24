@@ -34,6 +34,8 @@
     "audit:section-contrast": "node scripts/audit-hardcoded-colors.mjs --section-contrast",
     "audit:builder-live-parity": "node scripts/audit-builder-live-parity.mjs",
     "verify:layout": "node scripts/verify-layout-preservation.mjs",
+    "verify:deploy": "node scripts/verify-production-deploy.mjs",
+    "verify:deploy:build": "node scripts/verify-production-deploy.mjs --build",
     "test:pat": "node scripts/production-acceptance.mjs"
   },
   "dependencies": {

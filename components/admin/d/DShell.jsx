@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { D_PROJECT_NEW_PATH, D_PROJECTS_PATH } from '@/lib/admin/dProjectRoutes';
+import { ADMIN_PROJECTS_PATH } from '@/lib/admin/adminRoutes';
 import '@/styles/admin/d-shell.css';
 
 function isFullscreenDPath(pathname) {
@@ -12,6 +12,10 @@ function isFullscreenDPath(pathname) {
   );
 }
 
+/**
+ * Minimal chrome for /d/builder and /d/preview only.
+ * Project manager lives under /admin/projects.
+ */
 export default function DShell({ children }) {
   const pathname = usePathname();
 
@@ -20,31 +24,14 @@ export default function DShell({ children }) {
   }
 
   return (
-    <div className="d-shell">
+    <div className="d-shell d-shell--redirect">
       <header className="d-shell__header">
         <div className="d-shell__brand">
-          <Link href={D_PROJECTS_PATH} className="d-shell__logo">
-            Builder
+          <Link href={ADMIN_PROJECTS_PATH} className="d-shell__logo">
+            Admin
           </Link>
-          <span className="d-shell__tag">Project manager</span>
+          <span className="d-shell__tag">Redirecting to workspace…</span>
         </div>
-        <nav className="d-shell__nav" aria-label="Project manager">
-          <Link
-            href={D_PROJECTS_PATH}
-            className={`d-shell__nav-link${pathname === D_PROJECTS_PATH ? ' is-active' : ''}`}
-          >
-            Projects
-          </Link>
-          <Link
-            href={D_PROJECT_NEW_PATH}
-            className={`d-shell__nav-link${pathname === D_PROJECT_NEW_PATH ? ' is-active' : ''}`}
-          >
-            New project
-          </Link>
-          <Link href="/admin/dashboard" className="d-shell__nav-link d-shell__nav-link--muted">
-            Admin console
-          </Link>
-        </nav>
       </header>
       <main className="d-shell__main">{children}</main>
     </div>

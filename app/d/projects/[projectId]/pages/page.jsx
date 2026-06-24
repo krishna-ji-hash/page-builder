@@ -1,12 +1,12 @@
-import DProjectPages from '@/components/admin/d/DProjectPages';
+import { redirect } from 'next/navigation';
+import { adminProjectSectionPath } from '@/lib/admin/adminRoutes';
+import { resolveAdminProjectKey } from '@/lib/admin/resolveAdminProject';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata = {
-  title: 'Project pages | Builder',
-};
-
-export default async function DProjectPagesRoute({ params }) {
+export default async function DProjectPagesRedirect({ params }) {
   const { projectId } = await params;
-  return <DProjectPages projectId={projectId} />;
+  const project = await resolveAdminProjectKey(String(projectId));
+  if (!project) redirect('/admin/projects');
+  redirect(adminProjectSectionPath(project.slug, 'pages'));
 }
