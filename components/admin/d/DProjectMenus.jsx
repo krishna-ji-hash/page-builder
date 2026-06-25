@@ -1,8 +1,7 @@
 'use client';
 
-import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { D_PROJECTS_PATH, dProjectMediaPath, dProjectMenusPath, dProjectPagesPath } from '@/lib/admin/dProjectRoutes';
+import ProjectWorkspaceChrome from '@/components/admin/workspace/ProjectWorkspaceChrome';
 import '@/styles/admin/platform.css';
 import '@/styles/admin/project-menus.css';
 
@@ -307,6 +306,8 @@ function MenuLocationPanel({
 
 export default function DProjectMenus({ projectId }) {
   const [project, setProject] = useState(null);
+  const [activeProjectId, setActiveProjectId] = useState(null);
+  const [activeProjectSlug, setActiveProjectSlug] = useState(null);
   const [pages, setPages] = useState([]);
   const [menus, setMenus] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -318,14 +319,16 @@ export default function DProjectMenus({ projectId }) {
     setLoading(true);
     setError('');
     try {
-      const [projectsRes, pagesRes, menusRes] = await Promise.all([
+      const [projectsRes, pagesRes, menusRes, settingsRes] = await Promise.all([
         fetch('/api/admin/projects', { cache: 'no-store' }),
         fetch(`/api/admin/projects/${pid}/pages`, { cache: 'no-store' }),
         fetch(`/api/admin/projects/${pid}/menus`, { cache: 'no-store' }),
+        fetch('/api/platform/site-settings', { cache: 'no-store' }),
       ]);
       const projectsData = await projectsRes.json().catch(() => ({}));
       const pagesData = await pagesRes.json().catch(() => ({}));
       const menusData = await menusRes.json().catch(() => ({}));
+      const settingsData = await settingsRes.json().catch(() => ({}));
       if (!projectsRes.ok) throw new Error(projectsData?.error || 'Failed to load project');
       if (!pagesRes.ok) throw new Error(pagesData?.error || 'Failed to load pages');
       if (!menusRes.ok) throw new Error(menusData?.error || 'Failed to load menus');
@@ -333,6 +336,12 @@ export default function DProjectMenus({ projectId }) {
       const found = (projectsData.projects || []).find((p) => String(p.id) === pid);
       if (!found) throw new Error('Project not found');
       setProject(found);
+      const activeId = settingsData?.settings?.activeProjectId ?? null;
+      setActiveProjectId(activeId);
+      if (activeId != null) {
+        const active = (projectsData.projects || []).find((p) => Number(p.id) === Number(activeId));
+        setActiveProjectSlug(active?.slug ?? null);
+      }
       setPages(Array.isArray(pagesData.pages) ? pagesData.pages : []);
       setMenus(Array.isArray(menusData.menus) ? menusData.menus : []);
     } catch (err) {
@@ -420,46 +429,20 @@ export default function DProjectMenus({ projectId }) {
 
   return (
     <div className="proj-menus">
-      <div className="proj-menus__top">
-        <Link className="project-new__back" href={D_PROJECTS_PATH}>
-          ← All projects
-        </Link>
-      </div>
-
-      {loading ? <p>Loading menus…</p> : null}
       {error ? (
         <p className="platform-alert platform-alert--error" role="alert">
           {error}
         </p>
       ) : null}
 
-      {!loading && !error && project ? (
-        <>
-          <header className="proj-menus__hero">
-            <div>
-              <p className="proj-menus__badge">Project · Menus</p>
-              <h1 className="proj-menus__title">{project.name}</h1>
-              <p className="proj-menus__sub">
-                <code>{project.slug}</code>
-              </p>
-            </div>
-            <nav className="proj-menus__nav" aria-label="Project sections">
-              <Link className="proj-menus__nav-link" href={dProjectPagesPath(project.id)}>
-                Pages
-              </Link>
-              <Link
-                className="proj-menus__nav-link proj-menus__nav-link--active"
-                href={dProjectMenusPath(project.id)}
-                aria-current="page"
-              >
-                Menus
-              </Link>
-              <Link className="proj-menus__nav-link" href={dProjectMediaPath(project.id)}>
-                Media
-              </Link>
-            </nav>
-          </header>
-
+      <ProjectWorkspaceChrome
+        project={project}
+        activeProjectId={activeProjectId}
+        activeProjectSlug={activeProjectSlug}
+        section="menus"
+        loading={loading}
+      >
+        {!loading && project ? (
           <div className="proj-menus__grid">
             {LOCATIONS.map((location) => (
               <MenuLocationPanel
@@ -475,8 +458,8 @@ export default function DProjectMenus({ projectId }) {
               />
             ))}
           </div>
-        </>
-      ) : null}
+        ) : null}
+      </ProjectWorkspaceChrome>
     </div>
   );
 }

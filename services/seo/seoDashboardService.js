@@ -1,5 +1,7 @@
 import { getDbPool } from '@/lib/db';
 import { publicPagePath } from '@/lib/publicSiteUrls';
+import { adminActivePathOpts } from '@/lib/admin/adminRoutes';
+import { adminBuilderPagePath } from '@/lib/builder/adminBuilderRoutes';
 import {
   normalizePageSeo,
   normalizeProjectSeo,
@@ -14,6 +16,7 @@ import {
 import { getProjectSeo, savePageSeo } from '@/services/builder/seoService';
 import { getProjectSitemapPreview, runProjectSeoAudit } from '@/services/seo/seoSuiteService';
 import { listSeoRedirects } from '@/services/seo/seoRedirectService';
+import { getActiveProject } from '@/services/platform/siteSettingService';
 
 function parseJson(value, fallback = null) {
   if (value == null) return fallback;
@@ -139,6 +142,8 @@ export async function getSeoDashboardOverview(projectId, origin) {
 export async function listProjectPagesSeo(projectId) {
   const pid = Number(projectId);
   const project = await getProjectRow(pid);
+  const active = await getActiveProject();
+  const builderPathOpts = adminActivePathOpts(active);
   const projectConfig = parseJson(project.config_json, {}) || {};
   const projectSeo = normalizeProjectSeo(projectConfig);
 
@@ -181,7 +186,7 @@ export async function listProjectPagesSeo(projectId) {
       updatedAt: row.updated_at,
       seo: pageSeo,
       livePath: publicPagePath(project.slug, row.slug),
-      builderPath: `/admin/builder/${project.slug}/${row.slug}`,
+      builderPath: adminBuilderPagePath(project.slug, row.slug, builderPathOpts),
     };
   });
 }

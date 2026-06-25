@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ADMIN_PROJECTS_PATH,
+  adminActivePathOpts,
   adminProjectSectionPath,
 } from '@/lib/admin/adminRoutes';
 import PublishChecklistModal from '@/components/builder/publish/PublishChecklistModal';
@@ -44,6 +45,7 @@ function formatDate(value) {
 
 export default function PublishingDashboard() {
   const [data, setData] = useState(null);
+  const [activeProject, setActiveProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -61,10 +63,19 @@ export default function PublishingDashboard() {
     else setLoading(true);
     setError('');
     try {
-      const res = await fetch('/api/platform/publishing', { cache: 'no-store' });
+      const [res, settingsRes] = await Promise.all([
+        fetch('/api/platform/publishing', { cache: 'no-store' }),
+        fetch('/api/platform/site-settings', { cache: 'no-store' }),
+      ]);
       const json = await res.json();
+      const settingsData = await settingsRes.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || 'Failed to load');
       setData(json);
+      const activeId = settingsData?.settings?.activeProjectId ?? null;
+      if (activeId != null) {
+        const found = (json.projects || []).find((p) => Number(p.id) === Number(activeId));
+        setActiveProject(found ?? { id: activeId });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -132,6 +143,7 @@ export default function PublishingDashboard() {
   };
 
   const summary = data?.summary || {};
+  const activePathOpts = adminActivePathOpts(activeProject);
 
   const filteredPages = useMemo(() => {
     const pages = data?.pages || [];
@@ -260,13 +272,13 @@ export default function PublishingDashboard() {
                             <div className="platform-actions">
                               <Link
                                 className="platform-btn"
-                                href={adminProjectSectionPath(p, 'pages')}
+                                href={adminProjectSectionPath(p, 'pages', activePathOpts)}
                               >
                                 Pages
                               </Link>
                               <Link
                                 className="platform-btn"
-                                href={adminProjectSectionPath(p, 'publishing')}
+                                href={adminProjectSectionPath(p, 'publishing', activePathOpts)}
                               >
                                 Publishing
                               </Link>

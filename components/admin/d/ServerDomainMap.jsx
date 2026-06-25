@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { adminProjectSectionPath } from '@/lib/admin/adminRoutes';
+import { adminActivePathOpts, adminProjectSectionPath } from '@/lib/admin/adminRoutes';
 import { dProjectDomainsPath } from '@/lib/admin/dProjectRoutes';
 import ProjectDeleteIconButton from '@/components/admin/d/ProjectDeleteIconButton';
 
@@ -13,6 +13,7 @@ export default function ServerDomainMap({
   rows = [],
   liveRoot,
   projects = [],
+  activeProject = null,
   busyId,
   onChanged,
   onEditProject,
@@ -24,6 +25,8 @@ export default function ServerDomainMap({
   const [error, setError] = useState('');
 
   const activeProjects = projects.filter((p) => p.status !== 'ARCHIVED');
+
+  const activePathOpts = adminActivePathOpts(activeProject);
 
   function openEdit(row) {
     setError('');
@@ -189,7 +192,7 @@ export default function ServerDomainMap({
                     ) : null}
                   </td>
                   <td>
-                    <Link href={adminProjectSectionPath({ slug: row.projectSlug }, 'overview')}>
+                    <Link href={adminProjectSectionPath({ slug: row.projectSlug }, 'overview', activePathOpts)}>
                       {row.projectName}
                     </Link>
                     <span className="platform-table__meta">
@@ -230,7 +233,7 @@ export default function ServerDomainMap({
                       {row.kind !== 'localhost-default' ? (
                         <Link
                           className="platform-btn platform-btn--sm"
-                          href={dProjectDomainsPath({ slug: row.projectSlug })}
+                          href={dProjectDomainsPath({ slug: row.projectSlug }, activeProject)}
                         >
                           Domains
                         </Link>

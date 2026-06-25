@@ -20,6 +20,7 @@ function isAuthDisabled(): boolean {
 }
 
 const PUBLIC_API_PREFIXES = [
+  '/api/health',
   '/api/forms/submit',
   '/api/runtime/',
   '/api/platform/resolve-host',

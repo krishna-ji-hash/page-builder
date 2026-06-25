@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import ProjectWorkspaceChrome from '@/components/admin/workspace/ProjectWorkspaceChrome';
 import PublicUrlActions from '@/components/admin/d/PublicUrlActions';
 import PageSeoSettingsPanel from '@/components/admin/d/PageSeoSettingsPanel';
-import { D_PROJECTS_PATH, dProjectMediaPath, dProjectMenusPath } from '@/lib/admin/dProjectRoutes';
 import { buildPublicPreviewUrl } from '@/lib/admin/publicPreviewUrl';
 import { dBuilderPagePath } from '@/lib/admin/dBuilderRoutes';
 import { normalizeBuilderSlug } from '@/lib/builder/projectPageRules';
@@ -15,11 +15,19 @@ function slugFromTitle(title) {
   return normalizeBuilderSlug(String(title || ''));
 }
 
-export default function DProjectPages({ projectId }) {
-  const [project, setProject] = useState(null);
-  const [activeProjectId, setActiveProjectId] = useState(null);
+export default function DProjectPages({
+  projectId,
+  initialProject = null,
+  activeProjectId: initialActiveProjectId = null,
+  activeProjectSlug: initialActiveProjectSlug = null,
+}) {
+  const pid = Number(projectId);
+  const addFormRef = useRef(null);
+  const [project, setProject] = useState(initialProject);
+  const [activeProjectId, setActiveProjectId] = useState(initialActiveProjectId);
+  const [activeProjectSlug, setActiveProjectSlug] = useState(initialActiveProjectSlug);
   const [pages, setPages] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialProject);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [newPage, setNewPage] = useState({ title: '', slug: '' });
@@ -29,13 +37,18 @@ export default function DProjectPages({ projectId }) {
   const [seoPageId, setSeoPageId] = useState(null);
 
   const load = useCallback(async () => {
-    const pid = String(projectId);
+    if (!Number.isInteger(pid) || pid <= 0) {
+      setError('Invalid project.');
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError('');
     try {
       const [projectsRes, pagesRes, settingsRes] = await Promise.all([
-        fetch('/api/admin/projects', { cache: 'no-store' }),
-        fetch(`/api/admin/projects/${pid}/pages`, { cache: 'no-store' }),
+        fetch('/api/projects', { cache: 'no-store' }),
+        fetch(`/api/projects/${pid}/pages`, { cache: 'no-store' }),
         fetch('/api/platform/site-settings', { cache: 'no-store' }),
       ]);
       const projectsData = await projectsRes.json().catch(() => ({}));
@@ -44,24 +57,39 @@ export default function DProjectPages({ projectId }) {
       if (!projectsRes.ok) throw new Error(projectsData?.error || 'Failed to load project');
       if (!pagesRes.ok) throw new Error(pagesData?.error || 'Failed to load pages');
 
-      const found = (projectsData.projects || []).find((p) => String(p.id) === pid);
+      const found = (projectsData.projects || []).find((p) => Number(p.id) === pid);
       if (!found) throw new Error('Project not found');
       setProject(found);
-      setActiveProjectId(settingsData?.settings?.activeProjectId ?? null);
+
+      const activeId = settingsData?.settings?.activeProjectId ?? null;
+      setActiveProjectId(activeId);
+      if (activeId != null) {
+        const active = (projectsData.projects || []).find((p) => Number(p.id) === Number(activeId));
+        setActiveProjectSlug(active?.slug ?? null);
+      }
+
       setPages(Array.isArray(pagesData.pages) ? pagesData.pages : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [pid]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (loading || !project) return;
+    if (typeof window === 'undefined' || window.location.hash !== '#add-page') return;
+    addFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const titleInput = addFormRef.current?.querySelector('input[name="page-title"]');
+    titleInput?.focus();
+  }, [loading, project]);
+
   const reloadPages = async () => {
-    const res = await fetch(`/api/admin/projects/${projectId}/pages`, { cache: 'no-store' });
+    const res = await fetch(`/api/projects/${pid}/pages`, { cache: 'no-store' });
     const data = await res.json().catch(() => ({}));
     if (res.ok) setPages(Array.isArray(data.pages) ? data.pages : []);
   };
@@ -78,7 +106,7 @@ export default function DProjectPages({ projectId }) {
     setCreating(true);
     setCreateError('');
     try {
-      const res = await fetch(`/api/admin/projects/${projectId}/pages`, {
+      const res = await fetch(`/api/projects/${pid}/pages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title, slug }),
@@ -122,62 +150,39 @@ export default function DProjectPages({ projectId }) {
     const q = query.trim().toLowerCase();
     if (!q || !project) return pages;
     return pages.filter((page) => {
-      const url = buildPublicPreviewUrl(project, page.slug, publicUrlOptions).toLowerCase();
-      return page.title.toLowerCase().includes(q) || page.slug.toLowerCase().includes(q) || url.includes(q);
+      const url = buildPublicPreviewUrl(project, page.slug, publicUrlOptions);
+      const hay = `${page.title} ${page.slug} ${url || ''}`.toLowerCase();
+      return hay.includes(q);
     });
   }, [pages, query, project, publicUrlOptions]);
 
   return (
-    <div className="proj-pages">
-      <div className="proj-pages__top">
-        <Link className="project-new__back" href={D_PROJECTS_PATH}>
-          ← All projects
-        </Link>
-      </div>
-
-      {loading ? <p>Loading pages…</p> : null}
-      {error ? (
-        <p className="platform-alert platform-alert--error" role="alert">
-          {error}
-        </p>
-      ) : null}
-
-      {!loading && !error && project ? (
+    <ProjectWorkspaceChrome
+      project={project}
+      activeProjectId={activeProjectId}
+      activeProjectSlug={activeProjectSlug}
+      section="pages"
+      loading={loading}
+      error={error}
+      stats={
+        project ? (
+          <>
+            <span className="proj-workspace__pill">
+              Total <strong>{pages.length}</strong>
+            </span>
+            <span className="proj-workspace__pill proj-workspace__pill--published">
+              Live <strong>{publishedCount}</strong>
+            </span>
+            <span className="proj-workspace__pill proj-workspace__pill--draft">
+              Drafts <strong>{draftCount}</strong>
+            </span>
+          </>
+        ) : null
+      }
+    >
+      {!loading && project ? (
         <>
-          <header className="proj-pages__hero">
-            <div className="proj-pages__hero-main">
-              <p className="proj-pages__badge">Project · Pages</p>
-              <h1 className="proj-pages__title">{project.name}</h1>
-              <p className="proj-pages__sub">
-                <code>{project.slug}</code>
-                {project.domain ? (
-                  <>
-                    {' '}
-                    · <code>{project.domain}</code>
-                  </>
-                ) : null}
-              </p>
-            </div>
-            <div className="proj-pages__stats">
-              <span className="proj-pages__pill">
-                Total <strong>{pages.length}</strong>
-              </span>
-              <span className="proj-pages__pill proj-pages__pill--published">
-                Live <strong>{publishedCount}</strong>
-              </span>
-              <span className="proj-pages__pill proj-pages__pill--draft">
-                Drafts <strong>{draftCount}</strong>
-              </span>
-              <Link className="proj-pages__btn" href={dProjectMenusPath(project.id)}>
-                Menus
-              </Link>
-              <Link className="proj-pages__btn" href={dProjectMediaPath(project.id)}>
-                Media
-              </Link>
-            </div>
-          </header>
-
-          <section className="proj-pages__add" aria-labelledby="d-add-page-heading">
+          <section id="add-page" ref={addFormRef} className="proj-pages__add" aria-labelledby="d-add-page-heading">
             <div className="proj-pages__add-head">
               <h2 id="d-add-page-heading" className="proj-pages__add-title">
                 Create page
@@ -194,6 +199,7 @@ export default function DProjectPages({ projectId }) {
                   <span className="proj-pages__field-label">Title</span>
                   <input
                     className="proj-pages__input"
+                    name="page-title"
                     value={newPage.title}
                     onChange={(e) => {
                       const nextTitle = e.target.value;
@@ -234,17 +240,39 @@ export default function DProjectPages({ projectId }) {
                     project,
                     normalizeBuilderSlug(newPage.slug) || slugFromTitle(newPage.title) || 'page-slug',
                     publicUrlOptions
-                  )}
+                  ) || '—'}
                 </code>
               </p>
             </form>
           </section>
 
+          {pages.length ? (
+            <div className="proj-pages__toolbar">
+              <label className="proj-pages__search">
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <circle cx="7" cy="7" r="4.25" stroke="currentColor" strokeWidth="1.5" />
+                  <path d="M10.5 10.5L13 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search pages…"
+                  aria-label="Search pages"
+                />
+              </label>
+              <span className="proj-pages__count">
+                {filteredPages.length} of {pages.length} page{pages.length === 1 ? '' : 's'}
+              </span>
+            </div>
+          ) : null}
+
           {!pages.length ? (
             <div className="proj-pages__empty">
               <p className="proj-pages__empty-title">No pages yet</p>
+              <p className="proj-pages__empty-text">Create your first page above, then open the builder to design it.</p>
             </div>
-          ) : (
+          ) : filteredPages.length ? (
             <ul className="proj-pages__list">
               {filteredPages.map((page) => {
                 const published = page.status === 'published';
@@ -252,51 +280,58 @@ export default function DProjectPages({ projectId }) {
                 return (
                   <li key={page.id} className="proj-pages__row">
                     <div className="proj-pages__card">
-                    <span
-                      className={`proj-pages__dot proj-pages__dot--${published ? 'published' : 'draft'}`}
-                      aria-hidden="true"
-                    />
-                    <span className="proj-pages__name">{page.title}</span>
-                    <code className="proj-pages__slug">{page.slug}</code>
-                    <a
-                      className="proj-pages__path"
-                      href={publicUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {publicUrl}
-                    </a>
-                    <span
-                      className={`proj-pages__status proj-pages__status--${published ? 'published' : 'draft'}`}
-                    >
-                      {published ? 'Published' : 'Draft'}
-                    </span>
-                    <div className="proj-pages__actions">
-                      <PublicUrlActions url={publicUrl} btnClassName="proj-pages__btn" />
-                      <button
-                        type="button"
-                        className={`proj-pages__btn${seoPageId === page.id ? ' proj-pages__btn--active' : ''}`}
-                        onClick={() => setSeoPageId((current) => (current === page.id ? null : page.id))}
+                      <span
+                        className={`proj-pages__dot proj-pages__dot--${published ? 'published' : 'draft'}`}
+                        aria-hidden="true"
+                      />
+                      <span className="proj-pages__name">{page.title}</span>
+                      <code className="proj-pages__slug">{page.slug}</code>
+                      {publicUrl ? (
+                        <a
+                          className="proj-pages__path"
+                          href={publicUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {publicUrl}
+                        </a>
+                      ) : (
+                        <span className="proj-pages__path proj-pages__path--muted">No public URL yet</span>
+                      )}
+                      <span
+                        className={`proj-pages__status proj-pages__status--${published ? 'published' : 'draft'}`}
                       >
-                        SEO
-                      </button>
-                      <Link
-                        className="proj-pages__btn proj-pages__btn--primary"
-                        href={dBuilderPagePath(page.id)}
-                      >
-                        Open builder
-                      </Link>
-                      {!published ? (
+                        {published ? 'Published' : 'Draft'}
+                      </span>
+                      <div className="proj-pages__actions">
+                        {publicUrl ? <PublicUrlActions url={publicUrl} btnClassName="proj-pages__btn" /> : null}
                         <button
                           type="button"
-                          className="proj-pages__btn"
-                          disabled={busyPageId === page.id}
-                          onClick={() => publishPage(page)}
+                          className={`proj-pages__btn${seoPageId === page.id ? ' proj-pages__btn--active' : ''}`}
+                          onClick={() => setSeoPageId((current) => (current === page.id ? null : page.id))}
                         >
-                          Publish
+                          SEO
                         </button>
-                      ) : null}
-                    </div>
+                        <Link
+                          className="proj-pages__btn proj-pages__btn--primary"
+                          href={dBuilderPagePath(page.id, project?.slug, page.slug, {
+                            id: activeProjectId,
+                            slug: activeProjectSlug,
+                          })}
+                        >
+                          Open builder
+                        </Link>
+                        {!published ? (
+                          <button
+                            type="button"
+                            className="proj-pages__btn"
+                            disabled={busyPageId === page.id}
+                            onClick={() => publishPage(page)}
+                          >
+                            Publish
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                     {seoPageId === page.id ? (
                       <PageSeoSettingsPanel
@@ -309,9 +344,11 @@ export default function DProjectPages({ projectId }) {
                 );
               })}
             </ul>
+          ) : (
+            <p className="proj-pages__no-results">No pages match your search.</p>
           )}
         </>
       ) : null}
-    </div>
+    </ProjectWorkspaceChrome>
   );
 }

@@ -540,6 +540,9 @@ function renderNodeContent(node, renderOpts = {}) {
     insideSiteHeaderRow = false,
     builderPageId = null,
     builderProjectId = null,
+    projectSlug = null,
+    projectPages = null,
+    currentPublicPath = '#',
     formPreviewMode = null,
     sectionTone = null,
     textEditToolbarOpen = false,
@@ -1181,6 +1184,9 @@ function NodeRenderer({
   insideSiteHeaderRow = false,
   builderPageId = null,
   builderProjectId = null,
+  projectSlug = null,
+  projectPages = null,
+  currentPublicPath = '#',
   /** Section row layout preset — passed to `sectionItemsHost` stacks (parity with liveRenderer). */
   sectionLayout = null,
   sectionTemplateId = null,
@@ -4749,6 +4755,9 @@ function NodeRenderer({
             insideSiteHeaderRow: childInsideSiteHeaderRow,
             builderPageId,
             builderProjectId,
+            projectSlug,
+            projectPages,
+            currentPublicPath,
           }}
         />
       )
@@ -5266,6 +5275,9 @@ function NodeRenderer({
                     insideSiteHeaderRow={childInsideSiteHeaderRow}
                     builderPageId={builderPageId}
                     builderProjectId={builderProjectId}
+                    projectSlug={projectSlug}
+                    projectPages={projectPages}
+                    currentPublicPath={currentPublicPath}
                     formPreviewByNodeId={formPreviewByNodeId}
                     sectionLayout={childSectionLayout}
                     sectionTemplateId={childSectionTemplateId}
@@ -5511,6 +5523,9 @@ function NodeRenderer({
                   insideSiteHeaderRow,
                   builderPageId,
                   builderProjectId,
+                  projectSlug,
+                  projectPages,
+                  currentPublicPath,
                   formPreviewMode: formPreviewByNodeId?.[node.id] ?? null,
                   sectionTone: ancestorSectionTone,
                   builderTree: tree,
@@ -5561,6 +5576,9 @@ function NodeRenderer({
                 insideSiteHeaderRow,
                 builderPageId,
                 builderProjectId,
+                projectSlug,
+                projectPages,
+                currentPublicPath,
                 formPreviewMode: formPreviewByNodeId?.[node.id] ?? null,
                 sectionTone: ancestorSectionTone,
                 builderTree: tree,
@@ -5912,6 +5930,9 @@ function NodeRenderer({
                     insideSiteHeaderRow={childInsideSiteHeaderRow}
                     builderPageId={builderPageId}
                     builderProjectId={builderProjectId}
+                    projectSlug={projectSlug}
+                    projectPages={projectPages}
+                    currentPublicPath={currentPublicPath}
                     sectionLayout={childSectionLayout}
                     sectionTemplateId={childSectionTemplateId}
                     insideSectionItemsHost={childInsideSectionItemsHost}
@@ -6959,6 +6980,9 @@ export default function BuilderCanvas({
                         cmsPreviewByCollection={cmsPreviewByCollection}
                         builderPageId={builderPageId}
                         builderProjectId={builderProjectId}
+                        projectSlug={projectSlug}
+                        projectPages={projectPages}
+                        currentPublicPath={currentPublicPath}
                       />
                     );
                     if (segment.type === 'header-stack') {

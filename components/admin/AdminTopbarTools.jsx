@@ -112,7 +112,7 @@ function AdminThemeToggle({ theme, onToggle }) {
   );
 }
 
-function AdminGlobalSearch({ projects }) {
+function AdminGlobalSearch({ projects, activeProjectId = null }) {
   const router = useRouter();
   const rootRef = useRef(null);
   const inputRef = useRef(null);
@@ -121,6 +121,11 @@ function AdminGlobalSearch({ projects }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [pages, setPages] = useState([]);
 
+  const activeProject = useMemo(() => {
+    if (activeProjectId == null) return null;
+    return projects.find((p) => Number(p.id) === Number(activeProjectId)) ?? { id: activeProjectId };
+  }, [projects, activeProjectId]);
+
   useEffect(() => {
     fetch('/api/platform/publishing', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
@@ -128,7 +133,10 @@ function AdminGlobalSearch({ projects }) {
       .catch(() => setPages([]));
   }, []);
 
-  const index = useMemo(() => buildAdminSearchIndex({ projects, pages }), [projects, pages]);
+  const index = useMemo(
+    () => buildAdminSearchIndex({ projects, pages, activeProject }),
+    [projects, pages, activeProject]
+  );
   const results = useMemo(() => {
     if (!query.trim()) return index.slice(0, 8);
     return searchAdminIndex(index, query);
@@ -445,7 +453,7 @@ export default function AdminTopbarTools({ projects = [], activeProjectId = null
   return (
     <div className="admin-topbar__tools">
       <AdminLiveSiteLink projects={projects} activeProjectId={activeProjectId} />
-      <AdminGlobalSearch projects={projects} />
+      <AdminGlobalSearch projects={projects} activeProjectId={activeProjectId} />
       <AdminLiveClock />
       <AdminThemeToggle theme={theme} onToggle={onToggleTheme} />
       <AdminNotifications />

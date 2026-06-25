@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { ADMIN_PROJECT_NEW_PATH, adminProjectSectionPath } from '@/lib/admin/adminRoutes';
+import { ADMIN_PROJECT_NEW_PATH, adminActivePathOpts, adminProjectSectionPath } from '@/lib/admin/adminRoutes';
 import { adminBuilderPagePath, previewPagePath } from '@/lib/builder/adminBuilderRoutes';
 import { isLivePagePublished } from '@/lib/builder/projectPageRules';
 import { publicPagePath } from '@/lib/publicSiteUrls';
@@ -150,7 +150,8 @@ function ProjectsHubHero({ sites, totalPages, stats, query, onQueryChange, child
   );
 }
 
-function ProjectCard({ project, pages }) {
+function ProjectCard({ project, pages, activeProject }) {
+  const pathOpts = adminActivePathOpts(activeProject);
   const tone = projectTone(project.id);
   const publishedCount = pages.filter((p) => isLivePagePublished(p)).length;
 
@@ -179,7 +180,7 @@ function ProjectCard({ project, pages }) {
             </div>
           </div>
         </div>
-        <Link className="projects-card__workspace" href={adminProjectSectionPath(project, 'overview')}>
+        <Link className="projects-card__workspace" href={adminProjectSectionPath(project, 'overview', pathOpts)}>
           Workspace
           <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M6 3.5h6.5V10M6 10L10.5 5.5 6 10z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -190,7 +191,7 @@ function ProjectCard({ project, pages }) {
       {!pages.length ? (
         <p className="projects-card__empty">
           No pages yet —{' '}
-          <Link href={adminProjectSectionPath(project, 'pages')}>add a page</Link> or open{' '}
+          <Link href={adminProjectSectionPath(project, 'pages', pathOpts)}>add a page</Link> or open{' '}
           <Link href={adminBuilderPagePath(project.slug, 'home')}>builder</Link>.
         </p>
       ) : (
@@ -262,16 +263,31 @@ function ProjectCard({ project, pages }) {
 
 export default function AdminSitesHub({ showHero = false, limit = null, hideHeader = false }) {
   const [sites, setSites] = useState([]);
+  const [activeProject, setActiveProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
 
   useEffect(() => {
-    loadSitesData()
-      .then(setSites)
+    Promise.all([
+      loadSitesData(),
+      fetch('/api/platform/site-settings', { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : {}))
+        .catch(() => ({})),
+    ])
+      .then(([sitesData, settingsData]) => {
+        setSites(sitesData);
+        const activeId = settingsData?.settings?.activeProjectId ?? null;
+        if (activeId != null) {
+          const found = sitesData.find((s) => Number(s.project.id) === Number(activeId));
+          setActiveProject(found?.project ?? { id: activeId });
+        }
+      })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
+
+  const activePathOpts = adminActivePathOpts(activeProject);
 
   const visibleSites = limit ? sites.slice(0, limit) : sites;
   const totalPages = sites.reduce((n, s) => n + s.pages.length, 0);
@@ -366,7 +382,7 @@ export default function AdminSitesHub({ showHero = false, limit = null, hideHead
         <div className={showHero ? 'projects-grid' : 'sites-hub__list'}>
           {filteredSites.map(({ project, pages }) =>
             showHero ? (
-              <ProjectCard key={project.id} project={project} pages={pages} />
+              <ProjectCard key={project.id} project={project} pages={pages} activeProject={activeProject} />
             ) : (
               <article key={project.id} className="sites-hub__project">
                 <header className="sites-hub__project-head">
@@ -383,7 +399,7 @@ export default function AdminSitesHub({ showHero = false, limit = null, hideHead
                   </div>
                   <Link
                     className="platform-btn platform-btn--ghost"
-                    href={adminProjectSectionPath(project, 'overview')}
+                    href={adminProjectSectionPath(project, 'overview', activePathOpts)}
                   >
                     Workspace
                   </Link>
@@ -391,7 +407,7 @@ export default function AdminSitesHub({ showHero = false, limit = null, hideHead
                 {!pages.length ? (
                   <p className="sites-hub__empty-project">
                     No pages yet —{' '}
-                    <Link href={adminProjectSectionPath(project, 'pages')}>add a page</Link> or open{' '}
+                    <Link href={adminProjectSectionPath(project, 'pages', activePathOpts)}>add a page</Link> or open{' '}
                     <Link href={adminBuilderPagePath(project.slug, 'home')}>builder</Link>.
                   </p>
                 ) : (

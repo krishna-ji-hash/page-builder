@@ -1,5 +1,5 @@
 import { resolveAdminProjectRoute } from '@/lib/admin/adminProjectPage';
-import AdminProjectPages from '@/components/admin/workspace/AdminProjectPages';
+import DProjectPages from '@/components/admin/d/DProjectPages';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -9,6 +9,13 @@ export const metadata = {
 };
 
 export default async function ProjectPagesPage({ params }) {
-  const { projectId } = await resolveAdminProjectRoute(params, 'pages');
-  return <AdminProjectPages projectId={projectId} />;
+  const ctx = await resolveAdminProjectRoute(params, 'pages');
+  return (
+    <DProjectPages
+      projectId={ctx.projectId}
+      initialProject={ctx.project}
+      activeProjectId={ctx.activeProjectId}
+      activeProjectSlug={ctx.activeProjectSlug}
+    />
+  );
 }

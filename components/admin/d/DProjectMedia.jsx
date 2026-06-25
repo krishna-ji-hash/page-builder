@@ -2,14 +2,9 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import ProjectWorkspaceChrome from '@/components/admin/workspace/ProjectWorkspaceChrome';
 import { formatLabelForMime } from '@/lib/media/mediaLabels';
 import { normalizeMediaItemForBuilder } from '@/lib/media/projectMediaApi';
-import {
-  D_PROJECTS_PATH,
-  dProjectMediaPath,
-  dProjectMenusPath,
-  dProjectPagesPath,
-} from '@/lib/admin/dProjectRoutes';
 import '@/styles/admin/platform.css';
 import '@/styles/admin/project-media.css';
 import '@/styles/admin/project-menus.css';
@@ -63,6 +58,8 @@ function MediaThumb({ item, fit = 'cover' }) {
 
 export default function DProjectMedia({ projectId }) {
   const [project, setProject] = useState(null);
+  const [activeProjectId, setActiveProjectId] = useState(null);
+  const [activeProjectSlug, setActiveProjectSlug] = useState(null);
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -89,16 +86,24 @@ export default function DProjectMedia({ projectId }) {
       if (query.trim()) params.set('q', query.trim());
       if (kind) params.set('kind', kind);
 
-      const [mediaData, projectsRes] = await Promise.all([
+      const [mediaData, projectsRes, settingsRes] = await Promise.all([
         fetchJson(`${listBase}?${params}`, { cache: 'no-store' }),
         fetch('/api/admin/projects', { cache: 'no-store' }),
+        fetch('/api/platform/site-settings', { cache: 'no-store' }),
       ]);
       const projectsData = await projectsRes.json().catch(() => ({}));
+      const settingsData = await settingsRes.json().catch(() => ({}));
       if (!projectsRes.ok) throw new Error(projectsData?.error || 'Failed to load project');
 
       const found = (projectsData.projects || []).find((p) => String(p.id) === pid);
       if (!found) throw new Error('Project not found');
       setProject(found);
+      const activeId = settingsData?.settings?.activeProjectId ?? null;
+      setActiveProjectId(activeId);
+      if (activeId != null) {
+        const active = (projectsData.projects || []).find((p) => Number(p.id) === Number(activeId));
+        setActiveProjectSlug(active?.slug ?? null);
+      }
       setItems(
         Array.isArray(mediaData.items)
           ? mediaData.items.map((row) => normalizeMediaItemForBuilder(row))
@@ -173,50 +178,31 @@ export default function DProjectMedia({ projectId }) {
 
   return (
     <div className="proj-media">
-      <div className="proj-media__top">
-        <Link className="project-new__back" href={D_PROJECTS_PATH}>
-          ← All projects
-        </Link>
-      </div>
-
-      <header className="proj-media__hero">
-        <div className="proj-media__hero-main">
-          <p className="proj-media__badge">Project · Media</p>
-          <h1 className="proj-media__title">{project?.name || 'Media library'}</h1>
-          <p className="proj-media__sub">
-            Upload images and files for use in the builder. Files are stored under <code>public/uploads</code>.
-          </p>
-          <nav className="proj-menus__nav" aria-label="Project sections" style={{ marginTop: 12 }}>
-            <Link className="proj-menus__nav-link" href={dProjectPagesPath(projectId)}>
-              Pages
-            </Link>
-            <Link className="proj-menus__nav-link" href={dProjectMenusPath(projectId)}>
-              Menus
-            </Link>
-            <Link
-              className="proj-menus__nav-link proj-menus__nav-link--active"
-              href={dProjectMediaPath(projectId)}
-              aria-current="page"
-            >
-              Media
-            </Link>
-          </nav>
-        </div>
-        <div className="proj-media__stats">
-          <div className="proj-media__stat">
-            <span className="proj-media__stat-val">{total}</span>
-            <span className="proj-media__stat-label">Assets</span>
-          </div>
-          <div className="proj-media__stat">
-            <span className="proj-media__stat-val">{stats.images}</span>
-            <span className="proj-media__stat-label">Images</span>
-          </div>
-          <div className="proj-media__stat">
-            <span className="proj-media__stat-val">{humanBytes(stats.bytes)}</span>
-            <span className="proj-media__stat-label">On page</span>
-          </div>
-        </div>
-      </header>
+      <ProjectWorkspaceChrome
+        project={project}
+        activeProjectId={activeProjectId}
+        activeProjectSlug={activeProjectSlug}
+        section="media"
+        loading={loading}
+        stats={
+          project ? (
+            <>
+              <span className="proj-workspace__pill">
+                Assets <strong>{total}</strong>
+              </span>
+              <span className="proj-workspace__pill">
+                Images <strong>{stats.images}</strong>
+              </span>
+              <span className="proj-workspace__pill">
+                Size <strong>{humanBytes(stats.bytes)}</strong>
+              </span>
+            </>
+          ) : null
+        }
+      >
+        <p className="proj-media__sub">
+          Upload images and files for use in the builder. Files are stored under <code>public/uploads</code>.
+        </p>
 
       {error ? (
         <p className="proj-media__alert proj-media__alert--error" role="alert">
@@ -359,6 +345,7 @@ export default function DProjectMedia({ projectId }) {
           )}
         </div>
       ) : null}
+      </ProjectWorkspaceChrome>
     </div>
   );
 }

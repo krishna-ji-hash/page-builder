@@ -2,16 +2,11 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import ProjectWorkspaceChrome from '@/components/admin/workspace/ProjectWorkspaceChrome';
 import AdminActivityLogPanel from '@/components/admin/AdminActivityLogPanel';
-import { adminProjectPagesAddPath, adminProjectSectionPath } from '@/lib/admin/adminRoutes';
-import { adminBuilderPagePath } from '@/lib/builder/adminBuilderRoutes';
+import { adminProjectPagesAddPath, adminActivePathOpts, adminProjectSectionPath } from '@/lib/admin/adminRoutes';
 import '@/styles/admin/platform.css';
 import '@/styles/admin/project-overview.css';
-
-function projectInitial(name) {
-  const ch = String(name ?? '?').trim().charAt(0);
-  return ch ? ch.toUpperCase() : '?';
-}
 
 const STAT_CARDS = [
   {
@@ -69,11 +64,18 @@ const STAT_CARDS = [
   },
 ];
 
-export default function AdminProjectOverview({ projectId }) {
-  const [project, setProject] = useState(null);
+export default function AdminProjectOverview({
+  projectId,
+  initialProject = null,
+  activeProjectId: initialActiveProjectId = null,
+  activeProjectSlug: initialActiveProjectSlug = null,
+}) {
+  const [project, setProject] = useState(initialProject);
   const [pages, setPages] = useState([]);
   const [domains, setDomains] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [activeProjectId, setActiveProjectId] = useState(initialActiveProjectId);
+  const [activeProjectSlug, setActiveProjectSlug] = useState(initialActiveProjectSlug);
+  const [loading, setLoading] = useState(!initialProject);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -83,6 +85,9 @@ export default function AdminProjectOverview({ projectId }) {
     setLoading(true);
     Promise.all([
       fetch('/api/projects', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : { projects: [] })),
+      fetch('/api/platform/site-settings', { cache: 'no-store' }).then((r) =>
+        r.ok ? r.json() : {}
+      ),
       fetch(`/api/projects/${pid}/pages`, { cache: 'no-store' }).then((r) =>
         r.ok ? r.json() : { pages: [] }
       ),
@@ -90,10 +95,16 @@ export default function AdminProjectOverview({ projectId }) {
         r.ok ? r.json() : { domains: [] }
       ),
     ])
-      .then(([projectsData, pagesData, domainsData]) => {
+      .then(([projectsData, settingsData, pagesData, domainsData]) => {
         const found = (projectsData.projects || []).find((p) => Number(p.id) === pid);
         if (!found) throw new Error('Project not found');
         setProject(found);
+        const activeId = settingsData?.settings?.activeProjectId ?? null;
+        setActiveProjectId(activeId);
+        if (activeId != null) {
+          const active = (projectsData.projects || []).find((p) => Number(p.id) === Number(activeId));
+          setActiveProjectSlug(active?.slug ?? null);
+        }
         setPages(Array.isArray(pagesData.pages) ? pagesData.pages : []);
         setDomains(Array.isArray(domainsData.domains) ? domainsData.domains : []);
       })
@@ -112,74 +123,17 @@ export default function AdminProjectOverview({ projectId }) {
   };
 
   return (
-    <div className="proj-overview">
-      {loading ? (
-        <>
-          <div className="proj-overview__hero" aria-hidden="true">
-            <div className="proj-overview__skeleton-block" style={{ height: 120, borderRadius: 20 }} />
-          </div>
-          <div className="proj-overview__skeleton-stats">
-            <div className="proj-overview__skeleton-block" />
-            <div className="proj-overview__skeleton-block" />
-            <div className="proj-overview__skeleton-block" />
-            <div className="proj-overview__skeleton-block" />
-          </div>
-        </>
-      ) : null}
-
-      {error ? (
-        <p className="platform-alert platform-alert--error" role="alert">
-          {error}
-        </p>
-      ) : null}
-
-      {project ? (
-        <>
-          <header className="proj-overview__hero">
-            <div className="proj-overview__hero-main">
-              <span className="proj-overview__avatar" aria-hidden="true">
-                {projectInitial(project.name)}
-              </span>
-              <div className="proj-overview__hero-text">
-                <p className="proj-overview__badge">Workspace · Overview</p>
-                <h1 className="proj-overview__title">{project.name}</h1>
-                <p className="proj-overview__meta">
-                  <span className="proj-overview__slug">/{project.slug}</span>
-                  <span className="proj-overview__type">{project.type || 'website'}</span>
-                  <span>· summary & recent activity</span>
-                </p>
-              </div>
-            </div>
-            <div className="proj-overview__actions">
-              <Link
-                className="proj-overview__btn proj-overview__btn--primary"
-                href={adminProjectPagesAddPath(project)}
-              >
-                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                  <path d="M8 3.5v9M3.5 8h9" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-                </svg>
-                Add page
-              </Link>
-              <Link className="proj-overview__btn" href={adminProjectSectionPath(project, 'pages')}>
-                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                  <path d="M3 4.5h10v9H3v-9z" stroke="currentColor" strokeWidth="1.4" />
-                  <path d="M6 7.5h4M6 10h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-                </svg>
-                All pages
-              </Link>
-              <Link className="proj-overview__btn" href={adminBuilderPagePath(project.slug, 'home')}>
-                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                  <path d="M3 12.5l8.5-8.5 2 2L5 14.5H3v-2z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-                </svg>
-                Open builder
-              </Link>
-              <Link className="proj-overview__btn" href={adminProjectSectionPath(project, 'domains')}>
-                Domains
-              </Link>
-            </div>
-          </header>
-
-          <div className="proj-overview__stats" aria-label="Project summary">
+    <ProjectWorkspaceChrome
+      project={project}
+      activeProjectId={activeProjectId}
+      activeProjectSlug={activeProjectSlug}
+      section="overview"
+      loading={loading}
+      error={error}
+    >
+        {project ? (
+          <>
+            <div className="proj-overview__stats" aria-label="Project summary">
             {STAT_CARDS.map((card) => {
               const statBody = (
                 <>
@@ -196,7 +150,7 @@ export default function AdminProjectOverview({ projectId }) {
                   <Link
                     key={card.key}
                     className={`proj-overview__stat proj-overview__stat--${card.tone} proj-overview__stat--link`}
-                    href={adminProjectPagesAddPath(project)}
+                    href={adminProjectPagesAddPath(project, adminActivePathOpts({ id: activeProjectId, slug: activeProjectSlug }))}
                     title="Add or manage pages"
                   >
                     {statBody}
@@ -209,7 +163,7 @@ export default function AdminProjectOverview({ projectId }) {
                   <Link
                     key={card.key}
                     className={`proj-overview__stat proj-overview__stat--${card.tone} proj-overview__stat--link`}
-                    href={adminProjectSectionPath(project, 'domains')}
+                    href={adminProjectSectionPath(project, 'domains', adminActivePathOpts({ id: activeProjectId, slug: activeProjectSlug }))}
                   >
                     {statBody}
                   </Link>
@@ -227,8 +181,8 @@ export default function AdminProjectOverview({ projectId }) {
           <div className="proj-overview__activity">
             <AdminActivityLogPanel projectId={projectId} title="Recent activity" limit={10} showToolbar={false} />
           </div>
-        </>
-      ) : null}
-    </div>
+          </>
+        ) : null}
+    </ProjectWorkspaceChrome>
   );
 }

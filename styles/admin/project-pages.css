@@ -488,6 +488,11 @@
   box-sizing: border-box;
 }
 
+.proj-pages__path--muted {
+  font-family: inherit;
+  font-size: 12px;
+}
+
 .proj-pages__path {
   min-width: 0;
   margin: 0;

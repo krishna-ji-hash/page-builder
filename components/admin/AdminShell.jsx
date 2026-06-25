@@ -11,11 +11,14 @@ import {
   ADMIN_PUBLISHING_PATH,
   PROJECT_SECTIONS,
   SETTINGS_SECTIONS,
+  adminActivePathOpts,
+  adminFlatProjectSectionPath,
   adminProjectSectionPath,
   breadcrumbLabels,
   parseAdminPathname,
   projectSlugFromParsed,
 } from '@/lib/admin/adminRoutes';
+import { projectSidebarLabel } from '@/lib/admin/projectWorkspaceMeta';
 import { ACTIVE_PROJECT_CHANGED } from '@/lib/admin/activeProjectEvents';
 import { PROJECT_LIST_CHANGED } from '@/lib/admin/projectListEvents';
 import { NAV_ICONS, SETTINGS_ICON, workspaceIcon } from '@/lib/admin/navIcons';
@@ -78,18 +81,40 @@ function NavItem({ href, active, icon, children, collapsed }) {
   );
 }
 
-function isActiveProject(parsed, project) {
+function isActiveProject(parsed, project, activeProjectId) {
+  if (parsed.kind === 'active-project') {
+    return activeProjectId != null && Number(project.id) === Number(activeProjectId);
+  }
   if (parsed.kind !== 'project') return false;
   if (parsed.projectSlug && project.slug === parsed.projectSlug) return true;
   if (parsed.projectId && Number(project.id) === Number(parsed.projectId)) return true;
   return false;
 }
 
-function ProjectsNavDropdown({ parsed, projects, sidebarCollapsed }) {
+function workspaceSectionHref(section, parsed, projects, activePathOpts) {
+  if (parsed.kind === 'active-project') {
+    return adminFlatProjectSectionPath(section);
+  }
+  const slug = projectSlugFromParsed(parsed, projects) || parsed.projectSlug || parsed.projectKey || '';
+  const project = projects.find(
+    (p) => p.slug === slug || (parsed.projectId && Number(p.id) === Number(parsed.projectId))
+  );
+  if (
+    project &&
+    activePathOpts?.activeProjectId != null &&
+    Number(project.id) === Number(activePathOpts.activeProjectId)
+  ) {
+    return adminFlatProjectSectionPath(section);
+  }
+  return adminProjectSectionPath(slug || project, section, activePathOpts);
+}
+
+function ProjectsNavDropdown({ parsed, projects, sidebarCollapsed, activeProjectId, activePathOpts }) {
   const isProjectsArea =
     parsed.kind === 'projects' ||
     parsed.kind === 'project-new' ||
-    parsed.kind === 'project';
+    parsed.kind === 'project' ||
+    parsed.kind === 'active-project';
 
   const [open, setOpen] = useState(isProjectsArea);
   const toggleRef = useRef(null);
@@ -205,15 +230,15 @@ function ProjectsNavDropdown({ parsed, projects, sidebarCollapsed }) {
                 {visibleProjects.map((project) => (
                   <li key={project.id} className="admin-shell__subnav-item">
                     <Link
-                      href={adminProjectSectionPath(project, 'overview')}
+                      href={adminProjectSectionPath(project, 'overview', activePathOpts)}
                       className={`admin-shell__subnav-link admin-shell__subnav-link--project${
-                        isActiveProject(parsed, project) ? ' is-active' : ''
+                        isActiveProject(parsed, project, activeProjectId) ? ' is-active' : ''
                       }`}
-                      title={project.name || project.slug}
+                      title={projectSidebarLabel(project, activeProjectId)}
                       onClick={() => sidebarCollapsed && setOpen(false)}
                     >
                       <span className="admin-shell__subnav-dot" aria-hidden="true" />
-                      <span className="admin-shell__subnav-name">{project.name || project.slug}</span>
+                      <span className="admin-shell__subnav-name">{projectSidebarLabel(project, activeProjectId)}</span>
                     </Link>
                   </li>
                 ))}
@@ -271,11 +296,14 @@ function AdminBreadcrumb({ crumbs }) {
   );
 }
 
-function ProjectSwitcher({ parsed, projects }) {
+function ProjectSwitcher({ parsed, projects, activeProjectId, activePathOpts }) {
   const router = useRouter();
-  if (parsed.kind !== 'project') return null;
+  if (parsed.kind !== 'project' && parsed.kind !== 'active-project') return null;
 
-  const activeSlug = projectSlugFromParsed(parsed, projects) || parsed.projectSlug || '';
+  const activeSlug =
+    parsed.kind === 'active-project'
+      ? projects.find((p) => Number(p.id) === Number(activeProjectId))?.slug || ''
+      : projectSlugFromParsed(parsed, projects) || parsed.projectSlug || '';
 
   return (
     <div className="admin-shell__project-switcher">
@@ -286,7 +314,9 @@ function ProjectSwitcher({ parsed, projects }) {
         onChange={(e) => {
           const nextSlug = String(e.target.value || '').trim();
           if (!nextSlug) return;
-          router.push(adminProjectSectionPath(nextSlug, parsed.section || 'overview'));
+          router.push(
+            adminProjectSectionPath(nextSlug, parsed.section || 'overview', activePathOpts)
+          );
         }}
       >
         {(projects || []).map((p) => (
@@ -389,7 +419,20 @@ export default function AdminShell({ children }) {
   const [projects, setProjects] = useState([]);
   const [activeProjectId, setActiveProjectId] = useState(null);
   const parsed = useMemo(() => parseAdminPathname(pathname), [pathname]);
-  const crumbs = useMemo(() => breadcrumbLabels(parsed, projects), [parsed, projects]);
+  const crumbs = useMemo(
+    () => breadcrumbLabels(parsed, projects, { activeProjectId }),
+    [parsed, projects, activeProjectId]
+  );
+
+  const activeProjectSlug = useMemo(
+    () => projects.find((p) => Number(p.id) === Number(activeProjectId))?.slug || null,
+    [projects, activeProjectId]
+  );
+
+  const activePathOpts = useMemo(
+    () => adminActivePathOpts({ id: activeProjectId, slug: activeProjectSlug }),
+    [activeProjectId, activeProjectSlug]
+  );
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [theme, setTheme] = useState('light');
   const pageTitle = crumbs[crumbs.length - 1]?.label || 'Admin';
@@ -449,7 +492,7 @@ export default function AdminShell({ children }) {
     return () => window.removeEventListener(ACTIVE_PROJECT_CHANGED, onChanged);
   }, []);
 
-  const isProjectRoute = parsed.kind === 'project';
+  const isProjectRoute = parsed.kind === 'project' || parsed.kind === 'active-project';
 
   return (
     <div
@@ -481,7 +524,13 @@ export default function AdminShell({ children }) {
               >
                 Dashboard
               </NavItem>
-              <ProjectsNavDropdown parsed={parsed} projects={sidebarProjects} sidebarCollapsed={sidebarCollapsed} />
+              <ProjectsNavDropdown
+                parsed={parsed}
+                projects={sidebarProjects}
+                sidebarCollapsed={sidebarCollapsed}
+                activeProjectId={activeProjectId}
+                activePathOpts={activePathOpts}
+              />
               <NavItem
                 href={ADMIN_PUBLISHING_PATH}
                 active={parsed.kind === 'publishing'}
@@ -505,11 +554,12 @@ export default function AdminShell({ children }) {
                 {PROJECT_SECTIONS.map((section) => (
                   <NavItem
                     key={section.id}
-                    href={adminProjectSectionPath(
-                      projectSlugFromParsed(parsed, projects) || parsed.projectSlug || parsed.projectKey,
-                      section.id
-                    )}
-                    active={parsed.section === section.id}
+                    href={workspaceSectionHref(section.id, parsed, projects, activePathOpts)}
+                    active={
+                      parsed.kind === 'active-project'
+                        ? parsed.section === section.id
+                        : parsed.section === section.id
+                    }
                     icon={workspaceIcon(section.id)}
                     collapsed={sidebarCollapsed}
                   >
@@ -571,7 +621,12 @@ export default function AdminShell({ children }) {
               <h1 className="admin-shell__page-title">{pageTitle}</h1>
               <AdminBreadcrumb crumbs={crumbs} />
             </div>
-            <ProjectSwitcher parsed={parsed} projects={sidebarProjects} />
+            <ProjectSwitcher
+              parsed={parsed}
+              projects={sidebarProjects}
+              activeProjectId={activeProjectId}
+              activePathOpts={activePathOpts}
+            />
           </div>
           <AdminTopbarTools
             projects={projects}

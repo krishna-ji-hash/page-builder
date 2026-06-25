@@ -2,26 +2,39 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { ADMIN_PROJECT_NEW_PATH, adminProjectSectionPath } from '@/lib/admin/adminRoutes';
+import { ADMIN_PROJECT_NEW_PATH, adminActivePathOpts, adminProjectSectionPath } from '@/lib/admin/adminRoutes';
 import { adminBuilderPagePath } from '@/lib/builder/adminBuilderRoutes';
 import '@/styles/admin/platform.css';
 
 export default function AdminProjectsList() {
   const [projects, setProjects] = useState([]);
+  const [activeProject, setActiveProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetch('/api/projects', { cache: 'no-store' })
-      .then(async (r) => {
+    Promise.all([
+      fetch('/api/projects', { cache: 'no-store' }).then(async (r) => {
         const data = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(data?.error || 'Failed to load projects');
         return Array.isArray(data.projects) ? data.projects : [];
+      }),
+      fetch('/api/platform/site-settings', { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : {}))
+        .catch(() => ({})),
+    ])
+      .then(([list, settingsData]) => {
+        setProjects(list);
+        const activeId = settingsData?.settings?.activeProjectId ?? null;
+        if (activeId != null) {
+          setActiveProject(list.find((p) => Number(p.id) === Number(activeId)) ?? { id: activeId });
+        }
       })
-      .then(setProjects)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
+
+  const activePathOpts = adminActivePathOpts(activeProject);
 
   return (
     <div className="platform-shell">
@@ -59,7 +72,7 @@ export default function AdminProjectsList() {
                 <td>{p.pages_count ?? p.pageCount ?? '—'}</td>
                 <td>
                   <div className="platform-actions">
-                    <Link className="platform-btn" href={adminProjectSectionPath(p, 'overview')}>
+                    <Link className="platform-btn" href={adminProjectSectionPath(p, 'overview', activePathOpts)}>
                       Overview
                     </Link>
                     <Link

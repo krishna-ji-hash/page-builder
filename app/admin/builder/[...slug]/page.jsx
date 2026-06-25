@@ -1,8 +1,13 @@
 import { notFound, redirect } from 'next/navigation';
 import BuilderShellClient from './BuilderShellClient';
-import { adminBuilderPagePath } from '@/lib/builder/adminBuilderRoutes';
+import {
+  adminBuilderPagePath,
+  adminFlatBuilderPagePath,
+} from '@/lib/builder/adminBuilderRoutes';
+import { adminActivePathOpts } from '@/lib/admin/adminRoutes';
 import { isPublicSlug, resolveMaybeAsyncParams } from '@/lib/routeParams';
 import { getPageIdByProjectAndPageSlug, getPageRoutingInfo } from '@/services/builder/builderService';
+import { getActiveProject } from '@/services/platform/siteSettingService';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,16 +25,32 @@ export default async function AdminBuilderEditorPage({ params }) {
       ? [resolved.slug]
       : [];
 
+  const active = await getActiveProject();
+  const activeOpts = adminActivePathOpts(active);
+
   if (segments.length === 1) {
-    const pageId = Number(segments[0]);
-    if (!Number.isInteger(pageId) || pageId <= 0) {
-      notFound();
+    const seg = segments[0];
+    const pageId = Number(seg);
+    if (Number.isInteger(pageId) && pageId > 0) {
+      const route = await getPageRoutingInfo(pageId);
+      if (!route?.projectSlug || !route?.pageSlug) {
+        notFound();
+      }
+      redirect(adminBuilderPagePath(route.projectSlug, route.pageSlug, activeOpts));
     }
-    const route = await getPageRoutingInfo(pageId);
-    if (!route?.projectSlug || !route?.pageSlug) {
-      notFound();
+
+    if (isPublicSlug(seg)) {
+      if (!active?.slug) {
+        notFound();
+      }
+      const flatPageId = await getPageIdByProjectAndPageSlug(active.slug, seg);
+      if (!flatPageId) {
+        notFound();
+      }
+      return <BuilderShellClient pageId={flatPageId} />;
     }
-    redirect(adminBuilderPagePath(route.projectSlug, route.pageSlug));
+
+    notFound();
   }
 
   if (segments.length !== 2) {
@@ -41,10 +62,14 @@ export default async function AdminBuilderEditorPage({ params }) {
     notFound();
   }
 
-  const pageId = await getPageIdByProjectAndPageSlug(projectSlug, pageSlug);
-  if (!pageId) {
+  if (active?.slug && projectSlug === active.slug) {
+    redirect(adminFlatBuilderPagePath(pageSlug));
+  }
+
+  const resolvedPageId = await getPageIdByProjectAndPageSlug(projectSlug, pageSlug);
+  if (!resolvedPageId) {
     notFound();
   }
 
-  return <BuilderShellClient pageId={pageId} />;
+  return <BuilderShellClient pageId={resolvedPageId} />;
 }

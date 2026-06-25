@@ -304,6 +304,7 @@ export default function DProjectsList() {
         rows={serverDomainMap}
         liveRoot={liveRoot}
         projects={projects}
+        activeProject={activeProject}
         busyId={busyId}
         onChanged={async () => {
           dispatchProjectListChanged();
@@ -429,8 +430,8 @@ export default function DProjectsList() {
                           project={project}
                           isActive={isActive}
                           busy={busyId === project.id}
-                          pagesPath={dProjectPagesPath(project)}
-                          domainsPath={dProjectDomainsPath(project)}
+                          pagesPath={dProjectPagesPath(project, activeProject)}
+                          domainsPath={dProjectDomainsPath(project, activeProject)}
                           publicUrl={publicUrl}
                           onSetDefault={setActive}
                           onEdit={openEdit}
