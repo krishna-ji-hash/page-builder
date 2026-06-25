@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { activityActionLabel, activityActionMeta } from '@/lib/admin/activityActions';
-import { ADMIN_DASHBOARD_PATH } from '@/lib/admin/adminRoutes';
+import { ACTIVE_PROJECT_CHANGED } from '@/lib/admin/activeProjectEvents';
+import { ADMIN_DASHBOARD_PATH, ADMIN_PROJECTS_PATH } from '@/lib/admin/adminRoutes';
 import { buildAdminSearchIndex, searchAdminIndex } from '@/lib/admin/adminSearchIndex';
 import '@/styles/admin/topbar.css';
 
@@ -393,9 +394,57 @@ function AdminNotifications() {
   );
 }
 
-export default function AdminTopbarTools({ projects = [], theme = 'light', onToggleTheme }) {
+function AdminLiveSiteLink({ projects = [], activeProjectId = null }) {
+  const [resolvedId, setResolvedId] = useState(activeProjectId);
+
+  const loadActiveId = useCallback(() => {
+    fetch('/api/platform/site-settings', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((data) => setResolvedId(data?.settings?.activeProjectId ?? null))
+      .catch(() => setResolvedId(null));
+  }, []);
+
+  useEffect(() => {
+    setResolvedId(activeProjectId);
+  }, [activeProjectId]);
+
+  useEffect(() => {
+    loadActiveId();
+    const onChanged = () => loadActiveId();
+    window.addEventListener(ACTIVE_PROJECT_CHANGED, onChanged);
+    return () => window.removeEventListener(ACTIVE_PROJECT_CHANGED, onChanged);
+  }, [loadActiveId]);
+
+  const activeProject = useMemo(
+    () => projects.find((p) => Number(p.id) === Number(resolvedId)) || null,
+    [projects, resolvedId]
+  );
+
+  if (!activeProject) {
+    return (
+      <Link href={ADMIN_PROJECTS_PATH} className="admin-topbar__live-link admin-topbar__live-link--muted">
+        Set default site
+      </Link>
+    );
+  }
+
+  return (
+    <a
+      href="/"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="admin-topbar__live-link"
+      title={`${activeProject.name} is published at localhost`}
+    >
+      Live: {activeProject.name}
+    </a>
+  );
+}
+
+export default function AdminTopbarTools({ projects = [], activeProjectId = null, theme = 'light', onToggleTheme }) {
   return (
     <div className="admin-topbar__tools">
+      <AdminLiveSiteLink projects={projects} activeProjectId={activeProjectId} />
       <AdminGlobalSearch projects={projects} />
       <AdminLiveClock />
       <AdminThemeToggle theme={theme} onToggle={onToggleTheme} />

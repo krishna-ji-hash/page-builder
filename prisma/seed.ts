@@ -129,6 +129,29 @@ async function insertBuilderNodes(
 }
 
 async function seedHomePage(projectId: bigint) {
+  const existing = await prisma.page.findUnique({
+    where: {
+      projectId_slug: {
+        projectId,
+        slug: DEFAULT_PAGE_SLUG,
+      },
+    },
+  });
+
+  const existingJson =
+    existing?.publishedJson && typeof existing.publishedJson === 'object'
+      ? (existing.publishedJson as Record<string, unknown>)
+      : null;
+  const hasNodes =
+    Array.isArray(existingJson?.nodes) && (existingJson.nodes as unknown[]).length > 0;
+  const hasSections =
+    Array.isArray(existingJson?.sections) && (existingJson.sections as unknown[]).length > 0;
+
+  if (existing && (hasNodes || hasSections)) {
+    console.log(`Skip Home page seed — published content already exists (id=${existing.id})`);
+    return existing;
+  }
+
   const sectionsContent = buildDefaultStarterPageJson('Main Website');
   const snapshot = {
     ...sectionsContent,

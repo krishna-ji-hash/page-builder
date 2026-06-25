@@ -59,7 +59,6 @@ export default function AdminLoginForm() {
         setError(data?.error || 'Login failed');
         return;
       }
-
       const target = resolveAdminLoginRedirectTarget(searchParams.get('next'));
       router.replace(target);
       router.refresh();
@@ -107,7 +106,7 @@ export default function AdminLoginForm() {
         </p>
       ) : null}
       <button type="submit" className="login-btn" disabled={loading}>
-        {loading ? 'Signing in…' : 'LOGIN TO DASHBOARD'}
+        {loading ? 'Signing in…' : 'LOGIN TO ADMIN'}
       </button>
     </form>
   );

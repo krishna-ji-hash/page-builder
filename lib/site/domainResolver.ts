@@ -75,7 +75,7 @@ export async function getProjectByHost(host: string): Promise<Project | null> {
     FROM project_domains pd
     INNER JOIN projects pr ON pr.id = pd.project_id
     WHERE pd.domain = ${normalizedHost}
-      AND pd.verified = 1
+      AND (pd.verified = 1 OR ${process.env.NODE_ENV !== 'production'})
       AND pr.status = 'ACTIVE'
     LIMIT 1
   `;

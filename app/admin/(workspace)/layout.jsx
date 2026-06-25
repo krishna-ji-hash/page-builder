@@ -5,6 +5,7 @@ import '@/styles/admin/shell.css';
 import '@/styles/admin/light-theme.css';
 import '@/styles/admin/dark-theme.css';
 import '@/styles/admin/workspace-dark.css';
+import '@/styles/admin/workspace.css';
 
 const inter = Inter({
   subsets: ['latin'],

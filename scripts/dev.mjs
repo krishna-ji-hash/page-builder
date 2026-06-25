@@ -20,6 +20,18 @@ const envFile = path.join(root, '.env');
 const nextDir = path.join(root, '.next');
 const PORT = Number(process.env.PORT || 3000);
 const HOST = getDevHost();
+const LOCAL_URL = `http://localhost:${PORT}`;
+
+function printSingleDevUrl() {
+  process.stdout.write('\n[dev] ═══════════════════════════════════════\n');
+  process.stdout.write(`[dev]  ONE URL → ${LOCAL_URL}\n`);
+  process.stdout.write('[dev] ═══════════════════════════════════════\n');
+  process.stdout.write(`[dev]  Public site:      ${LOCAL_URL}/\n`);
+  process.stdout.write(`[dev]  Projects/Builder: ${LOCAL_URL}/admin/projects\n`);
+  process.stdout.write(`[dev]  Admin login:      ${LOCAL_URL}/admin/login\n`);
+  process.stdout.write('[dev]  Other project home: /admin/projects → Set default → refresh /\n');
+  process.stdout.write('[dev] ═══════════════════════════════════════\n\n');
+}
 
 const ensureMysqlArgs = fs.existsSync(envFile)
   ? ['--env-file=.env', path.join(root, 'scripts', 'ensure-mysql.mjs')]
@@ -66,10 +78,13 @@ killPort(PORT);
 killPort(3001);
 
 const nextBin = path.join(root, 'node_modules', 'next', 'dist', 'bin', 'next');
+const devEnv = { ...process.env, PORT: String(PORT), HOST };
+// Stale NODE_ENV=production (e.g. from prior `npm run build` in the same shell) breaks Edge middleware in dev.
+delete devEnv.NODE_ENV;
 const child = spawn(process.execPath, [nextBin, 'dev', '-H', HOST, '-p', String(PORT)], {
   cwd: root,
   stdio: 'inherit',
-  env: { ...process.env, PORT: String(PORT), HOST },
+  env: devEnv,
 });
 
 let warmupStarted = false;
@@ -88,7 +103,7 @@ const startWarmup = () => {
     const compiled = await waitForBuilderPageChunk(root);
     if (compiled) {
       printDevNetworkHints(PORT);
-      process.stdout.write('[dev] Builder ready — open http://localhost:' + PORT + '/admin/builder/dispatch/home\n');
+      printSingleDevUrl();
     } else {
       process.stderr.write(
         '[dev] Builder chunk still compiling. Wait for "✓ Compiled" in the log, then refresh.\n'

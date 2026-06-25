@@ -1,19 +1,39 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
-import {
-  D_PROJECT_NEW_PATH,
-  dProjectPagesPath,
-} from '@/lib/admin/dProjectRoutes';
-import PublicUrlActions from '@/components/admin/d/PublicUrlActions';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ADMIN_PROJECT_NEW_PATH } from '@/lib/admin/adminRoutes';
+import { dispatchActiveProjectChanged } from '@/lib/admin/activeProjectEvents';
+import { dispatchProjectListChanged } from '@/lib/admin/projectListEvents';
+import { dProjectDomainsPath, dProjectPagesPath } from '@/lib/admin/dProjectRoutes';
 import DomainStatusBadge, { formatLastVerifiedAt } from '@/components/admin/d/DomainStatusBadge';
-import { buildProjectHomePreviewUrl } from '@/lib/admin/publicPreviewUrl';
+import ProjectActionsMenu from '@/components/admin/d/ProjectActionsMenu';
+import ServerDomainMap from '@/components/admin/d/ServerDomainMap';
+import { ProjectRoutingCell, resolvePrimaryPreviewUrl } from '@/components/admin/d/ProjectRoutingGuide';
+import {
+  describeDomainRouting,
+  describeLocalhostRouting,
+} from '@/lib/admin/projectRoutingDisplay';
+import { buildServerDomainMap } from '@/lib/admin/buildServerDomainMap';
 import { normalizeBuilderSlug } from '@/lib/builder/projectPageRules';
 import '@/styles/admin/platform.css';
+import '@/styles/admin/d-shell.css';
+import '@/styles/admin/project-pages.css';
 
 function statusLabel(status) {
   return status === 'ARCHIVED' ? 'Archived' : 'Active';
+}
+
+function sortProjects(projects, activeProjectId) {
+  return [...projects].sort((a, b) => {
+    const aDefault = Number(a.id) === Number(activeProjectId);
+    const bDefault = Number(b.id) === Number(activeProjectId);
+    if (aDefault !== bDefault) return aDefault ? -1 : 1;
+    const aArchived = a.status === 'ARCHIVED';
+    const bArchived = b.status === 'ARCHIVED';
+    if (aArchived !== bArchived) return aArchived ? 1 : -1;
+    return String(a.name || '').localeCompare(String(b.name || ''));
+  });
 }
 
 export default function DProjectsList() {
@@ -33,6 +53,49 @@ export default function DProjectsList() {
   });
   const [editError, setEditError] = useState('');
   const [verifyMessage, setVerifyMessage] = useState('');
+  const [defaultNotice, setDefaultNotice] = useState('');
+  const [liveRoot, setLiveRoot] = useState('http://localhost:3000/');
+  const [query, setQuery] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setLiveRoot(`${window.location.origin}/`);
+    }
+  }, []);
+
+  const activeProject = projects.find((p) => Number(p.id) === Number(activeProjectId)) || null;
+
+  const stats = useMemo(() => {
+    const active = projects.filter((p) => p.status !== 'ARCHIVED').length;
+    const archived = projects.length - active;
+    return { total: projects.length, active, archived };
+  }, [projects]);
+
+  const visibleProjects = useMemo(() => {
+    let list = showArchived ? projects : projects.filter((p) => p.status !== 'ARCHIVED');
+    const q = query.trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        (p) =>
+          String(p.name || '')
+            .toLowerCase()
+            .includes(q) ||
+          String(p.slug || '')
+            .toLowerCase()
+            .includes(q) ||
+          String(p.domain || '')
+            .toLowerCase()
+            .includes(q)
+      );
+    }
+    return sortProjects(list, activeProjectId);
+  }, [projects, showArchived, query, activeProjectId]);
+
+  const serverDomainMap = useMemo(
+    () => buildServerDomainMap(projects, activeProjectId, liveRoot.replace(/\/+$/, '')),
+    [projects, activeProjectId, liveRoot]
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -59,12 +122,58 @@ export default function DProjectsList() {
   }, [load]);
 
   const setActive = async (projectId) => {
+    const target = projects.find((p) => Number(p.id) === Number(projectId));
+    const name = target?.name || 'this project';
+    const slug = target?.slug ? ` (${target.slug})` : '';
+    if (
+      !window.confirm(
+        `Set "${name}"${slug} as the default for localhost?\n\n` +
+          `Only this project will open at ${liveRoot}. ` +
+          `Other projects without a custom domain will not appear on localhost until you change the default.`
+      )
+    ) {
+      return;
+    }
+
     setBusyId(projectId);
+    setDefaultNotice('');
     try {
       const res = await fetch(`/api/admin/projects/${projectId}/set-active`, { method: 'POST' });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || 'Failed to set active project');
+      if (!res.ok) throw new Error(data?.error || 'Failed to set default site');
+      const name =
+        data.project?.name || projects.find((p) => Number(p.id) === Number(projectId))?.name || 'Site';
       setActiveProjectId(projectId);
+      setDefaultNotice(name);
+      dispatchActiveProjectChanged(projectId);
+      await load();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const deleteProject = async (project) => {
+    if (
+      !window.confirm(
+        `Permanently delete "${project.name}" (${project.slug})?\n\n` +
+          `This removes the project, all pages, media, domains, and builder data from the database. This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    setBusyId(project.id);
+    try {
+      const res = await fetch(`/api/admin/projects/${project.id}/permanent`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to delete project');
+      if (Number(activeProjectId) === Number(project.id)) {
+        setActiveProjectId(null);
+        dispatchActiveProjectChanged(null);
+      }
+      dispatchProjectListChanged();
+      await load();
     } catch (err) {
       window.alert(err instanceof Error ? err.message : String(err));
     } finally {
@@ -85,6 +194,7 @@ export default function DProjectsList() {
       const res = await fetch(`/api/admin/projects/${project.id}`, { method: 'DELETE' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Failed to archive project');
+      dispatchProjectListChanged();
       await load();
     } catch (err) {
       window.alert(err instanceof Error ? err.message : String(err));
@@ -161,23 +271,82 @@ export default function DProjectsList() {
   };
 
   return (
-    <div className="platform-shell">
+    <div className="platform-shell d-projects-admin">
       <div className="admin-page__header">
         <div className="admin-page__header-main">
-          <p className="admin-page__badge">Sites</p>
+          <p className="admin-page__badge">Workspace</p>
           <h1 className="admin-page__title">Projects</h1>
-          <p className="admin-page__description">
-            Manage client websites, domains, and published pages.
-          </p>
+          <p className="admin-page__description">Manage sites, domains, and the localhost default.</p>
         </div>
         <div className="admin-page__header-actions">
-          <Link className="platform-btn platform-btn--primary" href={D_PROJECT_NEW_PATH}>
+          <Link className="platform-btn platform-btn--primary" href={ADMIN_PROJECT_NEW_PATH}>
             New project
           </Link>
         </div>
       </div>
 
-      {loading ? <p>Loading projects…</p> : null}
+      <div className="d-projects__stats" aria-label="Project summary">
+        <div className="d-projects__stat">
+          <span className="d-projects__stat-value">{stats.active}</span>
+          <span className="d-projects__stat-label">Active</span>
+        </div>
+        <div className="d-projects__stat">
+          <span className="d-projects__stat-value">{stats.archived}</span>
+          <span className="d-projects__stat-label">Archived</span>
+        </div>
+        <div className="d-projects__stat d-projects__stat--accent">
+          <span className="d-projects__stat-value">{activeProject?.name || '—'}</span>
+          <span className="d-projects__stat-label">Default on localhost</span>
+        </div>
+      </div>
+
+      <ServerDomainMap
+        rows={serverDomainMap}
+        liveRoot={liveRoot}
+        projects={projects}
+        busyId={busyId}
+        onChanged={async () => {
+          dispatchProjectListChanged();
+          await load();
+        }}
+        onEditProject={openEdit}
+        onSetDefault={setActive}
+      />
+
+      {activeProject ? null : (
+        <p className="platform-alert platform-alert--warn d-projects__no-default" role="status">
+          No default site selected. Pick a project below and click <strong>Set default</strong>.
+        </p>
+      )}
+
+      {defaultNotice ? (
+        <p className="platform-alert platform-alert--success d-projects__default-notice" role="status">
+          <strong>{defaultNotice}</strong> is now the default site at{' '}
+          <a href={liveRoot}>{liveRoot}</a>
+        </p>
+      ) : null}
+
+      <div className="d-projects__toolbar">
+        <label className="d-projects__search">
+          <span className="sr-only">Search projects</span>
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by name, slug, or domain…"
+          />
+        </label>
+        <label className="d-projects__filter">
+          <input
+            type="checkbox"
+            checked={showArchived}
+            onChange={(e) => setShowArchived(e.target.checked)}
+          />
+          Show archived
+        </label>
+      </div>
+
+      {loading ? <p className="d-projects__loading">Loading projects…</p> : null}
       {error ? (
         <p className="platform-alert platform-alert--error" role="alert">
           {error}
@@ -185,86 +354,89 @@ export default function DProjectsList() {
       ) : null}
 
       {!loading && !error ? (
-        <div className="platform-table-wrap">
-          <table className="platform-table">
+        <div className="platform-table-wrap d-projects__table-wrap">
+          <table className="platform-table d-projects__table">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Slug</th>
-                <th>Domain</th>
+                <th>Project</th>
+                <th>localhost</th>
+                <th>Custom domain</th>
                 <th>Status</th>
-                <th>Public URL</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {projects.length === 0 ? (
+              {visibleProjects.length === 0 ? (
                 <tr>
-                  <td colSpan={6}>No projects yet. Create your first site.</td>
+                  <td colSpan={5}>
+                    {projects.length === 0
+                      ? 'No projects yet. Create your first site.'
+                      : 'No projects match your search.'}
+                  </td>
                 </tr>
               ) : (
-                projects.map((project) => {
+                visibleProjects.map((project) => {
                   const isActive = Number(activeProjectId) === Number(project.id);
-                  const publicUrl = buildProjectHomePreviewUrl(project, { isActiveProject: isActive });
+                  const routingOrigin = liveRoot.replace(/\/+$/, '');
+                  const localhostRouting = describeLocalhostRouting(project, {
+                    isDefault: isActive,
+                    origin: routingOrigin,
+                  });
+                  const domainRouting = describeDomainRouting(project, { origin: routingOrigin });
+                  const publicUrl = resolvePrimaryPreviewUrl(project, {
+                    isDefault: isActive,
+                    origin: routingOrigin,
+                  });
+                  const isArchived = project.status === 'ARCHIVED';
                   return (
-                    <tr key={project.id}>
+                    <tr
+                      key={project.id}
+                      className={[
+                        isActive ? 'is-default-site' : '',
+                        isArchived ? 'is-archived' : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
+                    >
                       <td>
-                        <strong>{project.name}</strong>
-                        {isActive ? <span className="d-projects__active-badge">Default</span> : null}
-                      </td>
-                      <td>
-                        <code>{project.slug}</code>
-                      </td>
-                      <td>
-                        <div className="d-projects__domain-cell">
-                          <span>{project.domain || '—'}</span>
-                          {project.domain ? (
-                            <DomainStatusBadge status={project.domainStatus} />
+                        <div className="d-projects__project-cell">
+                          <span className="platform-table__primary">{project.name}</span>
+                          <span className="platform-table__meta">
+                            slug: <code>{project.slug}</code>
+                            <span className="d-projects__project-id"> · id {project.id}</span>
+                          </span>
+                          {isActive ? <span className="d-projects__active-badge">localhost default</span> : null}
+                          {domainRouting.domain ? (
+                            <span className="d-projects__domain-badge">domain: {domainRouting.domain}</span>
                           ) : null}
                         </div>
                       </td>
+                      <td className="d-projects__routing-cell">
+                        <ProjectRoutingCell routing={localhostRouting} variant="localhost" compact />
+                      </td>
+                      <td className="d-projects__routing-cell">
+                        <ProjectRoutingCell routing={domainRouting} variant="domain" compact />
+                      </td>
                       <td>
                         <span
-                          className={`platform-badge platform-badge--${project.status === 'ARCHIVED' ? 'muted' : 'success'}`}
+                          className={`platform-badge platform-badge--${isArchived ? 'muted' : 'success'}`}
                         >
                           {statusLabel(project.status)}
                         </span>
                       </td>
                       <td>
-                        <a href={publicUrl} target="_blank" rel="noopener noreferrer">
-                          {publicUrl}
-                        </a>
-                      </td>
-                      <td>
-                        <div className="platform-actions">
-                          <PublicUrlActions url={publicUrl} />
-                          <Link className="platform-btn" href={dProjectPagesPath(project.id)}>
-                            Pages
-                          </Link>
-                          <button
-                            type="button"
-                            className="platform-btn"
-                            disabled={busyId === project.id || isActive}
-                            onClick={() => setActive(project.id)}
-                          >
-                            {isActive ? 'Default' : 'Set default'}
-                          </button>
-                          <button
-                            type="button"
-                            className="platform-btn"
-                            onClick={() => openEdit(project)}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            className="platform-btn platform-btn--danger"
-                            disabled={busyId === project.id || project.status === 'ARCHIVED'}
-                            onClick={() => archiveProject(project)}
-                          >
-                            Archive
-                          </button>
-                        </div>
+                        <ProjectActionsMenu
+                          project={project}
+                          isActive={isActive}
+                          busy={busyId === project.id}
+                          pagesPath={dProjectPagesPath(project)}
+                          domainsPath={dProjectDomainsPath(project)}
+                          publicUrl={publicUrl}
+                          onSetDefault={setActive}
+                          onEdit={openEdit}
+                          onArchive={archiveProject}
+                          onDelete={deleteProject}
+                        />
                       </td>
                     </tr>
                   );

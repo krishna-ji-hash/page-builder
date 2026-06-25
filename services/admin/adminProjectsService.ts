@@ -7,6 +7,7 @@ import {
   type Project,
 } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { syncPrimaryDomainRecord } from '@/services/admin/adminDomainMapService';
 import {
   AdminProjectValidationError,
   normalizeProjectDomain,
@@ -18,6 +19,7 @@ import {
   validateProjectStatus,
 } from '@/lib/admin/adminProjectInput';
 import { buildDefaultStarterPageJson } from '@/lib/site/defaultStarterPageJson';
+import { deleteProjectSafely } from '@/services/builder/builderService';
 
 const SITE_SETTING_ID = 'main';
 const DEFAULT_HOME_SLUG = 'home';
@@ -158,6 +160,10 @@ export async function createAdminProject(input: {
     return { project, homePage };
   });
 
+  if (domain) {
+    await syncPrimaryDomainRecord(result.project.id, domain);
+  }
+
   return {
     project: serializeProject(result.project),
     homePage: serializePage(result.homePage),
@@ -235,6 +241,10 @@ export async function updateAdminProject(
     data,
   });
 
+  if (input.domain !== undefined) {
+    await syncPrimaryDomainRecord(projectId, project.domain);
+  }
+
   return serializeProject(project);
 }
 
@@ -251,6 +261,37 @@ export async function archiveAdminProject(projectIdRaw: string) {
   });
 
   return serializeProject(project);
+}
+
+/** Permanently remove an archived project and all related data from the database. */
+export async function deleteAdminProjectPermanently(projectIdRaw: string) {
+  const projectId = parseProjectId(projectIdRaw);
+  const existing = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!existing) {
+    throw new AdminProjectValidationError('Project not found');
+  }
+  if (existing.status !== ProjectStatus.ARCHIVED) {
+    throw new AdminProjectValidationError(
+      'Only archived projects can be permanently deleted. Archive the project first.'
+    );
+  }
+
+  await prisma.siteSetting.updateMany({
+    where: { activeProjectId: projectId },
+    data: { activeProjectId: null },
+  });
+
+  const result = await deleteProjectSafely(Number(projectId));
+  if (!result) {
+    throw new AdminProjectValidationError('Project not found');
+  }
+
+  return {
+    id: Number(projectId),
+    deleted: true,
+    name: existing.name,
+    slug: existing.slug,
+  };
 }
 
 export async function setActiveAdminProject(projectIdRaw: string) {

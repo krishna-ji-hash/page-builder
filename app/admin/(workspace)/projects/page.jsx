@@ -1,12 +1,12 @@
-import AdminSitesHub from '@/components/admin/AdminSitesHub';
+import DProjectsList from '@/components/admin/d/DProjectsList';
 
 export const dynamic = 'force-dynamic';
 
 export const metadata = {
   title: 'Projects',
-  description: 'Your sites — open builder, preview, or live',
+  description: 'Manage sites, domains, and published pages',
 };
 
 export default function AdminProjectsPage() {
-  return <AdminSitesHub showHero />;
+  return <DProjectsList />;
 }

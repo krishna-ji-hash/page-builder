@@ -179,8 +179,9 @@ for (const marker of ['getProjectByHost', 'getPublishedPageForRequest', 'normali
 // ── 3. Admin routes (source + build manifest) ───────────────────────────────
 const ADMIN_ROUTE_SOURCES = [
   { route: '/admin', files: ['app/admin/page.jsx'] },
-  { route: '/d (admin home)', files: ['app/d/page.jsx', 'app/d/layout.jsx'] },
-  { route: '/d/projects', files: ['app/d/projects/page.jsx'] },
+  { route: '/admin/projects', files: ['app/admin/(workspace)/projects/page.jsx', 'components/admin/d/DProjectsList.jsx'] },
+  { route: '/d (redirect)', files: ['app/d/page.jsx', 'app/d/layout.jsx'] },
+  { route: '/d/projects (redirect)', files: ['app/d/projects/page.jsx'] },
   {
     route: '/d/home (project slug page)',
     files: ['app/[projectSlug]/[pageSlug]/page.jsx'],
@@ -204,7 +205,7 @@ if (fileExists('.next/routes-manifest.json')) {
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     const pages = collectBuildRoutePages(manifest);
 
-    for (const route of ['/admin', '/d', '/d/projects']) {
+    for (const route of ['/admin', '/admin/projects', '/d', '/d/projects']) {
       if (pages.has(route)) pass(`Build route ${route}`);
       else fail(`Build route ${route}`, 'not in .next/routes-manifest.json');
     }
