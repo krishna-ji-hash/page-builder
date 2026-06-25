@@ -128,7 +128,7 @@ async function buildPublishedPageFromJsonRow(row, pageContext = null) {
     projectPages: pageRows.map((page) => ({
       slug: page.slug,
       title: page.title,
-      href: publicPagePath(row.project_slug, page.slug),
+      href: publicPagePath(row.project_slug, page.slug, { publicSite: true }),
     })),
   };
 }
@@ -253,7 +253,7 @@ async function getPublishedPageRaw(projectSlug, pageSlug, pageContext = null) {
     projectPages: pageRows.map((page) => ({
       slug: page.slug,
       title: page.title,
-      href: publicPagePath(row.project_slug, page.slug),
+      href: publicPagePath(row.project_slug, page.slug, { publicSite: true }),
     })),
   };
 }

@@ -627,6 +627,9 @@ function renderNodeContent(node, renderOpts = {}) {
     builderCanvas: builderCanvasHooks,
     pageId: builderPageId,
     projectId: builderProjectId,
+    projectSlug: projectSlug || null,
+    projectPages: projectPages || null,
+    currentPath: currentPublicPath || '#',
     builderInlineCss: widgetCss || undefined,
     formPreviewMode: formPreviewMode || null,
     sectionTone: sectionTone || null,
@@ -6096,6 +6099,9 @@ export default function BuilderCanvas({
   showGrid = false,
   projectId,
   pageId: builderPageIdProp = null,
+  projectSlug = null,
+  projectPages = null,
+  currentPublicPath = '#',
 }) {
   const builderPageId = Number(builderPageIdProp) > 0 ? Number(builderPageIdProp) : null;
   const builderProjectId = Number(projectId) > 0 ? Number(projectId) : null;

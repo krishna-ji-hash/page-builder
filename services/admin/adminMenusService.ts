@@ -337,7 +337,7 @@ function runtimeItemsFromSerialized(items: SerializedMenuItem[], pageSlugById: M
   const mapNode = (item: SerializedMenuItem) => {
     let to = item.url?.trim() || '#';
     if (item.pageId && pageSlugById.has(item.pageId)) {
-      to = publicPagePath(projectSlug, pageSlugById.get(item.pageId)!);
+      to = publicPagePath(projectSlug, pageSlugById.get(item.pageId)!, { publicSite: true });
     }
     return {
       label: item.label,

@@ -1,17 +1,14 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { isDAdminPath } from '@/lib/site/dAdminPaths';
 import {
   isBuilderHost,
   isClientDomain,
   readRequestHost,
 } from '@/lib/site/hostUtils';
+import { getPublicProjectSlug, isFlatPublicUrlsEnabled } from '@/lib/publicSiteUrls';
 
 function isAdminOrDPath(pathname: string): boolean {
-  return (
-    pathname === '/admin' ||
-    pathname.startsWith('/admin/') ||
-    pathname === '/d' ||
-    pathname.startsWith('/d/')
-  );
+  return pathname === '/admin' || pathname.startsWith('/admin/') || isDAdminPath(pathname);
 }
 
 function isAdminApiPath(pathname: string): boolean {
@@ -43,7 +40,24 @@ function isProtectedAdminPath(pathname: string): boolean {
 }
 
 function isProtectedDPath(pathname: string): boolean {
-  return pathname === '/d' || pathname.startsWith('/d/');
+  return isDAdminPath(pathname);
+}
+
+/** `/d/about` → `/about` when flat URLs + primary project slug matches. */
+function tryCanonicalFlatPublicRedirect(request: NextRequest): NextResponse | null {
+  if (!isFlatPublicUrlsEnabled()) return null;
+
+  const publicSlug = getPublicProjectSlug();
+  const { pathname } = request.nextUrl;
+  const prefix = `/${publicSlug}/`;
+  if (!pathname.startsWith(prefix) || isDAdminPath(pathname)) return null;
+
+  const rest = pathname.slice(prefix.length);
+  if (!rest) return null;
+
+  const target = request.nextUrl.clone();
+  target.pathname = `/${rest}`;
+  return NextResponse.redirect(target, 308);
 }
 
 function isProtectedApiPath(pathname: string, method = 'GET'): boolean {
@@ -90,6 +104,9 @@ export async function middleware(request: NextRequest) {
   );
   const { pathname } = request.nextUrl;
   const onBuilderHost = isBuilderHost(host);
+
+  const flatRedirect = tryCanonicalFlatPublicRedirect(request);
+  if (flatRedirect) return flatRedirect;
 
   if (isAdminOrDPath(pathname) && isClientDomain(host)) {
     return redirectToHome(request);

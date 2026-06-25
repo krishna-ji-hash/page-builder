@@ -984,7 +984,7 @@ export default function BuilderShell({ pageId, apiMode = 'legacy' }) {
       ? buildPublicPreviewUrl(adminProject, page.slug)
       : null
     : page?.projectSlug && page?.slug
-      ? publicPagePath(page.projectSlug, page.slug)
+      ? publicPagePath(page.projectSlug, page.slug, { publicSite: true })
       : null;
   const previewUrl = isAdminApi
     ? dPreviewPagePath(pid)
@@ -5262,6 +5262,13 @@ export default function BuilderShell({ pageId, apiMode = 'legacy' }) {
               showGrid={showGrid}
               pageId={pid}
               projectId={page?.projectId}
+              projectSlug={page?.projectSlug || null}
+              projectPages={projectPages}
+              currentPublicPath={
+                page?.projectSlug && page?.slug
+                  ? publicPagePath(page.projectSlug, page.slug, { publicSite: true })
+                  : '#'
+              }
             />
           </div>
           <aside className="bld-right" aria-label="Style and properties">

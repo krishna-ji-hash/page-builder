@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { prefixMenuItemsWithProjectSlug, prefixRelativeAppPath } from '../lib/projectPathPrefix.js';
+import {
+  normalizePublicSiteHref,
+  prefixMenuItemsWithProjectSlug,
+  prefixRelativeAppPath,
+} from '../lib/projectPathPrefix.js';
 import { normalizeMenuItems } from '../lib/menuItems.js';
 
 test('prefixRelativeAppPath: maps / and /about under project slug', () => {
@@ -56,6 +60,52 @@ test('prefixRelativeAppPath: flat primary project uses root paths', () => {
     );
     const menu = prefixMenuItemsWithProjectSlug([{ label: 'About', to: '/about-us' }], 'dispatch');
     assert.equal(menu[0].to, '/about-us');
+  } finally {
+    if (prevSlug === undefined) delete process.env.NEXT_PUBLIC_PUBLIC_PROJECT_SLUG;
+    else process.env.NEXT_PUBLIC_PUBLIC_PROJECT_SLUG = prevSlug;
+    if (prevFlat === undefined) delete process.env.NEXT_PUBLIC_FLAT_PUBLIC_URLS;
+    else process.env.NEXT_PUBLIC_FLAT_PUBLIC_URLS = prevFlat;
+  }
+});
+
+test('normalizePublicSiteHref: unwraps stored localhost /d/ absolute URLs', () => {
+  const opts = { publicSite: true };
+  assert.equal(
+    normalizePublicSiteHref('http://localhost:3000/d/domestic-shipping', 'd', opts),
+    '/domestic-shipping'
+  );
+  assert.equal(
+    normalizePublicSiteHref('http://localhost:3000/d/bulk-shipping', 'd', opts),
+    '/bulk-shipping'
+  );
+});
+
+test('prefixMenuItemsWithProjectSlug: fixes absolute menu links on hover href', () => {
+  const items = [
+    {
+      label: 'Services',
+      children: [{ label: 'Domestic Shipping', to: 'http://localhost:3000/d/domestic-shipping' }],
+    },
+  ];
+  const out = prefixMenuItemsWithProjectSlug(items, 'd', '/home', [], { publicSite: true });
+  assert.equal(out[0].children[0].to, '/domestic-shipping');
+});
+
+test('prefixRelativeAppPath: flat URLs for project slug d', () => {
+  const prevSlug = process.env.NEXT_PUBLIC_PUBLIC_PROJECT_SLUG;
+  const prevFlat = process.env.NEXT_PUBLIC_FLAT_PUBLIC_URLS;
+  process.env.NEXT_PUBLIC_PUBLIC_PROJECT_SLUG = 'dispatch';
+  process.env.NEXT_PUBLIC_FLAT_PUBLIC_URLS = 'true';
+  try {
+    assert.equal(
+      prefixRelativeAppPath('cross-border-shipping', 'd', { publicSite: true }),
+      '/cross-border-shipping'
+    );
+    assert.equal(prefixRelativeAppPath('/d/home', 'd', { publicSite: true }), '/home');
+    assert.equal(
+      prefixRelativeAppPath('/d/cross-border-shipping', 'd', { publicSite: true }),
+      '/cross-border-shipping'
+    );
   } finally {
     if (prevSlug === undefined) delete process.env.NEXT_PUBLIC_PUBLIC_PROJECT_SLUG;
     else process.env.NEXT_PUBLIC_PUBLIC_PROJECT_SLUG = prevSlug;
