@@ -50,3 +50,7 @@ tmp/
 temp/
 uploads/
 public/uploads/
+
+# SQL dump files
+*.sql
+*.sql.gz
