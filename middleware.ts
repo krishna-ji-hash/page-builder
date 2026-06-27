@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { requestHasAdminSessionCookie } from '@/lib/auth/sessionCookie';
 import { isDAdminPath } from '@/lib/site/dAdminPaths';
 import {
   isBuilderHost,
@@ -82,6 +83,8 @@ function redirectToHome(request: NextRequest): NextResponse {
 }
 
 async function hasValidSession(request: NextRequest): Promise<boolean> {
+  if (!requestHasAdminSessionCookie(request)) return false;
+
   const origin = request.nextUrl.origin;
   try {
     const res = await fetch(`${origin}/api/auth/session-check`, {
@@ -90,7 +93,9 @@ async function hasValidSession(request: NextRequest): Promise<boolean> {
     });
     return res.ok;
   } catch {
-    return false;
+    // Render cold starts / internal fetch hiccups must not cause login redirect loops.
+    // Route handlers and server layouts validate the session against the database.
+    return true;
   }
 }
 
@@ -145,8 +150,7 @@ export async function middleware(request: NextRequest) {
 
   if (!isAuthDisabled()) {
     if (isProtectedAdminPath(pathname) || isProtectedDPath(pathname)) {
-      const valid = await hasValidSession(request);
-      if (!valid) {
+      if (!requestHasAdminSessionCookie(request)) {
         const loginUrl = request.nextUrl.clone();
         loginUrl.pathname = '/admin/login';
         loginUrl.searchParams.set('next', pathname);
