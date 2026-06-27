@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   getPublicProjectSlug,
+  isReservedProjectSlugSegment,
   isRootPublicPageSlug,
   publicPagePath,
   shouldServeFlatPublicPage,
@@ -38,4 +39,12 @@ test('isRootPublicPageSlug: reserves admin and project slug', () => {
     if (prevSlug === undefined) delete process.env.NEXT_PUBLIC_PUBLIC_PROJECT_SLUG;
     else process.env.NEXT_PUBLIC_PUBLIC_PROJECT_SLUG = prevSlug;
   }
+});
+
+test('isReservedProjectSlugSegment: blocks admin/api but not project slug d', () => {
+  assert.equal(isReservedProjectSlugSegment('admin'), true);
+  assert.equal(isReservedProjectSlugSegment('api'), true);
+  assert.equal(isReservedProjectSlugSegment('preview'), true);
+  assert.equal(isReservedProjectSlugSegment('d'), false);
+  assert.equal(isReservedProjectSlugSegment('dispatch'), false);
 });

@@ -11,7 +11,7 @@
     "dev:firewall": "powershell -ExecutionPolicy Bypass -File scripts/open-dev-firewall.ps1",
     "dev:firewall:win": "scripts\\open-dev-firewall.bat",
     "build": "next build",
-    "start": "next start -H 0.0.0.0",
+    "start": "node scripts/start-production.mjs",
     "db:up": "docker compose up -d",
     "db:xampp": "node scripts/ensure-mysql.mjs",
     "db:down": "docker compose down",
