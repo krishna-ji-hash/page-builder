@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
 import PublicProjectPage from "../[projectSlug]/[pageSlug]/page";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const RESERVED_ROOT_SEGMENTS = new Set([
   "admin",
   "api",
