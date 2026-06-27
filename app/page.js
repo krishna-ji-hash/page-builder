@@ -1,18 +1,11 @@
-﻿import PublicHostCatchAllPage, { generateMetadata as catchAllGenerateMetadata } from './[[...slug]]/page';
-
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
-export async function generateMetadata(props) {
-  return catchAllGenerateMetadata({
-    ...props,
-    params: Promise.resolve({ slug: [] }),
-  });
-}
+﻿import PublicProjectPage from "./[projectSlug]/[pageSlug]/page";
 
 export default function RootPage(props) {
-  return PublicHostCatchAllPage({
+  return PublicProjectPage({
     ...props,
-    params: Promise.resolve({ slug: [] }),
+    params: Promise.resolve({
+      projectSlug: "d",
+      pageSlug: "home",
+    }),
   });
 }
