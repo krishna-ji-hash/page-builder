@@ -61,7 +61,21 @@ export default async function PublicSitePageView({ projectSlug, pageSlug, search
   const sp = searchParams ? await Promise.resolve(searchParams) : null;
   const pageParam = typeof sp?.page === 'string' ? Number(sp.page) : 0;
   const pageContext = Number.isInteger(pageParam) && pageParam > 0 ? { cms: { page: pageParam } } : null;
-  const page = await getPublishedPageForPublic(projectSlug, pageSlug, pageContext);
+
+  let page;
+  try {
+    page = await getPublishedPageForPublic(projectSlug, pageSlug, pageContext);
+  } catch (error) {
+    console.error('[publicSite] failed to load published page:', error?.message || error);
+    return (
+      <div style={{ padding: 40, maxWidth: 520, margin: '0 auto', textAlign: 'center' }}>
+        <h1 style={{ fontSize: 20, marginBottom: 8 }}>Site temporarily unavailable</h1>
+        <p style={{ color: '#64748b', margin: 0 }}>
+          Database connection failed. Check MySQL env vars on Render and that your Aiven service is running.
+        </p>
+      </div>
+    );
+  }
 
   if (!page) {
     return (
