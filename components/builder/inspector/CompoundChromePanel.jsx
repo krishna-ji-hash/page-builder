@@ -1,23 +1,22 @@
 'use client';
 
 import FeatureTabsControls from '@/components/builder/inspector/FeatureTabsControls';
+import InspectorColorInput from '@/components/builder/inspector/InspectorColorInput';
 import { InspectorNumField, inspectorNumStringChange } from '@/components/builder/inspector/InspectorNumeric';
 import { InspectorSection } from '@/components/builder/inspector/InspectorUi';
 import { COMPOUND_CHROME_KINDS, getCompoundWidgetMeta } from '@/lib/compoundWidgetRegistry';
 
 function ColorField({ id, label, formKey, value, onChange }) {
-  const hex = /^#[0-9a-f]{6}$/i.test(String(value || '')) ? value : '#e2e8f0';
   return (
     <div className="bld-field">
       <label className="bld-label" htmlFor={id}>
         {label}
       </label>
-      <input
+      <InspectorColorInput
         id={id}
-        type="color"
-        className="bld-input"
-        value={hex}
-        onChange={(e) => onChange(formKey, e.target.value)}
+        value={value}
+        fallback="#e2e8f0"
+        onChange={(hex) => onChange(formKey, hex)}
         onMouseDown={(e) => e.stopPropagation()}
       />
     </div>

@@ -4572,6 +4572,24 @@ function NodeRenderer({
     }
   };
 
+  const addColumnToRow = async (event) => {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    if (sectionEditLocked) return;
+    if (node.nodeType !== 'row') return;
+    const colCount = (node.children || []).filter((c) => c.nodeType === 'column').length;
+    if (colCount >= 6) return;
+    onSelectNode(node.id);
+    if (onQuickAddNode) {
+      await onQuickAddNode({ targetNodeId: node.id, nodeType: 'column' });
+    } else {
+      await onCreateNode?.({ nodeType: 'column', parentNodeId: node.id });
+    }
+  };
+
+  const rowColumnCount =
+    node.nodeType === 'row' ? (node.children || []).filter((c) => c.nodeType === 'column').length : 0;
+
   const quickLayoutControls =
     isLayoutContainer && isSelected && !sectionEditLocked ? (
       <div
@@ -4579,6 +4597,22 @@ function NodeRenderer({
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
+        {node.nodeType === 'row' ? (
+          <>
+            <span className="bld-quick-layout-controls__meta" title="Columns in this section (side by side)">
+              {rowColumnCount || 0} col{rowColumnCount === 1 ? '' : 's'}
+            </span>
+            <button
+              type="button"
+              className="bld-quick-layout-controls__btn"
+              onClick={(e) => void addColumnToRow(e)}
+              disabled={isSavingNode || isCreatingNode || isLinkedGlobal || rowColumnCount >= 6}
+              title="Add a column — 1 col = stacked in one lane, 2+ cols = left/right lanes. Drag widgets between stacks in Layers (↳)."
+            >
+              + Col
+            </button>
+          </>
+        ) : null}
         <button type="button" className="bld-quick-layout-controls__btn" onClick={() => quickSetDirection('row')} disabled={isSavingNode}>
           Row
         </button>

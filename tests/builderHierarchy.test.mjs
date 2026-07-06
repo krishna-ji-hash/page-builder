@@ -5,6 +5,7 @@ import {
   assertValidReorderParent,
   isValidNodeHierarchy,
 } from '../lib/builderHierarchy.js';
+import { PDP_BLOCK_NODE_TYPES } from '../lib/pdpElementRegistry.js';
 
 test('row only at root', () => {
   assertValidNodeHierarchy('row', null);
@@ -53,6 +54,13 @@ test('blocks only inside stack', () => {
 test('isValidNodeHierarchy mirrors assert', () => {
   assert.equal(isValidNodeHierarchy('button', 'stack'), true);
   assert.equal(isValidNodeHierarchy('button', 'row'), false);
+});
+
+test('PDP widgets only inside stack', () => {
+  for (const nodeType of PDP_BLOCK_NODE_TYPES) {
+    assertValidNodeHierarchy(nodeType, 'stack');
+    assert.throws(() => assertValidNodeHierarchy(nodeType, 'row'), /inside stack/);
+  }
 });
 
 test('assertValidReorderParent rejects non-containers', () => {

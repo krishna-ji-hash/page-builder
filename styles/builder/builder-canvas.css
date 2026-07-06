@@ -1227,6 +1227,17 @@
   background: var(--bld-primary);
 }
 
+.bld-quick-layout-controls__meta {
+  align-self: center;
+  padding: 0 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--bld-text-soft);
+  white-space: nowrap;
+}
+
 .bld-wp-toolbar__icon-btn--text,
 .bld-wp-toolbar__nowrap-btn {
   width: auto;

@@ -2,33 +2,13 @@
 
 import { useMemo, useRef, useState } from 'react';
 import MediaLibraryModal from '@/components/builder/media/MediaLibraryModal';
+import InspectorColorInput from '@/components/builder/inspector/InspectorColorInput';
+import { isTransparentBackground } from '@/lib/colorInputUtils';
 
 function bgImageCssUrl(url) {
   if (!url) return undefined;
   const safe = String(url).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   return `url("${safe}")`;
-}
-
-/** True when the stored value should paint as fully transparent in CSS. */
-function isTransparentBackground(color) {
-  if (color == null || color === '') return false;
-  const s = String(color).trim().toLowerCase().replace(/\s/g, '');
-  if (s === 'transparent') return true;
-  if (s === 'rgba(0,0,0,0)' || s === 'hsla(0,0%,0%,0)') return true;
-  const m = /^#([0-9a-f]{8})$/i.exec(s);
-  if (m && m[1].slice(6, 8).toLowerCase() === '00') return true;
-  return false;
-}
-
-/** `#rrggbb` only — native color input rejects `transparent`. */
-function hex6ForColorInput(color) {
-  const s = String(color || '').trim();
-  if (/^#[0-9a-f]{6}$/i.test(s)) return s;
-  if (/^#[0-9a-f]{3}$/i.test(s)) {
-    const h = s.slice(1);
-    return `#${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}`;
-  }
-  return '#94a3b8';
 }
 
 export default function BackgroundControls({ form, onUpdate, projectId, selectedNode = null }) {
@@ -89,12 +69,11 @@ export default function BackgroundControls({ form, onUpdate, projectId, selected
       <div className="bld-field">
         <label className="bld-label">Background Color</label>
         <div className="bld-field-grid" style={{ gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'center' }}>
-          <input
-            type="color"
-            className="bld-input"
+          <InspectorColorInput
             aria-label="Solid background color"
-            value={hex6ForColorInput(form.bgColor)}
-            onChange={(e) => onUpdate('bgColor', e.target.value)}
+            value={form.bgColor}
+            fallback="#ffffff"
+            onChange={(hex) => onUpdate('bgColor', hex)}
           />
           <button
             type="button"

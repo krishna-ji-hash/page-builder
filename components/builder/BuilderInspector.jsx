@@ -37,6 +37,7 @@ import {
   patchCompoundChromeFromKey,
 } from '@/lib/compoundChromeInspector';
 import { isCompoundWidgetType } from '@/lib/compoundWidgetRegistry';
+import { backgroundImageUrlForInspector } from '@/lib/colorInputUtils';
 import {
   columnHeadingFromProps,
   columnHeadingInspectorFields,
@@ -177,6 +178,8 @@ import { applyButtonStylePresetToStyleJson } from '@/lib/buttonStylePresets';
 
 const IX_PREVIEW_MS = 48;
 const IX_SAVE_MS = 420;
+const STYLE_COLOR_SAVE_MS = 400;
+const STYLE_COLOR_KEYS = new Set(['bgColor', 'textColor', 'borderColor']);
 const IX_SAVE_IMMEDIATE_KEYS = new Set([
   'preset',
   'trigger',
@@ -515,6 +518,8 @@ export default function BuilderInspector({
   const ixPreviewTimerRef = useRef(null);
   const ixSaveTimerRef = useRef(null);
   const ixPendingIxRef = useRef(null);
+  const styleColorSaveTimerRef = useRef(null);
+  const styleColorPersistRef = useRef(null);
   const inspectorFormSyncKeyRef = useRef('');
   const selectedNodeRef = useRef(selectedNode);
   const deviceRef = useRef(device);
@@ -1189,7 +1194,7 @@ export default function BuilderInspector({
       dividerOrientation: selectedNode.props?.orientation === 'vertical' ? 'vertical' : 'horizontal',
       dividerThicknessPx: Number(selectedNode.props?.thicknessPx) > 0 ? Number(selectedNode.props.thicknessPx) : 2,
     bgColor: style?.colors?.backgroundColor || style?.background?.backgroundColor || '#ffffff',
-    bgImageUrl: style?.background?.backgroundImage || '',
+    bgImageUrl: backgroundImageUrlForInspector(style?.background?.backgroundImage),
     bgImageAlt: style?.background?.meta?.altText || '',
     bgImageTitle: style?.background?.meta?.title || '',
     bgSize: style?.background?.backgroundSize ? String(style.background.backgroundSize) : 'cover',
@@ -1892,6 +1897,18 @@ export default function BuilderInspector({
       flushHtmlBlockDebouncedSaves();
     };
   }, [selectedNode?.id, flushHtmlBlockDebouncedSaves]);
+
+  useEffect(() => {
+    return () => {
+      if (styleColorSaveTimerRef.current) {
+        clearTimeout(styleColorSaveTimerRef.current);
+        styleColorSaveTimerRef.current = null;
+      }
+      const job = styleColorPersistRef.current;
+      styleColorPersistRef.current = null;
+      if (job) void job();
+    };
+  }, [selectedNode?.id]);
 
   const handleApplyStylePreset = async (presetPatch) => {
     if (!selectedNode || !presetPatch) return;
@@ -3495,95 +3512,112 @@ export default function BuilderInspector({
       }
 
       previewStylePatch(built.patch);
-      const style_json = mergeStyleForDevice(styleTarget, device, built.patch, siteTheme, baseJsonOverride);
-      const nodePayload = { style_json };
-      if (statsLayoutTarget && built.patch?.layout?.gap != null) {
-        nodePayload.props = {
-          ...(styleTarget.props || {}),
-          gapPx: parsePxValue(built.patch.layout.gap, 32),
-        };
-      } else if (built.propsMetaPatch) {
-        const prevMeta =
-          selectedNode.props?.meta &&
-          typeof selectedNode.props.meta === 'object' &&
-          !Array.isArray(selectedNode.props.meta)
-            ? selectedNode.props.meta
-            : {};
-        nodePayload.props = {
-          ...selectedNode.props,
-          meta: { ...prevMeta, ...built.propsMetaPatch },
-        };
-      }
-      await updateNode(styleTarget.id, nodePayload);
 
-      if (statsLayoutTarget) return;
+      const persistStylePatch = async () => {
+        const style_json = mergeStyleForDevice(styleTarget, device, built.patch, siteTheme, baseJsonOverride);
+        const nodePayload = { style_json };
+        if (statsLayoutTarget && built.patch?.layout?.gap != null) {
+          nodePayload.props = {
+            ...(styleTarget.props || {}),
+            gapPx: parsePxValue(built.patch.layout.gap, 32),
+          };
+        } else if (built.propsMetaPatch) {
+          const prevMeta =
+            selectedNode.props?.meta &&
+            typeof selectedNode.props.meta === 'object' &&
+            !Array.isArray(selectedNode.props.meta)
+              ? selectedNode.props.meta
+              : {};
+          nodePayload.props = {
+            ...selectedNode.props,
+            meta: { ...prevMeta, ...built.propsMetaPatch },
+          };
+        }
+        await updateNode(styleTarget.id, nodePayload);
 
-      const isRow = selectedNode?.nodeType === 'row';
-      const isRootLandmarkRow =
-        isRow &&
-        Array.isArray(pageTree) &&
-        pageTree.length > 0 &&
-        isRootPageRow(pageTree, selectedNode) &&
-        (isHeaderRowNode(selectedNode) || isFooterRowNode(selectedNode));
-      const rawMode = isRow ? String(nextFormSnapshot.containerWidthMode || 'full') : 'full';
-      const containerMode = rawMode === 'custom' ? 'boxed' : rawMode;
-      const containerPx = Math.max(320, Math.min(2400, parsePxFromPatch(nextFormSnapshot.containerWidthPx, 1200)));
+        if (statsLayoutTarget) return;
 
-      if (onUpdateNode && built.needsRowMeta) {
-        const prevMeta =
-          selectedNode.props?.meta &&
-          typeof selectedNode.props.meta === 'object' &&
-          !Array.isArray(selectedNode.props.meta)
-            ? selectedNode.props.meta
-            : {};
-        if (isRootLandmarkRow) {
-          const contentMode = containerMode === 'boxed' ? 'boxed' : 'full';
-          const contentMetaKey = isHeaderRowNode(selectedNode) ? 'headerContentWidth' : 'footerContentWidth';
-          const maxMetaKey = isHeaderRowNode(selectedNode) ? 'headerContentMaxWidthPx' : 'footerContentMaxWidthPx';
-          await onUpdateNode({
-            nodeId: selectedNode.id,
-            payload: {
-              props: {
-                ...selectedNode.props,
-                meta: {
-                  ...prevMeta,
-                  rootStripLayout: 'full',
-                  [contentMetaKey]: contentMode,
-                  [maxMetaKey]: containerPx,
-                },
-              },
-            },
-          });
-        } else if (
+        const isRow = selectedNode?.nodeType === 'row';
+        const isRootLandmarkRow =
           isRow &&
           Array.isArray(pageTree) &&
           pageTree.length > 0 &&
           isRootPageRow(pageTree, selectedNode) &&
-          !isHeaderRowNode(selectedNode) &&
-          !isFooterRowNode(selectedNode)
-        ) {
-          const sectionWidthMode =
-            key === 'sectionWidthMode' && String(nextFormSnapshot.sectionWidthMode || '').trim()
-              ? String(nextFormSnapshot.sectionWidthMode).trim()
-              : containerMode === 'boxed'
-                ? 'boxed'
-                : 'fullWidthContentBoxed';
-          await onUpdateNode({
-            nodeId: selectedNode.id,
-            payload: {
-              props: {
-                ...selectedNode.props,
-                meta: {
-                  ...prevMeta,
-                  rootStripLayout: containerMode === 'boxed' ? 'boxed' : 'full',
-                  sectionWidthMode,
-                  sectionContentMaxWidthPx: containerPx,
+          (isHeaderRowNode(selectedNode) || isFooterRowNode(selectedNode));
+        const rawMode = isRow ? String(nextFormSnapshot.containerWidthMode || 'full') : 'full';
+        const containerMode = rawMode === 'custom' ? 'boxed' : rawMode;
+        const containerPx = Math.max(320, Math.min(2400, parsePxFromPatch(nextFormSnapshot.containerWidthPx, 1200)));
+
+        if (onUpdateNode && built.needsRowMeta) {
+          const prevMeta =
+            selectedNode.props?.meta &&
+            typeof selectedNode.props.meta === 'object' &&
+            !Array.isArray(selectedNode.props.meta)
+              ? selectedNode.props.meta
+              : {};
+          if (isRootLandmarkRow) {
+            const contentMode = containerMode === 'boxed' ? 'boxed' : 'full';
+            const contentMetaKey = isHeaderRowNode(selectedNode) ? 'headerContentWidth' : 'footerContentWidth';
+            const maxMetaKey = isHeaderRowNode(selectedNode) ? 'headerContentMaxWidthPx' : 'footerContentMaxWidthPx';
+            await onUpdateNode({
+              nodeId: selectedNode.id,
+              payload: {
+                props: {
+                  ...selectedNode.props,
+                  meta: {
+                    ...prevMeta,
+                    rootStripLayout: 'full',
+                    [contentMetaKey]: contentMode,
+                    [maxMetaKey]: containerPx,
+                  },
                 },
               },
-            },
-          });
+            });
+          } else if (
+            isRow &&
+            Array.isArray(pageTree) &&
+            pageTree.length > 0 &&
+            isRootPageRow(pageTree, selectedNode) &&
+            !isHeaderRowNode(selectedNode) &&
+            !isFooterRowNode(selectedNode)
+          ) {
+            const sectionWidthMode =
+              key === 'sectionWidthMode' && String(nextFormSnapshot.sectionWidthMode || '').trim()
+                ? String(nextFormSnapshot.sectionWidthMode).trim()
+                : containerMode === 'boxed'
+                  ? 'boxed'
+                  : 'fullWidthContentBoxed';
+            await onUpdateNode({
+              nodeId: selectedNode.id,
+              payload: {
+                props: {
+                  ...selectedNode.props,
+                  meta: {
+                    ...prevMeta,
+                    rootStripLayout: containerMode === 'boxed' ? 'boxed' : 'full',
+                    sectionWidthMode,
+                    sectionContentMaxWidthPx: containerPx,
+                  },
+                },
+              },
+            });
+          }
         }
+      };
+
+      if (STYLE_COLOR_KEYS.has(key)) {
+        styleColorPersistRef.current = persistStylePatch;
+        if (styleColorSaveTimerRef.current) clearTimeout(styleColorSaveTimerRef.current);
+        styleColorSaveTimerRef.current = setTimeout(() => {
+          styleColorSaveTimerRef.current = null;
+          const job = styleColorPersistRef.current;
+          styleColorPersistRef.current = null;
+          if (job) void job();
+        }, STYLE_COLOR_SAVE_MS);
+        return;
       }
+
+      await persistStylePatch();
     } finally {
       styleChangeInFlightRef.current = Math.max(0, styleChangeInFlightRef.current - 1);
     }
