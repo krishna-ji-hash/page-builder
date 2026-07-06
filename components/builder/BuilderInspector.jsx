@@ -52,6 +52,7 @@ import {
   advancedElementPatchFromFormKey,
   tryParseAdvancedElementJson,
 } from '@/lib/advancedElementInspector';
+import { isHtmlBlockFormKey } from '@/lib/advancedElementInspectorBatch2';
 import { appendFaqItem, normalizeFaqItems, patchFaqItems, removeFaqItemAt } from '@/lib/faqAccordionDefaults';
 import {
   ensureTickerRowSlideArrays,
@@ -798,6 +799,8 @@ export default function BuilderInspector({
   // Same issue for other carousel fields (number inputs + other selects/toggles).
   // Parent often provides a new `selectedNode` object before async save completes, so we keep a short-lived draft.
   const pendingCarouselFormRef = useRef({});
+  const pendingHtmlBlockFormRef = useRef({});
+  const htmlBlockSaveTimersRef = useRef({});
   /** Layout/size numeric fields — avoids useEffect form sync fighting InspectorNumInput (infinite setState loop). */
   const pendingStyleFormRef = useRef({});
   const styleChangeInFlightRef = useRef(0);
@@ -1141,6 +1144,8 @@ export default function BuilderInspector({
     const pickPending = (fieldKey, nodeValue) => {
       const styleDraft = pickPendingFromRef(pendingStyleFormRef.current, fieldKey, nodeValue, 2000);
       if (styleDraft != null) return styleDraft;
+      const htmlBlockDraft = pickPendingFromRef(pendingHtmlBlockFormRef.current, fieldKey, nodeValue, 3000);
+      if (htmlBlockDraft != null) return htmlBlockDraft;
       const carouselDraft = pickPendingFromRef(pendingCarouselFormRef.current, fieldKey, nodeValue, 1500);
       if (carouselDraft != null) return carouselDraft;
       return nodeValue;
@@ -1404,7 +1409,7 @@ export default function BuilderInspector({
       ...(isBrandLogoInspectorNode(selectedNode, pageTree)
         ? brandLogoFormFields(selectedNode.props || {})
         : {}),
-      ...advancedElementFormFromProps(selectedNode.props || {}),
+      ...advancedElementFormFromProps(selectedNode.props || {}, pickPending),
       carouselVariant: pickPending(
         'carouselVariant',
         shouldUsePendingVariant ? pendingVariant.value : nodeCarouselVariant
@@ -1869,6 +1874,25 @@ export default function BuilderInspector({
     };
   }, [selectedNode?.id, flushInteractionSave]);
 
+  const flushHtmlBlockDebouncedSaves = useCallback(() => {
+    const timers = htmlBlockSaveTimersRef.current;
+    Object.keys(timers).forEach((timerKey) => {
+      const entry = timers[timerKey];
+      if (!entry) return;
+      if (entry.timer) clearTimeout(entry.timer);
+      if (typeof entry.flush === 'function') {
+        entry.flush().catch(() => {});
+      }
+      delete timers[timerKey];
+    });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      flushHtmlBlockDebouncedSaves();
+    };
+  }, [selectedNode?.id, flushHtmlBlockDebouncedSaves]);
+
   const handleApplyStylePreset = async (presetPatch) => {
     if (!selectedNode || !presetPatch) return;
     if (editingDisabledBySectionLock) return;
@@ -1932,6 +1956,10 @@ export default function BuilderInspector({
   };
 
   const handleContentChangeInner = async (key, value) => {
+    if (key === 'htmlBlockFlush') {
+      flushHtmlBlockDebouncedSaves();
+      return;
+    }
     const contentTypoKeys = new Set([
       'fontSizePx',
       'fontWeight',
@@ -2057,6 +2085,9 @@ export default function BuilderInspector({
       setForm((prev) => ({ ...prev, [key]: value }));
     }
     recordPendingInspectorForm(pendingCarouselFormRef, key, value);
+    if (isHtmlBlockFormKey(key)) {
+      recordPendingInspectorForm(pendingHtmlBlockFormRef, key, value);
+    }
     if (selectedNode.nodeType === 'row' && isSectionHeadingInspectorKey(key)) {
       if (key === 'sectionHeadingReset') {
         await updateProps({ sectionHeading: {} });
@@ -2563,7 +2594,30 @@ export default function BuilderInspector({
 
     const advPatch = advancedElementPatchFromFormKey(selectedNode.nodeType, key, value);
     if (advPatch) {
-      const payload = { props: { ...(selectedNode.props || {}), ...advPatch.patch } };
+      if (selectedNode.nodeType === 'html_block' && isHtmlBlockFormKey(key)) {
+        const nodeId = selectedNode.id;
+        const timerKey = `${nodeId}:${key}`;
+        const timers = htmlBlockSaveTimersRef.current;
+        if (timers[timerKey]?.timer) clearTimeout(timers[timerKey].timer);
+
+        const flush = async () => {
+          delete timers[timerKey];
+          await updateProps(advPatch.patch);
+          const pending = { ...pendingHtmlBlockFormRef.current };
+          delete pending[key];
+          pendingHtmlBlockFormRef.current = pending;
+        };
+
+        timers[timerKey] = {
+          timer: setTimeout(() => {
+            flush().catch(() => {});
+          }, 600),
+          flush,
+        };
+        return;
+      }
+
+      const payload = { props: advPatch.patch };
       if (advPatch.stylePatch) {
         const prev = selectedNode.style_json || {};
         payload.style_json = {

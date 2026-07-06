@@ -15,6 +15,16 @@ async function bootstrapAdmin(connection) {
     [email]
   );
   if (existing.length) {
+    const isDev = String(process.env.NODE_ENV || '').toLowerCase() !== 'production';
+    if (isDev && password) {
+      const passwordHash = await hashPassword(password);
+      await connection.execute(
+        `UPDATE admin_users SET password_hash = ?, is_active = 1 WHERE email = ?`,
+        [passwordHash, email]
+      );
+      process.stdout.write(`Synced dev bootstrap password for: ${email}\n`);
+      return;
+    }
     process.stdout.write(`Admin user already exists: ${email}\n`);
     return;
   }

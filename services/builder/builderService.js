@@ -12,6 +12,7 @@ import { normalizeResponsiveStyle } from '@/lib/styleNormalizer';
 import { DEFAULT_SITE_THEME, themeSpacingPx } from '@/lib/siteDesignTheme';
 import { DEFAULT_THEME_TOKENS, createModePalettesFromFlat, normalizeThemeTokens } from '@/lib/themeTokens';
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
+import { normalizeHtmlBlockProps } from '@/lib/htmlBlockCss';
 import { isSectionLockedFlagValue, metaRepresentsExplicitSectionUnlock } from '@/lib/rowLayoutMeta';
 import { freezeGlobalSectionsForPublish } from '@/lib/globalSectionSnapshot';
 import { applyResponsiveDefaultsToTree } from '@/lib/applyPageResponsiveDefaults';
@@ -487,6 +488,73 @@ function sortBuilderNodesParentsBeforeChildren(rows) {
   return list;
 }
 
+/**
+ * Published snapshots may have no `builder_nodes` rows (nodes-only-in-JSON legacy path).
+ * Materialize snapshot tree nodes into mutable draft `builder_nodes` so the builder canvas loads sections.
+ */
+async function materializeSnapshotTreeToBuilderNodesTx(pageId, versionId, snapshotRoots, connection) {
+  const roots = Array.isArray(snapshotRoots) ? snapshotRoots : [];
+  if (!roots.length) return;
+
+  async function insertSubtree(parentId, spec, positionIndex) {
+    const nodeType = String(spec?.nodeType || 'stack');
+    const displayName = String(spec?.displayName || nodeType);
+    const props = normalizeNodeProps(
+      {
+        ...(spec?.props && typeof spec.props === 'object' ? spec.props : {}),
+        style_json: spec?.style_json || spec?.props?.style_json || {},
+      },
+      nodeType,
+    );
+    const dataJson = spec?.dataJson ?? null;
+    const actionsJson = spec?.actionsJson ?? null;
+    const [insertRes] = await connection.query(
+      `INSERT INTO builder_nodes
+        (page_id, version_id, parent_node_id, node_type, display_name, props_json, position_index, data_json, actions_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        pageId,
+        versionId,
+        parentId,
+        nodeType,
+        displayName,
+        JSON.stringify(props),
+        Number.isFinite(Number(positionIndex)) ? Number(positionIndex) : 0,
+        dataJson ? JSON.stringify(dataJson) : null,
+        actionsJson ? JSON.stringify(actionsJson) : null,
+      ],
+    );
+    const newId = insertRes.insertId;
+    const kids = Array.isArray(spec?.children) ? spec.children : [];
+    for (let i = 0; i < kids.length; i += 1) {
+      await insertSubtree(newId, kids[i], kids[i]?.positionIndex ?? i);
+    }
+    return newId;
+  }
+
+  for (let i = 0; i < roots.length; i += 1) {
+    await insertSubtree(null, roots[i], roots[i]?.positionIndex ?? i);
+  }
+}
+
+async function ensureDraftBuilderNodesFromSnapshotTx(pageId, versionId, connection) {
+  const [countRows] = await connection.query(
+    `SELECT COUNT(*) AS total FROM builder_nodes WHERE version_id = ?`,
+    [versionId],
+  );
+  if (Number(countRows[0]?.total || 0) > 0) return false;
+
+  const version = await getVersionById(versionId, connection);
+  const snapshot = parseSnapshot(version?.snapshot_json) || { nodes: [] };
+  const snapNodes = Array.isArray(snapshot.nodes) ? snapshot.nodes : [];
+  if (!snapNodes.length) return false;
+
+  await assertVersionMutableForDraftWrites(connection, versionId);
+  await materializeSnapshotTreeToBuilderNodesTx(pageId, versionId, snapNodes, connection);
+  await refreshVersionSnapshot(versionId, connection);
+  return true;
+}
+
 async function createDraftFromVersion(pageId, sourceVersion, connection) {
   const nextVersionNumber = sourceVersion.version_number + 1;
   const snapshot = parseSnapshot(sourceVersion.snapshot_json) || { nodes: [] };
@@ -527,6 +595,13 @@ async function createDraftFromVersion(pageId, sourceVersion, connection) {
     idMap.set(node.id, insertNode.insertId);
   }
 
+  if (!orderedNodes.length) {
+    const snapNodes = Array.isArray(snapshot.nodes) ? snapshot.nodes : [];
+    if (snapNodes.length) {
+      await materializeSnapshotTreeToBuilderNodesTx(pageId, newVersionId, snapNodes, connection);
+    }
+  }
+
   return getVersionById(newVersionId, connection);
 }
 
@@ -542,6 +617,10 @@ export async function getBuilderState(pageId) {
   const projectPages = await listPagesByProject(page.project_id);
 
   const draftVersion = await ensureDraftVersion(pageId);
+  await withTransaction(async (connection) => {
+    await ensureDraftBuilderNodesFromSnapshotTx(pageId, draftVersion.id, connection);
+  });
+
   const [nodes] = await getDbPool().query(
     `SELECT id, page_id, version_id, parent_node_id, node_type, display_name, props_json, position_index, data_json, actions_json
      FROM builder_nodes
@@ -875,6 +954,11 @@ export async function updateNode(nodeId, payload) {
     }
     if (existing.node_type === 'rich_text' && mergedProps.content !== undefined) {
       mergedProps.content = sanitizeRichHtml(String(mergedProps.content));
+    }
+    if (existing.node_type === 'html_block') {
+      const normalized = normalizeHtmlBlockProps(mergedProps);
+      mergedProps.html = normalized.html;
+      mergedProps.css = normalized.css;
     }
 
     if (brandFontNormalize) {

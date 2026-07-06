@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import HeaderBrandLogo from '@/components/runtime/HeaderBrandLogo';
+import { HTML_BLOCK_CLASS, mergeHtmlBlockCssSources, scopeHtmlBlockCss, splitHtmlBlockStyleFromHtml } from '@/lib/htmlBlockCss';
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
 
 function clamp(n, min, max) {
@@ -279,13 +280,24 @@ export function LiveCountdownTimer({ targetIso, label, className = '' }) {
   );
 }
 
-export function LiveHtmlBlock({ html, className = '' }) {
-  const safe = sanitizeRichHtml(html || '');
+export function LiveHtmlBlock({ html, css = '', blockId, className = '' }) {
+  const { html: htmlWithoutStyles, extractedCss } = splitHtmlBlockStyleFromHtml(html || '');
+  const safe = sanitizeRichHtml(htmlWithoutStyles);
+  const blockKey = blockId != null && String(blockId).trim() ? String(blockId).trim() : '';
+  const cssBundle = mergeHtmlBlockCssSources(css, extractedCss);
+  const scopedCss = useMemo(
+    () => (blockKey && cssBundle ? scopeHtmlBlockCss(cssBundle, blockKey) : ''),
+    [cssBundle, blockKey],
+  );
+
   return (
     <div
-      className={`bld-el bld-el-html ${className}`.trim()}
-      dangerouslySetInnerHTML={{ __html: safe || '<p></p>' }}
-    />
+      className={`${HTML_BLOCK_CLASS} bld-el bld-el-html ${className}`.trim()}
+      data-html-block-id={blockKey || undefined}
+    >
+      {scopedCss ? <style dangerouslySetInnerHTML={{ __html: scopedCss }} /> : null}
+      <div className="bld-el-html__inner" dangerouslySetInnerHTML={{ __html: safe || '<p></p>' }} />
+    </div>
   );
 }
 

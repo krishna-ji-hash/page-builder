@@ -169,10 +169,35 @@ export default function AdvancedElementControlsBatch2({
 
   if (t === 'html_block') {
     return (
-      <div className="bld-field">
-        <label className="bld-label">HTML (sanitized on render)</label>
-        <textarea className="bld-input bld-textarea" rows={8} value={form.htmlBlockContent || ''} onChange={(e) => onChange('htmlBlockContent', e.target.value)} />
-      </div>
+      <>
+        <div className="bld-field">
+          <label className="bld-label">HTML (sanitized on render)</label>
+          <textarea
+            className="bld-input bld-textarea"
+            rows={8}
+            value={form.htmlBlockContent || ''}
+            onChange={(e) => onChange('htmlBlockContent', e.target.value)}
+            onBlur={() => onChange('htmlBlockFlush', 'htmlBlockContent')}
+          />
+        </div>
+        <div className="bld-field">
+          <label className="bld-label">Custom CSS (scoped to this block)</label>
+          <textarea
+            className="bld-input bld-textarea bld-textarea--mono"
+            rows={8}
+            value={form.htmlBlockCss || ''}
+            onChange={(e) => onChange('htmlBlockCss', e.target.value)}
+            onBlur={() => onChange('htmlBlockFlush', 'htmlBlockCss')}
+            placeholder={'.dispatch-process-section { padding: 80px; }'}
+            spellCheck={false}
+          />
+          <p className="bld-hint">
+            Put <strong>HTML only</strong> above (no <code>&lt;style&gt;</code> tags — they are stripped for security).
+            Paste raw CSS below without <code>&lt;style&gt;</code> wrappers. Selectors are auto-prefixed with{' '}
+            <code>[data-html-block-id=&quot;…&quot;]</code>; <code>body</code>/<code>*</code> map to this block.
+          </p>
+        </div>
+      </>
     );
   }
 
