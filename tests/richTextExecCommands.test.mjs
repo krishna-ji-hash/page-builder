@@ -4,11 +4,84 @@ import {
   applyFontSizePxInRoot,
   applyRichColorInRoot,
   ensureFontSizeMarkupInRoot,
+  preserveRichTextSelectionForToolbar,
   readFontSizePxFromRoot,
+  restoreRichTextSelection,
   selectAllContentsInRoot,
   selectionNonCollapsedInRoot,
 } from '../lib/richTextExecCommands.js';
 import { sanitizeInlineLeafHtml } from '../lib/inlineTextHtml.js';
+
+test('preserveRichTextSelectionForToolbar keeps highlighted range when caret collapses', () => {
+  if (typeof document === 'undefined') return;
+
+  const root = document.createElement('div');
+  root.contentEditable = 'true';
+  root.innerHTML = 'Why Ship?';
+  document.body.appendChild(root);
+
+  const sel = window.getSelection();
+  const range = document.createRange();
+  const textNode = root.firstChild;
+  range.setStart(textNode, 0);
+  range.setEnd(textNode, 3);
+  sel.removeAllRanges();
+  sel.addRange(range);
+  preserveRichTextSelectionForToolbar(root);
+
+  const collapsed = document.createRange();
+  collapsed.selectNodeContents(root);
+  collapsed.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(collapsed);
+  preserveRichTextSelectionForToolbar(root);
+
+  restoreRichTextSelection(root);
+  assert.equal(selectionNonCollapsedInRoot(root), true);
+
+  root.remove();
+});
+
+test('applyRichColorInRoot wraps a single selected character', () => {
+  if (typeof document === 'undefined') return;
+
+  const root = document.createElement('div');
+  root.contentEditable = 'true';
+  root.innerHTML = 'Why Ship with Dispatch?';
+  document.body.appendChild(root);
+
+  const sel = window.getSelection();
+  const range = document.createRange();
+  const textNode = root.firstChild;
+  range.setStart(textNode, textNode.length - 1);
+  range.setEnd(textNode, textNode.length);
+  sel.removeAllRanges();
+  sel.addRange(range);
+
+  const result = applyRichColorInRoot(root, 'foreColor', '#17ba2a', { selectAllIfCollapsed: false });
+  assert.ok(result);
+  assert.notEqual(result.after, result.before);
+  assert.match(result.after, /bld-text-accent|color/i);
+  assert.match(sanitizeInlineLeafHtml(result.after), /17ba2a|rgb\(23,\s*186,\s*42\)/i);
+
+  root.remove();
+});
+
+test('applyRichColorInRoot highlight adds bld-text-highlight class', () => {
+  if (typeof document === 'undefined') return;
+
+  const root = document.createElement('div');
+  root.contentEditable = 'true';
+  root.innerHTML = 'Accent word';
+  document.body.appendChild(root);
+  selectAllContentsInRoot(root);
+
+  const result = applyRichColorInRoot(root, 'hiliteColor', '#fef08a', { selectAllIfCollapsed: true });
+  assert.ok(result);
+  assert.match(sanitizeInlineLeafHtml(result.after), /bld-text-highlight|background-color/i);
+
+  root.remove();
+});
 
 test('selectAllContentsInRoot and applyRichColorInRoot update innerHTML', () => {
   if (typeof document === 'undefined') return;

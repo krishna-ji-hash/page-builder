@@ -2707,6 +2707,24 @@
   pointer-events: none;
 }
 
+.bld-wp-toolbar__swatch-letter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--bld-text, #0f172a);
+  pointer-events: none;
+}
+
+.bld-wp-toolbar__swatch-letter--mark {
+  font-size: 10px;
+  color: #ca8a04;
+}
+
 .bld-wp-toolbar__color-input {
   position: absolute;
   inset: 0;
@@ -3222,6 +3240,11 @@
   font-size: clamp(24px, 3.2vw, 40px);
   font-weight: 700;
   line-height: 1.1;
+}
+
+.bld-inline-text-editor .bld-text-highlight {
+  border-radius: 2px;
+  padding: 0 0.12em;
 }
 
 .bld-inline-text-editor--text {

@@ -53,8 +53,8 @@
   color: var(--live-section-muted-on-dark, rgba(248, 250, 252, 0.82)) !important;
 }
 
-.live-site[data-site-preset='dark'] .live-leaf-wrap .bld-rich-content :is(span, font, p):not(.bld-text-highlight),
-.live-site .live-leaf-wrap[data-section-tone='dark'] .bld-rich-content :is(span, font, p):not(.bld-text-highlight) {
+.live-site[data-site-preset='dark'] .live-leaf-wrap .bld-rich-content :is(span, font, p):not(.bld-text-highlight):not(.bld-text-accent),
+.live-site .live-leaf-wrap[data-section-tone='dark'] .bld-rich-content :is(span, font, p):not(.bld-text-highlight):not(.bld-text-accent) {
   color: inherit !important;
 }
 
@@ -103,22 +103,22 @@
 :is(.live-doc, .bld-canvas__live-mirror)
   .live-leaf-wrap[data-section-tone='dark']
   .bld-rich-content
-  :is(span, font):not(.bld-text-highlight),
+  :is(span, font):not(.bld-text-highlight):not(.bld-text-accent),
 :is(.live-doc, .bld-canvas__live-mirror)
   .live-node[data-section-tone='dark']
   .live-leaf-wrap
   .bld-rich-content
-  :is(span, font):not(.bld-text-highlight),
-.live-site[data-site-preset='dark'] .live-leaf-wrap .bld-rich-content :is(span, font):not(.bld-text-highlight),
+  :is(span, font):not(.bld-text-highlight):not(.bld-text-accent),
+.live-site[data-site-preset='dark'] .live-leaf-wrap .bld-rich-content :is(span, font):not(.bld-text-highlight):not(.bld-text-accent),
 :is(.live-doc, .bld-canvas__live-mirror)
   [data-dark-surface='true']
   .live-leaf-wrap
   .bld-rich-content
-  :is(span, font):not(.bld-text-highlight),
+  :is(span, font):not(.bld-text-highlight):not(.bld-text-accent),
 :is(.live-doc, .bld-canvas__live-mirror)
   .live-leaf-wrap[data-section-tone='dark']
   > :is(p, .live-rich-text)
-  :is(span, font):not(.bld-text-highlight) {
+  :is(span, font):not(.bld-text-highlight):not(.bld-text-accent) {
   color: inherit;
 }
 
@@ -146,12 +146,12 @@
 :is(.live-doc, .bld-canvas__live-mirror)
   .live-feature-tabs[data-section-tone='dark']
   :is(.live-feature-tabs__paragraph, .live-feature-tabs__bullets li)
-  :is(span, font):not(.bld-text-highlight),
+  :is(span, font):not(.bld-text-highlight):not(.bld-text-accent),
 :is(.live-doc, .bld-canvas__live-mirror)
   [data-section-template='featureTabs'][data-section-tone='dark']
   .live-feature-tabs
   :is(.live-feature-tabs__paragraph, .live-feature-tabs__bullets li)
-  :is(span, font):not(.bld-text-highlight) {
+  :is(span, font):not(.bld-text-highlight):not(.bld-text-accent) {
   color: inherit !important;
 }
 

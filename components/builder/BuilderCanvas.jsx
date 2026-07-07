@@ -176,7 +176,7 @@ import {
 import { sectionToneDataAttrForCss } from '@/lib/liveSectionContrastVars.js';
 import { applySectionToneToLeafCss, resolveSectionToneForNode } from '@/lib/sectionToneContext.js';
 import { neutralizeLightSurfaceDeviceStyle } from '@/lib/sectionSurfaceNeutralization.js';
-import { neutralizeLeafTextCssObject } from '@/lib/sanitizeRichHtml';
+import { neutralizeLeafTextCssObject, parseCssColorToRgb } from '@/lib/sanitizeRichHtml';
 import ResizeHandle from './canvas/ResizeHandle';
 import InlineEdit from './canvas/InlineEdit';
 import AddSectionModal from './canvas/AddSectionModal';
@@ -290,20 +290,15 @@ function WpIconAlignMiddle() {
 
 /**
  * Floating toolbars use pointerdown preventDefault so the canvas does not treat the press as drag/pan.
- * That same cancelation applies to the event's original target, which breaks native `<select>` and color inputs.
+ * Never preventDefault inside the toolbar itself — that blocks buttons, selects, and color inputs.
  */
 function consumeFloatingToolbarPointerForCanvas(event) {
   const t = event.target;
   if (t && typeof t.closest === 'function') {
     const inToolbar = t.closest('.bld-floating-inline-toolbar, .bld-floating-quick-toolbar, .bld-wp-toolbar');
     if (inToolbar) {
-      const native = t.closest(
-        'select, option, textarea, input, button, label, .bld-font-size-stepper, .bld-font-size-stepper__input, .bld-font-size-stepper__btn'
-      );
-      if (native && inToolbar.contains(native)) {
-        event.stopPropagation();
-        return;
-      }
+      event.stopPropagation();
+      return;
     }
   }
   event.preventDefault();
@@ -338,8 +333,12 @@ function getRichTextCommandRoot({
   nodeElementRef,
   nodeType,
   pinnedTextEditRoot = null,
+  textEditToolbarOpen = false,
 }) {
-  if (isInlineEditing && inlineEditWrapRef?.current) {
+  if (pinnedTextEditRoot && nodeElementRef?.current?.contains(pinnedTextEditRoot)) {
+    return pinnedTextEditRoot;
+  }
+  if ((isInlineEditing || textEditToolbarOpen) && inlineEditWrapRef?.current) {
     const ed = inlineEditWrapRef.current.querySelector('[contenteditable="true"], [contenteditable=""]');
     if (ed) return ed;
   }
@@ -1679,6 +1678,8 @@ function NodeRenderer({
   const floatingToolbarFreezeRef = useRef(false);
   const floatingToolbarFreezeTimerRef = useRef(null);
   const toolbarColorPickerOpenRef = useRef(false);
+  const toolbarColorHadWordSelectionRef = useRef(false);
+  const toolbarInteractUntilRef = useRef(0);
   const wasSelectedRef = useRef(isSelected);
   const { siteTheme, themeTokens, stylePresets, animationPresets } = useBuilderTheme();
   const alignedContentTokens = useMemo(
@@ -2604,6 +2605,7 @@ function NodeRenderer({
         nodeElementRef,
         nodeType: node.nodeType,
         pinnedTextEditRoot: activeTextEditRootRef.current,
+        textEditToolbarOpen,
         ...extra,
       }),
     [
@@ -2613,6 +2615,7 @@ function NodeRenderer({
       node.nodeType,
       inlineEditWrapRef,
       nodeElementRef,
+      textEditToolbarOpen,
     ]
   );
 
@@ -2983,12 +2986,29 @@ function NodeRenderer({
 
   useEffect(() => {
     if (!showFloatingTextToolbar) return undefined;
+    const armToolbarInteract = (event) => {
+      const target = event?.target;
+      if (
+        target &&
+        typeof target.closest === 'function' &&
+        target.closest('.bld-floating-inline-toolbar, .bld-floating-quick-toolbar, .bld-wp-toolbar')
+      ) {
+        toolbarInteractUntilRef.current = Date.now() + 3200;
+      }
+    };
+    document.addEventListener('pointerdown', armToolbarInteract, true);
     const onSelectionChange = () => {
+      if (toolbarColorPickerOpenRef.current || isFocusInFloatingToolbar()) return;
+      if (Date.now() < toolbarInteractUntilRef.current) return;
       const root = activeTextEditRootRef.current || syncActiveTextEditRoot();
-      if (root) preserveTextEditSelectionForToolbar(root);
+      if (!root || !selectionNonCollapsedInRoot(root)) return;
+      preserveTextEditSelectionForToolbar(root);
     };
     document.addEventListener('selectionchange', onSelectionChange);
-    return () => document.removeEventListener('selectionchange', onSelectionChange);
+    return () => {
+      document.removeEventListener('pointerdown', armToolbarInteract, true);
+      document.removeEventListener('selectionchange', onSelectionChange);
+    };
   }, [showFloatingTextToolbar, syncActiveTextEditRoot]);
 
   useEffect(() => {
@@ -3137,12 +3157,27 @@ function NodeRenderer({
     setInlineDraftText(inlineEditDraftFromProps(node.props));
   };
 
+  const readInlineEditTextFromRoot = useCallback(() => {
+    const root =
+      activeTextEditRootRef.current ||
+      inlineEditWrapRef.current?.querySelector('[contenteditable="true"], [contenteditable=""]');
+    if (!root) return null;
+    const html = String(root.innerHTML || '').trim();
+    if (isProbablyInlineHtml(html)) {
+      return sanitizeInlineLeafHtml(html, {
+        neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist,
+      });
+    }
+    return String(root.innerText || '').trim();
+  }, [neutralizeBodyColorsPersist]);
+
   const handleInlineEditCommit = async (targetNode) => {
     if (isCommittingInlineEditRef.current) return;
     if (sectionEditLocked) return;
     if (!supportsInlineTextEdit || targetNode.id !== node.id) return;
     isCommittingInlineEditRef.current = true;
-    let nextText = inlineDraftText;
+    const fromRoot = readInlineEditTextFromRoot();
+    let nextText = fromRoot != null && fromRoot !== '' ? fromRoot : inlineDraftText;
     if (
       (targetNode.nodeType === 'heading' ||
         targetNode.nodeType === 'text' ||
@@ -3192,7 +3227,6 @@ function NodeRenderer({
     const root = nodeElementRef.current?.querySelector?.(
       `${FEATURE_TAB_FIELD_SELECTOR}:focus, [contenteditable="true"]:focus, [contenteditable=""]:focus`
     );
-    activeTextEditRootRef.current = null;
     const shouldBlurFocusedRoot =
       textEditToolbarOpen ||
       isInlineEditing ||
@@ -3204,6 +3238,7 @@ function NodeRenderer({
     } else {
       setIsInlineEditing(false);
     }
+    activeTextEditRootRef.current = null;
     setIsFeatureTabFieldEditing(false);
     if (isRichTextEditing) setIsRichTextEditing(false);
     setFloatingToolbarPos(null);
@@ -3247,6 +3282,8 @@ function NodeRenderer({
     const shell = nodeElementRef.current;
     const onPointerDown = (event) => {
       if (toolbarColorPickerOpenRef.current) return;
+      if (Date.now() < toolbarInteractUntilRef.current) return;
+      if (typeof document !== 'undefined' && document.activeElement?.matches?.('input[type="color"]')) return;
       const target = event.target;
       if (!target || typeof target.closest !== 'function') return;
       if (target.closest(FLOATING_TOOLBAR_SELECTOR)) return;
@@ -3453,29 +3490,79 @@ function NodeRenderer({
     });
   };
 
-  const beginToolbarColorPicker = () => {
-    toolbarColorPickerOpenRef.current = true;
-    freezeFloatingToolbar(4000);
+  const markToolbarInteract = useCallback((ms = 2200) => {
+    toolbarInteractUntilRef.current = Date.now() + ms;
+    freezeFloatingToolbar(ms);
+  }, [freezeFloatingToolbar]);
+
+  const refocusTextEditAfterToolbar = useCallback((root) => {
+    if (!root || typeof root.focus !== 'function') return;
+    restoreRichTextSelection(root);
+    try {
+      root.focus({ preventScroll: true });
+    } catch {
+      root.focus();
+    }
+    preserveTextEditSelectionForToolbar(root);
+  }, []);
+
+  const prepareToolbarFormat = useCallback(() => {
+    markToolbarInteract();
     const root = activeTextEditRootRef.current || syncActiveTextEditRoot();
     preserveTextEditSelectionForToolbar(root);
+    return root;
+  }, [markToolbarInteract, syncActiveTextEditRoot]);
+
+  const beginToolbarColorPicker = () => {
+    toolbarColorPickerOpenRef.current = true;
+    markToolbarInteract(4000);
+    const root = prepareToolbarFormat();
+    toolbarColorHadWordSelectionRef.current =
+      Boolean(root && (selectionNonCollapsedInRoot(root) || toolbarColorHadWordSelectionRef.current));
     return root;
   };
 
   const handleFloatingToolbarPointerDown = (event) => {
-    const root = activeTextEditRootRef.current || syncActiveTextEditRoot();
-    preserveTextEditSelectionForToolbar(root);
+    prepareToolbarFormat();
     consumeFloatingToolbarPointerForCanvas(event);
-    freezeFloatingToolbar(1600);
   };
 
   const endToolbarColorPicker = () => {
+    markToolbarInteract(1200);
     window.setTimeout(() => {
       toolbarColorPickerOpenRef.current = false;
-    }, 200);
+      toolbarColorHadWordSelectionRef.current = false;
+    }, 800);
+  };
+
+  const applyToolbarTextColor = (color) => {
+    void quickSetTextColor(color);
+  };
+
+  const applyToolbarHighlightColor = (color) => {
+    void quickSetHighlightColor(color);
+  };
+
+  const handleToolbarTextColorBlur = (event) => {
+    const hex = String(event.currentTarget?.value || '').trim();
+    const root = activeTextEditRootRef.current || syncActiveTextEditRoot();
+    if (hex) applyToolbarTextColor(hex);
+    endToolbarColorPicker();
+    refocusTextEditAfterToolbar(root);
+  };
+
+  const handleToolbarHighlightColorBlur = (event) => {
+    const hex = String(event.currentTarget?.value || '').trim();
+    const root = activeTextEditRootRef.current || syncActiveTextEditRoot();
+    if (hex) applyToolbarHighlightColor(hex);
+    endToolbarColorPicker();
+    refocusTextEditAfterToolbar(root);
   };
 
   const inlineEditBlurCommitGuard = () =>
-    toolbarColorPickerOpenRef.current || isFocusInFloatingToolbar();
+    toolbarColorPickerOpenRef.current ||
+    Date.now() < toolbarInteractUntilRef.current ||
+    isFocusInFloatingToolbar();
   const textEditBlurCommitGuard = inlineEditBlurCommitGuard;
   const featureTabValueSyncGuard = () => textEditToolbarOpen;
 
@@ -3584,6 +3671,50 @@ function NodeRenderer({
     await persistRichHtmlFromCommand(command, value);
   };
 
+  const syncInlineDraftFromActiveRoot = useCallback(() => {
+    if (!isInlineEditing) return;
+    const fromRoot = readInlineEditTextFromRoot();
+    if (fromRoot != null && fromRoot !== '') {
+      setInlineDraftText(fromRoot);
+    }
+  }, [isInlineEditing, readInlineEditTextFromRoot]);
+
+  const handleToolbarRichFormat = (command, value) => async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const root = prepareToolbarFormat();
+    await persistRichHtmlFromCommand(command, value);
+    syncInlineDraftFromActiveRoot();
+    refocusTextEditAfterToolbar(root);
+  };
+
+  const handleToolbarBold = async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const root = prepareToolbarFormat();
+    await quickToggleBold();
+    syncInlineDraftFromActiveRoot();
+    refocusTextEditAfterToolbar(root);
+  };
+
+  const handleToolbarClearFormatting = async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const root = prepareToolbarFormat();
+    await quickClearFormatting();
+    syncInlineDraftFromActiveRoot();
+    refocusTextEditAfterToolbar(root);
+  };
+
+  const handleToolbarLink = async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const root = prepareToolbarFormat();
+    await quickSetLink();
+    syncInlineDraftFromActiveRoot();
+    refocusTextEditAfterToolbar(root);
+  };
+
   const quickClearFormatting = async () => {
     if (sectionEditLocked) return;
     if (
@@ -3662,31 +3793,27 @@ function NodeRenderer({
     if (!hex) return;
 
     const root = getTextCommandRoot();
+    if (!root) return;
 
-    const applyToEditor = () => {
-      if (!root) return;
-      root.style.setProperty('color', hex);
-      root.style.setProperty('--node-text', hex);
-    };
+    toolbarColorPickerOpenRef.current = true;
+    preserveTextEditSelectionForToolbar(root);
+    restoreRichTextSelection(root);
+    const hadWordSelection =
+      selectionNonCollapsedInRoot(root) || toolbarColorHadWordSelectionRef.current;
 
     if (node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'paragraph') {
-      if (root) {
-        const result = applyRichColorInRoot(root, 'foreColor', hex);
-        if (result) {
-          const after = sanitizeInlineLeafHtml(result.after, {
-            neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist,
-          });
-          const before = sanitizeInlineLeafHtml(result.before, {
-            neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist,
-          });
+      const sanitizeOpts = { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist };
+      const result = applyRichColorInRoot(root, 'foreColor', hex, {
+        selectAllIfCollapsed: !hadWordSelection,
+      });
+      if (result) {
+        const after = sanitizeInlineLeafHtml(result.after, sanitizeOpts);
+        const before = sanitizeInlineLeafHtml(result.before, sanitizeOpts);
+        if (after !== before) {
+          lockTextEditRootForFormatting(root);
           if (isInlineEditing) {
-            applyToEditor();
-            if (after !== before) {
-              setInlineDraftText(after);
-            } else {
-              syncInlineEditorFromRoot(root);
-            }
-          } else if (after !== before && onUpdateNode) {
+            setInlineDraftText(after);
+          } else if (onUpdateNode) {
             await onUpdateNode({
               nodeId: node.id,
               payload: {
@@ -3696,22 +3823,25 @@ function NodeRenderer({
                 },
               },
             });
-            await commitStylePatch({
-              typography: { color: hex },
-              colors: { textColor: hex },
-            });
-            return;
           }
-        } else if (isInlineEditing) {
-          applyToEditor();
+        } else if (isInlineEditing && isProbablyInlineHtml(root.innerHTML)) {
+          const synced = sanitizeInlineLeafHtml(root.innerHTML, sanitizeOpts);
+          if (synced) setInlineDraftText(synced);
         }
       }
     }
 
-    await commitStylePatch({
-      typography: { color: hex },
-      colors: { textColor: hex },
-    });
+    if (!hadWordSelection) {
+      root.style.setProperty('color', hex);
+      root.style.setProperty('--node-text', hex);
+      await commitStylePatch({
+        typography: { color: hex },
+        colors: { textColor: hex },
+      });
+    }
+    preserveTextEditSelectionForToolbar(root);
+    syncInlineDraftFromActiveRoot();
+    refocusTextEditAfterToolbar(root);
   };
 
   const quickSetHighlightColor = async (color) => {
@@ -3720,44 +3850,54 @@ function NodeRenderer({
     if (!hex) return;
 
     const root = getTextCommandRoot();
+    if (!root) return;
 
-    if ((node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'paragraph') && root) {
-      const result = applyRichColorInRoot(root, 'hiliteColor', hex);
+    toolbarColorPickerOpenRef.current = true;
+    preserveTextEditSelectionForToolbar(root);
+    restoreRichTextSelection(root);
+    const hadWordSelection =
+      selectionNonCollapsedInRoot(root) || toolbarColorHadWordSelectionRef.current;
+
+    if (node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'paragraph') {
+      const sanitizeOpts = { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist };
+      const result = applyRichColorInRoot(root, 'hiliteColor', hex, {
+        selectAllIfCollapsed: !hadWordSelection,
+      });
       if (result) {
-        const after = sanitizeInlineLeafHtml(result.after, {
-          neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist,
-        });
-        const before = sanitizeInlineLeafHtml(result.before, {
-          neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist,
-        });
-        if (isInlineEditing) {
-          if (after !== before) {
+        const after = sanitizeInlineLeafHtml(result.after, sanitizeOpts);
+        const before = sanitizeInlineLeafHtml(result.before, sanitizeOpts);
+        if (after !== before) {
+          lockTextEditRootForFormatting(root);
+          if (isInlineEditing) {
             setInlineDraftText(after);
-          } else {
-            syncInlineEditorFromRoot(root);
-          }
-        } else if (after !== before && onUpdateNode) {
-          await onUpdateNode({
-            nodeId: node.id,
-            payload: {
-              props: {
-                ...(node.props || {}),
-                ...propsPatchForTextContent(node.props || {}, after),
+          } else if (onUpdateNode) {
+            await onUpdateNode({
+              nodeId: node.id,
+              payload: {
+                props: {
+                  ...(node.props || {}),
+                  ...propsPatchForTextContent(node.props || {}, after),
+                },
               },
-            },
-          });
-          return;
+            });
+          }
+        } else if (isInlineEditing && isProbablyInlineHtml(root.innerHTML)) {
+          const synced = sanitizeInlineLeafHtml(root.innerHTML, sanitizeOpts);
+          if (synced) setInlineDraftText(synced);
         }
       }
     }
 
     const applied = await persistRichHtmlFromCommand('hiliteColor', hex);
-    if (!applied) {
+    if (!applied && !hadWordSelection) {
       await commitStylePatch({
         colors: { backgroundColor: hex },
         background: { backgroundColor: hex },
       });
     }
+    preserveTextEditSelectionForToolbar(root);
+    syncInlineDraftFromActiveRoot();
+    refocusTextEditAfterToolbar(root);
   };
 
   const quickSetLink = async () => {
@@ -3975,6 +4115,18 @@ function NodeRenderer({
 
   const toolbarFontSizePx = toolbarFontSizeLive ?? readToolbarFontSizePx();
 
+  const cssColorToHexInput = (raw, fallback = '#2563eb') => {
+    const rgb = parseCssColorToRgb(String(raw || '').trim());
+    if (!rgb) return fallback;
+    const [r, g, b] = rgb;
+    return `#${[r, g, b].map((x) => x.toString(16).padStart(2, '0')).join('')}`;
+  };
+
+  const toolbarTextColorHex = cssColorToHexInput(
+    deviceStyle?.typography?.color || deviceStyle?.colors?.textColor,
+    '#2563eb'
+  );
+
   const quickToggleTextWrap = async () => {
     if (node.nodeType !== 'heading' && node.nodeType !== 'text' && node.nodeType !== 'paragraph') return;
     const defaultWs = node.nodeType === 'text' ? 'pre-wrap' : 'normal';
@@ -3997,6 +4149,13 @@ function NodeRenderer({
     node.nodeType === 'rich_text' ||
     ((node.nodeType === 'tabs' || node.nodeType === 'tab_hero') && isFeatureTabFieldEditing);
 
+  const handleToolbarAlign = (side) => async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    prepareToolbarFormat();
+    await quickSetAlign(side);
+  };
+
   const inlineRichToolbarControls = supportsFloatingTextToolbar ? (
     <div className="bld-wp-toolbar bld-wp-toolbar--floating" role="toolbar" aria-label="Text formatting">
       {node.nodeType === 'heading' ? (
@@ -4009,6 +4168,10 @@ function NodeRenderer({
               id={wpToolbarHeadingId}
               className="bld-wp-toolbar__select bld-wp-toolbar__select--level"
               value={headingTag}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                prepareToolbarFormat();
+              }}
               onChange={(e) => quickSetHeadingTag(e.target.value)}
               title="Heading level (H1–H6)"
               aria-label="Heading level"
@@ -4029,8 +4192,7 @@ function NodeRenderer({
             className="bld-font-size-stepper--compact"
             value={toolbarFontSizePx}
             onBeforeDelta={() => {
-              const root = activeTextEditRootRef.current || syncActiveTextEditRoot();
-              preserveTextEditSelectionForToolbar(root);
+              prepareToolbarFormat();
             }}
             onDelta={(delta) => void quickAdjustFontSize(delta)}
             onSetPx={(px) => void quickSetFontSizePx(px)}
@@ -4043,12 +4205,8 @@ function NodeRenderer({
         className={`bld-wp-toolbar__icon-btn ${String(deviceStyle?.typography?.fontWeight || '400') === '700' ? 'is-pressed' : ''}`}
         title="Bold"
         aria-pressed={String(deviceStyle?.typography?.fontWeight || '400') === '700'}
-        onMouseDown={(event) => {
-          if (isCanvasTextLeaf) {
-            event.preventDefault();
-          }
-        }}
-        onClick={quickToggleBold}
+        onMouseDown={isCanvasTextLeaf ? handleToolbarBold : (e) => e.preventDefault()}
+        onClick={isCanvasTextLeaf ? undefined : quickToggleBold}
       >
         <WpIconBold />
       </button>
@@ -4058,8 +4216,8 @@ function NodeRenderer({
             type="button"
             className="bld-wp-toolbar__icon-btn bld-wp-toolbar__icon-btn--text"
             title="Italic"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={quickRichFormat('italic')}
+            onMouseDown={handleToolbarRichFormat('italic')}
+            onClick={(e) => e.preventDefault()}
           >
             <em>I</em>
           </button>
@@ -4067,8 +4225,8 @@ function NodeRenderer({
             type="button"
             className="bld-wp-toolbar__icon-btn bld-wp-toolbar__icon-btn--text"
             title="Underline"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={quickRichFormat('underline')}
+            onMouseDown={handleToolbarRichFormat('underline')}
+            onClick={(e) => e.preventDefault()}
           >
             <u>U</u>
           </button>
@@ -4076,23 +4234,50 @@ function NodeRenderer({
             type="button"
             className="bld-wp-toolbar__icon-btn bld-wp-toolbar__icon-btn--text"
             title="Strikethrough"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={quickRichFormat('strikeThrough')}
+            onMouseDown={handleToolbarRichFormat('strikeThrough')}
+            onClick={(e) => e.preventDefault()}
           >
             <s>S</s>
           </button>
+          <span className="bld-wp-toolbar__sep" aria-hidden />
+          <label className="bld-wp-toolbar__swatch" title="Text color (letter A) — select words first">
+            <span className="bld-sr-only">Text color</span>
+            <span className="bld-wp-toolbar__swatch-letter" aria-hidden>
+              A
+            </span>
+            <input
+              type="color"
+              className="bld-wp-toolbar__color-input"
+              defaultValue={toolbarTextColorHex}
+              onPointerDown={() => beginToolbarColorPicker()}
+              onInput={(e) => applyToolbarTextColor(e.target.value)}
+              onChange={(e) => applyToolbarTextColor(e.target.value)}
+              onBlur={handleToolbarTextColorBlur}
+            />
+          </label>
+          <label className="bld-wp-toolbar__swatch" title="Highlight marker — select words first (not text color)">
+            <span className="bld-sr-only">Highlight color</span>
+            <span className="bld-wp-toolbar__swatch-letter bld-wp-toolbar__swatch-letter--mark" aria-hidden>
+              ■
+            </span>
+            <input
+              type="color"
+              className="bld-wp-toolbar__color-input"
+              defaultValue="#fef08a"
+              onPointerDown={() => beginToolbarColorPicker()}
+              onInput={(e) => applyToolbarHighlightColor(e.target.value)}
+              onChange={(e) => applyToolbarHighlightColor(e.target.value)}
+              onBlur={handleToolbarHighlightColorBlur}
+            />
+          </label>
         </>
       ) : null}
       <button
         type="button"
         className="bld-wp-toolbar__icon-btn"
         title="Insert / edit link"
-        onMouseDown={(event) => {
-          if (isCanvasTextLeaf) {
-            event.preventDefault();
-          }
-        }}
-        onClick={quickSetLink}
+        onMouseDown={isCanvasTextLeaf ? handleToolbarLink : undefined}
+        onClick={isCanvasTextLeaf ? undefined : quickSetLink}
       >
         <WpIconLink />
       </button>
@@ -4100,12 +4285,8 @@ function NodeRenderer({
         type="button"
         className="bld-wp-toolbar__icon-btn bld-wp-toolbar__icon-btn--text"
         title="Clear formatting"
-        onMouseDown={(event) => {
-          if (isCanvasTextLeaf) {
-            event.preventDefault();
-          }
-        }}
-        onClick={() => void quickClearFormatting()}
+        onMouseDown={isCanvasTextLeaf ? handleToolbarClearFormatting : undefined}
+        onClick={isCanvasTextLeaf ? undefined : () => void quickClearFormatting()}
       >
         ✕
       </button>
@@ -4124,8 +4305,8 @@ function NodeRenderer({
               className={`bld-text-align-group__btn ${active ? 'is-active' : ''}`}
               title={label}
               aria-pressed={active}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => quickSetAlign(side)}
+              onMouseDown={handleToolbarAlign(side)}
+              onClick={(e) => e.preventDefault()}
             >
               <Icon />
             </button>
@@ -6005,14 +6186,14 @@ function NodeRenderer({
               }}
               role="toolbar"
               aria-label="Text formatting"
+              onPointerDownCapture={() => {
+                toolbarInteractUntilRef.current = Date.now() + 3200;
+              }}
               onPointerDown={(event) => {
-                const t = event.target;
-                if (t?.closest?.('input[type="color"], select, label.bld-wp-toolbar__swatch')) {
-                  freezeFloatingToolbar(2000);
-                }
+                markToolbarInteract(2500);
                 handleFloatingToolbarPointerDown(event);
               }}
-              onFocusCapture={() => freezeFloatingToolbar(2000)}
+              onFocusCapture={() => markToolbarInteract(2500)}
             >
               <div className="bld-floating-inline-toolbar__inner bld-floating-inline-toolbar__inner--wp">
                 {inlineRichToolbarControls}

@@ -25,7 +25,7 @@ export default function InlineEdit({
       const open = typeof blurCommitGuard === 'function' ? Boolean(blurCommitGuard()) : false;
       if (shouldDeferInlineEditBlurCommit(event, open)) return;
       onCommit();
-    }, 0);
+    }, 80);
   };
 
   useEffect(() => {
