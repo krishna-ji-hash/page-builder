@@ -20,12 +20,14 @@ import StatsCounterControls from '@/components/builder/inspector/StatsCounterCon
 import TabHeroControls from '@/components/builder/inspector/TabHeroControls';
 import AdvancedElementControls, { isAdvancedElementNodeType } from '@/components/builder/inspector/AdvancedElementControls';
 import LogoBrandControls from '@/components/builder/inspector/LogoBrandControls';
+import CourierPartnerCardControls from '@/components/builder/inspector/CourierPartnerCardControls';
 import InlineTextFormattingPanel from '@/components/builder/inspector/InlineTextFormattingPanel';
 import TextEffectsControls from '@/components/builder/inspector/TextEffectsControls';
 import SplitHeroImageSizeControls from '@/components/builder/inspector/SplitHeroImageSizeControls';
 import TickerDualRowSlidesEditor from '@/components/builder/inspector/TickerDualRowSlidesEditor';
 import { resolveDualTickerSlides } from '@/lib/carouselTickerRows';
 import { nodeIsInsideSiteHeader, nodeLooksLikeBrandLogo } from '@/lib/headerLogo';
+import { getCourierPartnerCardParts, isCourierPartnerCardStack } from '@/lib/courierPartnerCard';
 import { uploadProjectMediaFile } from '@/lib/media/uploadProjectMedia';
 import {
   InspectorNumField,
@@ -116,6 +118,10 @@ export default function ContentPanel({
       onChange('src', item.publicUrl);
       if (!form.alt?.trim() && item.altText) onChange('alt', item.altText);
       if (item.title) onChange('imageTitle', item.title);
+    } else if (target === 'courierPartnerImage') {
+      const patch = { src: item.publicUrl };
+      if (item.altText) patch.alt = item.altText;
+      onChange('courierPartnerImagePatch', patch);
     } else if (typeof target === 'object' && target?.type === 'carouselSlide') {
       const idx = Number(target.index);
       if (!Number.isInteger(idx) || idx < 0) return;
@@ -212,8 +218,9 @@ export default function ContentPanel({
     if (canUseMedia) {
       try {
         const { publicUrl, alt } = await uploadImageFileToMedia(file, 'images');
-        onChange('src', publicUrl);
-        if (!form.alt?.trim()) onChange('alt', alt);
+        const patch = { src: publicUrl };
+        if (!form.alt?.trim()) patch.alt = alt;
+        onChange('imageUploadPatch', patch);
         event.target.value = '';
         return;
       } catch {
@@ -223,10 +230,11 @@ export default function ContentPanel({
     const reader = new FileReader();
     reader.onload = () => {
       const src = typeof reader.result === 'string' ? reader.result : '';
-      onChange('src', src);
+      const patch = { src };
       if (!form.alt?.trim()) {
-        onChange('alt', file.name.replace(/\.[^.]+$/, ''));
+        patch.alt = file.name.replace(/\.[^.]+$/, '');
       }
+      onChange('imageUploadPatch', patch);
       event.target.value = '';
     };
     reader.onerror = () => {
@@ -310,6 +318,11 @@ export default function ContentPanel({
     return nestedFeatureTabsNode || null;
   }, [selectedNode, nestedFeatureTabsNode]);
 
+  const courierPartnerParts = useMemo(
+    () => (isCourierPartnerCardStack(selectedNode) ? getCourierPartnerCardParts(selectedNode) : null),
+    [selectedNode]
+  );
+
   const tickerRowSlides = useMemo(() => {
     if (!selectedNode || selectedNode.nodeType !== 'carousel' || form.carouselVariant !== 'ticker') {
       return { topSlides: [], bottomSlides: [] };
@@ -368,6 +381,16 @@ export default function ContentPanel({
       <CmsBindingsPanel selectedNode={selectedNode} projectId={projectId} onChange={onChange} />
       {isSectionRow ? <SectionHeadingControls form={form} onChange={onChange} /> : null}
       {isColumnOrStack ? <ColumnHeadingControls form={form} onChange={onChange} /> : null}
+      {courierPartnerParts ? (
+        <CourierPartnerCardControls
+          imageNode={courierPartnerParts.image}
+          labelNode={courierPartnerParts.label}
+          projectId={projectId}
+          canUseMedia={canUseMedia}
+          onChange={onChange}
+          onOpenMedia={openMedia}
+        />
+      ) : null}
       {isDivider ? (
         <>
           <div className="bld-field">

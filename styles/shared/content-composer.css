@@ -136,6 +136,12 @@
   padding: 0 0.12em;
 }
 
+/* Toolbar-authored accent colors must beat section foreground inheritance. */
+:is(.live-doc, .bld-canvas__live-mirror) .bld-rich-content span.bld-text-accent[style*='color'],
+.bld-inline-text-editor span.bld-text-accent[style*='color'] {
+  -webkit-text-fill-color: currentcolor;
+}
+
 .bld-inline-rich__toolbar {
   display: flex;
   flex-wrap: wrap;

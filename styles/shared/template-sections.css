@@ -30,7 +30,13 @@
 [data-tpl-role*='process-step'],
 [data-tpl-role*='story-card'],
 [data-tpl-role*='trust-badge'],
-[data-tpl-role*='gallery-item'] {
+[data-tpl-role*='gallery-item'],
+[data-tpl-role*='courier-partner-card'],
+[data-tpl-role*='integration-benefit-card'],
+[data-tpl-role*='integration-step-card'],
+[data-tpl-role*='integration-feature-item'],
+[data-tpl-role*='ai-recommendation-card'],
+[data-tpl-role*='business-type-card'] {
   height: 100%;
   min-height: 0;
   box-sizing: border-box;
@@ -164,6 +170,418 @@
 }
 [data-tpl-role='gallery-item']:hover img {
   transform: scale(1.06);
+}
+
+/* —— Courier partners (5-column logo grid) —— */
+:is(.live-doc, .bld-canvas__live-mirror)
+  > :where(section.live-node.bld-row, main.live-node.bld-row)[data-section-template='courierPartners'] {
+  justify-content: center !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='courierPartners']
+  :is(
+    [data-bld-section-items='true'].bld-section-layout:is(.bld-layout-horizontal, .bld-layout-auto),
+    [data-tpl-role='items-host']
+  ) {
+  display: grid !important;
+  grid-template-columns: repeat(var(--bld-section-layout-cols, 5), minmax(0, 1fr)) !important;
+  gap: var(--bld-section-layout-gap, 16px) !important;
+  width: 100%;
+  max-width: 100%;
+  align-items: stretch;
+  justify-items: stretch;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='courierPartners']
+  :is(
+    [data-bld-section-items='true'].bld-section-layout:is(.bld-layout-horizontal, .bld-layout-auto),
+    [data-tpl-role='items-host']
+  )
+  > :is(
+    .live-node.bld-stack,
+    .bld-node__shell.bld-stack,
+    .bld-node-children > .live-node.bld-stack,
+    .bld-node-children > .bld-node__shell.bld-stack
+  ) {
+  flex: unset !important;
+  flex-grow: unset !important;
+  flex-shrink: unset !important;
+  flex-basis: unset !important;
+  max-width: 100% !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+[data-tpl-role='courier-partner-card'] {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+[data-tpl-role='courier-partner-card']:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.1);
+}
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='courierPartners']
+  [data-tpl-role='courier-partner-card']
+  :is(.live-image-leaf-wrap, figure.live-image-stable) {
+  width: 100% !important;
+  max-width: 140px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+[data-tpl-role='courier-partner-card'] img {
+  display: block;
+  width: 100%;
+  height: 52px;
+  object-fit: contain;
+}
+
+@media (max-width: 1023px) {
+  :is(.live-doc, .bld-canvas__live-mirror):not([data-bld-device='desktop'])
+    [data-section-template='courierPartners']
+    :is(
+      [data-bld-section-items='true'].bld-section-layout:is(.bld-layout-horizontal, .bld-layout-auto),
+      [data-tpl-role='items-host']
+    ) {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 767px) {
+  :is(.live-doc, .bld-canvas__live-mirror):not([data-bld-device='desktop'])
+    [data-section-template='courierPartners']
+    :is(
+      [data-bld-section-items='true'].bld-section-layout[data-bld-layout-mobile-stack='true'],
+      [data-tpl-role='items-host']
+    ) {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+/* —— Integration sections (04–08: IB, 4S, IF, AI, BT) —— */
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='integrationBenefits'],
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='integrationSteps'],
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='integrationFeatures'],
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='aiCourierRecommendation'],
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='businessTypes'] {
+  --integration-accent: var(--color-primary, #2563eb);
+  justify-content: center !important;
+}
+
+/* Shared items-host grid */
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='integrationBenefits']
+  :is([data-bld-section-items='true'].bld-section-layout, [data-tpl-role='items-host']),
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='integrationSteps']
+  :is([data-bld-section-items='true'].bld-section-layout, [data-tpl-role='items-host']),
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='integrationFeatures']
+  :is([data-bld-section-items='true'].bld-section-layout, [data-tpl-role='items-host']),
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='aiCourierRecommendation']
+  :is([data-bld-section-items='true'].bld-section-layout, [data-tpl-role='items-host']),
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='businessTypes']
+  :is([data-bld-section-items='true'].bld-section-layout, [data-tpl-role='items-host']) {
+  display: grid !important;
+  width: 100%;
+  max-width: 100%;
+  align-items: stretch;
+  justify-items: stretch;
+  justify-content: start !important;
+  align-content: start !important;
+}
+
+/* Grid children — reset flex sizing so columns snap evenly */
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='integrationBenefits']
+  :is([data-bld-section-items='true'].bld-section-layout, [data-tpl-role='items-host'])
+  > :is(
+    .live-node.bld-stack,
+    .bld-node__shell.bld-stack,
+    .bld-node-children > .live-node.bld-stack,
+    .bld-node-children > .bld-node__shell.bld-stack
+  ),
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='integrationSteps']
+  :is([data-bld-section-items='true'].bld-section-layout, [data-tpl-role='items-host'])
+  > :is(
+    .live-node.bld-stack,
+    .bld-node__shell.bld-stack,
+    .bld-node-children > .live-node.bld-stack,
+    .bld-node-children > .bld-node__shell.bld-stack
+  ),
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='integrationFeatures']
+  :is([data-bld-section-items='true'].bld-section-layout, [data-tpl-role='items-host'])
+  > :is(
+    .live-node.bld-stack,
+    .bld-node__shell.bld-stack,
+    .bld-node-children > .live-node.bld-stack,
+    .bld-node-children > .bld-node__shell.bld-stack
+  ),
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='aiCourierRecommendation']
+  :is([data-bld-section-items='true'].bld-section-layout, [data-tpl-role='items-host'])
+  > :is(
+    .live-node.bld-stack,
+    .bld-node__shell.bld-stack,
+    .bld-node-children > .live-node.bld-stack,
+    .bld-node-children > .bld-node__shell.bld-stack
+  ),
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='businessTypes']
+  :is([data-bld-section-items='true'].bld-section-layout, [data-tpl-role='items-host'])
+  > :is(
+    .live-node.bld-stack,
+    .bld-node__shell.bld-stack,
+    .bld-node-children > .live-node.bld-stack,
+    .bld-node-children > .bld-node__shell.bld-stack
+  ) {
+  flex: unset !important;
+  flex-grow: unset !important;
+  flex-shrink: unset !important;
+  flex-basis: unset !important;
+  max-width: 100% !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  align-self: stretch !important;
+  justify-self: stretch !important;
+  height: 100% !important;
+  box-sizing: border-box;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='integrationBenefits']
+  :is([data-bld-section-items='true'].bld-section-layout, [data-tpl-role='items-host']) {
+  grid-template-columns: repeat(var(--bld-section-layout-cols, 3), minmax(0, 1fr)) !important;
+  gap: var(--bld-section-layout-gap, 20px) !important;
+  row-gap: var(--bld-section-layout-gap, 20px) !important;
+  column-gap: var(--bld-section-layout-gap, 20px) !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='integrationSteps']
+  :is([data-bld-section-items='true'].bld-section-layout, [data-tpl-role='items-host']) {
+  grid-template-columns: repeat(var(--bld-section-layout-cols, 4), minmax(0, 1fr)) !important;
+  gap: var(--bld-section-layout-gap, 20px) !important;
+  row-gap: var(--bld-section-layout-gap, 20px) !important;
+  column-gap: var(--bld-section-layout-gap, 20px) !important;
+  overflow: visible !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='integrationFeatures']
+  :is([data-bld-section-items='true'].bld-section-layout, [data-tpl-role='items-host']) {
+  grid-template-columns: repeat(var(--bld-section-layout-cols, 4), minmax(0, 1fr)) !important;
+  gap: var(--bld-section-layout-gap, 20px) !important;
+  row-gap: 14px !important;
+  column-gap: var(--bld-section-layout-gap, 20px) !important;
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='aiCourierRecommendation']
+  :is([data-bld-section-items='true'].bld-section-layout, [data-tpl-role='items-host']),
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='businessTypes']
+  :is([data-bld-section-items='true'].bld-section-layout, [data-tpl-role='items-host']) {
+  grid-template-columns: repeat(var(--bld-section-layout-cols, 4), minmax(0, 1fr)) !important;
+  gap: var(--bld-section-layout-gap, 20px) !important;
+  row-gap: var(--bld-section-layout-gap, 20px) !important;
+  column-gap: var(--bld-section-layout-gap, 20px) !important;
+}
+
+/* Equal-height card shells */
+[data-tpl-role='integration-benefit-card'],
+[data-tpl-role='integration-step-card'],
+[data-tpl-role='integration-feature-item'],
+[data-tpl-role='ai-recommendation-card'],
+[data-tpl-role='business-type-card'] {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+[data-tpl-role='integration-step-card'],
+[data-tpl-role='ai-recommendation-card'],
+[data-tpl-role='business-type-card'] {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Eyebrow badge */
+:is(.live-doc, .bld-canvas__live-mirror) [data-tpl-role='integration-eyebrow'] {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* —— IB: Integration Benefits —— */
+[data-tpl-role='integration-benefit-card'] {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-start !important;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+[data-tpl-role='integration-benefit-card']:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.1);
+}
+:is(.live-doc, .bld-canvas__live-mirror) [data-tpl-role='integration-icon-box'] {
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+[data-tpl-role='integration-benefit-card']:hover [data-tpl-role='integration-icon-box'] {
+  transform: scale(1.04);
+}
+
+/* —— 4S: Integration Steps —— */
+[data-tpl-role='integration-step-card'] {
+  position: relative;
+  overflow: visible;
+  align-items: center !important;
+  text-align: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+[data-tpl-role='integration-step-card']:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.1);
+}
+[data-tpl-role='integration-step-badge'] {
+  flex-shrink: 0;
+}
+@media (min-width: 1024px) {
+  :is(.live-doc, .bld-canvas__live-mirror)
+    [data-section-template='integrationSteps']
+    [data-tpl-role='items-host']
+    > [data-tpl-role='integration-step-card']:not(:nth-child(4n))::after {
+    content: '';
+    position: absolute;
+    top: 46px;
+    left: calc(100% + 4px);
+    width: calc(var(--bld-section-layout-gap, 20px) - 8px);
+    height: 0;
+    border-top: 2px dashed color-mix(in srgb, var(--integration-accent) 30%, transparent);
+    pointer-events: none;
+    z-index: 2;
+  }
+}
+
+/* —— IF: Integration Features (flat list, no card chrome) —— */
+[data-tpl-role='integration-feature-item'] {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-start !important;
+}
+[data-tpl-role='integration-feature-icon'] {
+  flex-shrink: 0;
+}
+
+/* —— AI: Courier Recommendation —— */
+[data-tpl-role='ai-recommendation-card'] {
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+[data-tpl-role='ai-recommendation-card']::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--ai-card-accent, var(--integration-accent));
+}
+[data-tpl-role='ai-recommendation-card'][data-tpl-theme='green'] {
+  --ai-card-accent: #16a34a;
+}
+[data-tpl-role='ai-recommendation-card'][data-tpl-theme='purple'] {
+  --ai-card-accent: #7c3aed;
+}
+[data-tpl-role='ai-recommendation-card'][data-tpl-theme='orange'] {
+  --ai-card-accent: #ea580c;
+}
+[data-tpl-role='ai-recommendation-card'][data-tpl-theme='blue'] {
+  --ai-card-accent: #2563eb;
+}
+[data-tpl-role='ai-recommendation-card']:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.1);
+}
+[data-tpl-role='ai-theme-pill'] {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+:is(.live-doc, .bld-canvas__live-mirror) [data-tpl-role='ai-bullet-list'] {
+  margin-top: auto;
+  width: 100%;
+}
+
+/* —— BT: Business Types —— */
+[data-tpl-role='business-type-card'] {
+  align-items: center !important;
+  text-align: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+[data-tpl-role='business-type-card']:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.1);
+}
+[data-tpl-role='business-type-icon'] {
+  flex-shrink: 0;
+}
+
+/* Responsive grids */
+@media (max-width: 1023px) {
+  :is(.live-doc, .bld-canvas__live-mirror):not([data-bld-device='desktop'])
+    [data-section-template='integrationBenefits']
+    :is([data-bld-section-items='true'].bld-section-layout, [data-tpl-role='items-host']),
+  :is(.live-doc, .bld-canvas__live-mirror):not([data-bld-device='desktop'])
+    [data-section-template='integrationSteps']
+    :is([data-bld-section-items='true'].bld-section-layout, [data-tpl-role='items-host']),
+  :is(.live-doc, .bld-canvas__live-mirror):not([data-bld-device='desktop'])
+    [data-section-template='integrationFeatures']
+    :is([data-bld-section-items='true'].bld-section-layout, [data-tpl-role='items-host']),
+  :is(.live-doc, .bld-canvas__live-mirror):not([data-bld-device='desktop'])
+    [data-section-template='aiCourierRecommendation']
+    :is([data-bld-section-items='true'].bld-section-layout, [data-tpl-role='items-host']),
+  :is(.live-doc, .bld-canvas__live-mirror):not([data-bld-device='desktop'])
+    [data-section-template='businessTypes']
+    :is([data-bld-section-items='true'].bld-section-layout, [data-tpl-role='items-host']) {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  :is(.live-doc, .bld-canvas__live-mirror):not([data-bld-device='desktop'])
+    [data-section-template='integrationSteps']
+    [data-tpl-role='integration-step-card']::after {
+    display: none;
+  }
+}
+
+@media (max-width: 767px) {
+  :is(.live-doc, .bld-canvas__live-mirror):not([data-bld-device='desktop'])
+    [data-section-template='integrationBenefits']
+    :is([data-bld-section-items='true'].bld-section-layout, [data-tpl-role='items-host']),
+  :is(.live-doc, .bld-canvas__live-mirror):not([data-bld-device='desktop'])
+    [data-section-template='integrationSteps']
+    :is([data-bld-section-items='true'].bld-section-layout, [data-tpl-role='items-host']),
+  :is(.live-doc, .bld-canvas__live-mirror):not([data-bld-device='desktop'])
+    [data-section-template='integrationFeatures']
+    :is([data-bld-section-items='true'].bld-section-layout, [data-tpl-role='items-host']),
+  :is(.live-doc, .bld-canvas__live-mirror):not([data-bld-device='desktop'])
+    [data-section-template='aiCourierRecommendation']
+    :is([data-bld-section-items='true'].bld-section-layout, [data-tpl-role='items-host']),
+  :is(.live-doc, .bld-canvas__live-mirror):not([data-bld-device='desktop'])
+    [data-section-template='businessTypes']
+    :is([data-bld-section-items='true'].bld-section-layout, [data-tpl-role='items-host']) {
+    grid-template-columns: 1fr !important;
+  }
 }
 
 /* —— Team —— */

@@ -1,5 +1,5 @@
 import { normalizeHeadingLevel } from '@/lib/headingLevel';
-import { sanitizeInlineLeafHtml } from '@/lib/inlineTextHtml';
+import { sanitizeInlineLeafHtmlForTag } from '@/lib/inlineTextHtml';
 import {
   normalizeInlineTextProps,
   resolveInlineTextHtml,
@@ -7,18 +7,22 @@ import {
 import TextEffectsWrap from '@/components/runtime/TextEffectsWrap';
 
 function renderInnerContent({ Tag, html, plain, className, style, sanitizeOptions }) {
+  const wrapperTag = typeof Tag === 'string' ? Tag : 'div';
   if (html) {
-    const safe = sanitizeInlineLeafHtml(html, sanitizeOptions) || '';
-    return (
-      <Tag
-        className={className}
-        style={style}
-        dangerouslySetInnerHTML={{ __html: safe }}
-      />
-    );
+    const safe = sanitizeInlineLeafHtmlForTag(html, wrapperTag, sanitizeOptions);
+    if (safe) {
+      return (
+        <Tag
+          className={className}
+          style={style}
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{ __html: safe }}
+        />
+      );
+    }
   }
   return (
-    <Tag className={className} style={style}>
+    <Tag className={className} style={style} suppressHydrationWarning>
       {plain}
     </Tag>
   );
@@ -44,9 +48,14 @@ export default function RichTextLeaf({
   const textTagRaw = String(props?.tag || '').toLowerCase().trim();
   const textTag =
     textTagRaw === 'span' || textTagRaw === 'div' || textTagRaw === 'p' ? textTagRaw : 'p';
+  const hasBlockHtml = Boolean(html && /<(p|div)\b/i.test(html));
   const Tag =
     tagOverride ||
-    (nodeType === 'heading' ? normalizeHeadingLevel(props?.tag, 'h2') : textTag);
+    (nodeType === 'heading'
+      ? normalizeHeadingLevel(props?.tag, 'h2')
+      : hasBlockHtml && textTag === 'p'
+        ? 'div'
+        : textTag);
 
   const richClass = [
     'bld-rich-text',

@@ -92,8 +92,10 @@ import {
   applyBrandLogoSlotPatch,
   brandLogoFormFields,
   brandLogoPropsPatchFromFormKey,
+  imageSrcPropsPatch,
   isBrandLogoInspectorNode,
 } from '@/lib/headerLogo';
+import { getCourierPartnerCardParts } from '@/lib/courierPartnerCard';
 import {
   applyHeaderBehaviorToRowTree,
   headerBehaviorMetaPatch,
@@ -1567,9 +1569,7 @@ export default function BuilderInspector({
     if (editingDisabledBySectionLock) return;
     await onUpdateNode({
       nodeId: featureTabsTarget.id,
-      payload: {
-        props: mergeNodePropsJsonPatch(featureTabsTarget.props || {}, changes),
-      },
+      payload: { props: changes },
     });
   };
 
@@ -1580,9 +1580,7 @@ export default function BuilderInspector({
     if (editingDisabledBySectionLock) return;
     await onUpdateNode({
       nodeId: target.id,
-      payload: {
-        props: mergeNodePropsJsonPatch(target.props || {}, changes),
-      },
+      payload: { props: changes },
     });
   };
 
@@ -1596,9 +1594,10 @@ export default function BuilderInspector({
   const updateProps = async (changes) => {
     if (!selectedNode) return;
     if (editingDisabledBySectionLock) return;
-    await updateNode(selectedNode.id, {
-      props: mergeNodePropsJsonPatch(selectedNode.props || {}, changes),
-    });
+    // Send only the delta — handleNodeUpdate + API merge into the live tree/DB.
+    // Pre-staging with selectedNode.props races when multiple inspector saves fire quickly
+    // (e.g. image upload sets src then alt) and can overwrite fresh canvas state.
+    await updateNode(selectedNode.id, { props: changes });
   };
 
   const patchRootSectionPageSpacingById = useCallback(
@@ -2028,6 +2027,48 @@ export default function BuilderInspector({
       return;
     }
 
+  if (key === 'imageUploadPatch' && selectedNode.nodeType === 'image') {
+      const raw = value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+      if (!raw) return;
+      const patch = imageSrcPropsPatch(raw.src, selectedNode.props || {}, {
+        tree: pageTree,
+        nodeId: selectedNode.id,
+        alt: raw.alt,
+      });
+      setForm((prev) => ({ ...prev, ...patch }));
+      await updateProps(patch);
+      return;
+    }
+
+    const courierParts = getCourierPartnerCardParts(selectedNode);
+    if (courierParts?.label && key === 'courierPartnerLabelText') {
+      await updateNode(courierParts.label.id, { props: { text: String(value ?? '') } });
+      return;
+    }
+    if (courierParts?.image && key === 'courierPartnerImagePatch') {
+      const raw = value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+      if (!raw) return;
+      const patch = imageSrcPropsPatch(raw.src, courierParts.image.props || {}, {
+        tree: pageTree,
+        nodeId: courierParts.image.id,
+        alt: raw.alt,
+      });
+      await updateNode(courierParts.image.id, { props: patch });
+      return;
+    }
+    if (courierParts?.image && key === 'courierPartnerImageSrc') {
+      const patch = imageSrcPropsPatch(value, courierParts.image.props || {}, {
+        tree: pageTree,
+        nodeId: courierParts.image.id,
+      });
+      await updateNode(courierParts.image.id, { props: patch });
+      return;
+    }
+    if (courierParts?.image && key === 'courierPartnerImageAlt') {
+      await updateNode(courierParts.image.id, { props: { alt: String(value ?? '') } });
+      return;
+    }
+
     /** One-click image layout: updates props + merged style (width / align-self) so live + canvas match. */
     if (key === 'imageQuickPreset' && selectedNode.nodeType === 'image') {
       const preset = String(value || '');
@@ -2223,7 +2264,12 @@ export default function BuilderInspector({
           return;
         }
       }
-      await updateProps({ src: value });
+      const patch = imageSrcPropsPatch(value, selectedNode.props || {}, {
+        tree: pageTree,
+        nodeId: selectedNode.id,
+      });
+      await updateProps(patch);
+      setForm((prev) => ({ ...prev, ...patch }));
     }
     if (key === 'alt') await updateProps({ alt: value });
 

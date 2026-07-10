@@ -74,6 +74,12 @@ describe('wizard page definitions use known section keys', () => {
     'pricing',
     'contactForm',
     'splitHeroCarousel',
+    'courierPartners',
+    'integrationBenefits',
+    'integrationSteps',
+    'integrationFeatures',
+    'aiCourierRecommendation',
+    'businessTypes',
   ]);
 
   it('only references catalogued section template keys', () => {

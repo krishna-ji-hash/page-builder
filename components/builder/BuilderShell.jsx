@@ -528,6 +528,7 @@ export default function BuilderShell({ pageId, apiMode = 'legacy' }) {
   const [isPublishing, setIsPublishing] = useState(false);
   const [isSyncingDraft, setIsSyncingDraft] = useState(false);
   const saveInFlightRef = useRef(false);
+  const nodeUpdateChainsRef = useRef(new Map());
   const treeRef = useRef(tree);
   treeRef.current = tree;
   const [undoStack, setUndoStack] = useState([]); // { ts:number, tree:any[] }[]
@@ -1073,90 +1074,112 @@ export default function BuilderShell({ pageId, apiMode = 'legacy' }) {
     if (blockedNodeUpdateIdsRef.current.has(normalizedNodeId)) {
       return;
     }
-    const brandFontNormalize = Boolean(payload?.brandFontNormalize);
-    const apiPayload = { ...payload };
-    delete apiPayload.allowInteractionsOnLockedSection;
-    const targetNode = findNodeInTree(tree, normalizedNodeId);
-    if (!targetNode) {
-      if (deleteInFlightRef.current) return;
-      try {
-        await reloadBuilder();
-      } catch {
-        // ignore sync errors
-      }
-      return;
-    }
-    if (
-      !brandFontNormalize &&
-      !allowInteractionsOnLockedSection &&
-      isStrictAncestorSectionLocked(tree, normalizedNodeId)
-    ) {
-      setErrorMessage('This layer is inside a locked section. Unlock the section in the left panel to edit.');
-      return;
-    }
-    if (
-      !brandFontNormalize &&
-      !allowInteractionsOnLockedSection &&
-      targetNode?.nodeType === 'row' &&
-      isSectionLockedRow(targetNode)
-    ) {
-      const mergedMeta = { ...(targetNode.props?.meta || {}), ...(payload.props?.meta || {}) };
-      if (!metaRepresentsExplicitSectionUnlock(mergedMeta)) {
-        setErrorMessage('This section is locked. Click the lock icon in Sections or Layers to unlock.');
+
+    const runUpdate = async () => {
+      const brandFontNormalize = Boolean(payload?.brandFontNormalize);
+      const apiPayload = { ...payload };
+      delete apiPayload.allowInteractionsOnLockedSection;
+      const currentTree = treeRef.current;
+      const targetNode = findNodeInTree(currentTree, normalizedNodeId);
+      if (!targetNode) {
+        if (deleteInFlightRef.current) return;
+        try {
+          await reloadBuilder();
+        } catch {
+          // ignore sync errors
+        }
         return;
       }
-    }
-    const beforeTree = tree;
-    if (!skipHistorySnapshot) {
-      pushHistorySnapshot(beforeTree);
-    }
-    setIsSavingNode(true);
-    setErrorMessage('');
-    setTree((prev) =>
-      updateNodeInTree(prev, normalizedNodeId, (node) => ({
-        ...node,
-        displayName: payload.displayName ?? node.displayName,
-        props: payload.props ? mergeNodePropsJsonPatch(node.props || {}, payload.props) : node.props,
-        style_json: payload.style_json ?? node.style_json,
-        dataJson: payload.dataJson !== undefined ? payload.dataJson : node.dataJson,
-        actionsJson: payload.actionsJson !== undefined ? payload.actionsJson : node.actionsJson,
-      }))
-    );
-
-    try {
-      const response = await fetch(`/api/nodes/${normalizedNodeId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(apiPayload),
-      });
-      const data = await readJsonSafe(response);
-      if (!response.ok) {
-        if (response.status === 404) {
-          blockedNodeUpdateIdsRef.current.add(normalizedNodeId);
-          setTree(beforeTree);
-          setUndoStack((prev) => prev.slice(0, -1));
-          setSelectedNodeId((current) => (current === normalizedNodeId ? null : current));
-          try {
-            await reloadBuilder();
-          } catch {
-            // ignore sync errors
-          }
+      if (
+        !brandFontNormalize &&
+        !allowInteractionsOnLockedSection &&
+        isStrictAncestorSectionLocked(currentTree, normalizedNodeId)
+      ) {
+        setErrorMessage('This layer is inside a locked section. Unlock the section in the left panel to edit.');
+        return;
+      }
+      if (
+        !brandFontNormalize &&
+        !allowInteractionsOnLockedSection &&
+        targetNode?.nodeType === 'row' &&
+        isSectionLockedRow(targetNode)
+      ) {
+        const mergedMeta = { ...(targetNode.props?.meta || {}), ...(payload.props?.meta || {}) };
+        if (!metaRepresentsExplicitSectionUnlock(mergedMeta)) {
+          setErrorMessage('This section is locked. Click the lock icon in Sections or Layers to unlock.');
           return;
         }
-        throw new Error(data.details || data.error || 'Failed to update node');
       }
-      setTree(data.tree || beforeTree);
-      setHasUnpublishedEdits(true);
-    } catch (error) {
-      setTree(beforeTree);
-      setUndoStack((prev) => prev.slice(0, -1));
-      const msg = error instanceof Error ? error.message : String(error);
-      if (msg !== 'Node not found') {
-        setErrorMessage(msg);
+      const beforeTree = treeRef.current;
+      if (!skipHistorySnapshot) {
+        pushHistorySnapshot(beforeTree);
       }
-    } finally {
-      setIsSavingNode(false);
-    }
+      setIsSavingNode(true);
+      setErrorMessage('');
+      setTree((prev) =>
+        updateNodeInTree(prev, normalizedNodeId, (node) => ({
+          ...node,
+          displayName: payload.displayName ?? node.displayName,
+          props: payload.props ? mergeNodePropsJsonPatch(node.props || {}, payload.props) : node.props,
+          style_json: payload.style_json ?? node.style_json,
+          dataJson: payload.dataJson !== undefined ? payload.dataJson : node.dataJson,
+          actionsJson: payload.actionsJson !== undefined ? payload.actionsJson : node.actionsJson,
+        }))
+      );
+
+      try {
+        const response = await fetch(`/api/nodes/${normalizedNodeId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(apiPayload),
+        });
+        const data = await readJsonSafe(response);
+        if (!response.ok) {
+          if (response.status === 404) {
+            blockedNodeUpdateIdsRef.current.add(normalizedNodeId);
+            setTree(beforeTree);
+            setUndoStack((prev) => prev.slice(0, -1));
+            setSelectedNodeId((current) => (current === normalizedNodeId ? null : current));
+            try {
+              await reloadBuilder();
+            } catch {
+              // ignore sync errors
+            }
+            return;
+          }
+          throw new Error(data.details || data.error || 'Failed to update node');
+        }
+        setTree((prev) => {
+          const serverTree = data.tree;
+          if (!serverTree) return prev;
+          const serverNode = findNodeInTree(serverTree, normalizedNodeId);
+          if (!serverNode) return serverTree;
+          return updateNodeInTree(serverTree, normalizedNodeId, () => serverNode);
+        });
+        setHasUnpublishedEdits(true);
+      } catch (error) {
+        setTree(beforeTree);
+        setUndoStack((prev) => prev.slice(0, -1));
+        const msg = error instanceof Error ? error.message : String(error);
+        if (msg !== 'Node not found') {
+          setErrorMessage(msg);
+        }
+      } finally {
+        setIsSavingNode(false);
+      }
+    };
+
+    const prior = nodeUpdateChainsRef.current.get(normalizedNodeId) || Promise.resolve();
+    const next = prior.then(runUpdate, runUpdate);
+    nodeUpdateChainsRef.current.set(
+      normalizedNodeId,
+      next.finally(() => {
+        if (nodeUpdateChainsRef.current.get(normalizedNodeId) === next) {
+          nodeUpdateChainsRef.current.delete(normalizedNodeId);
+        }
+      })
+    );
+    return next;
   };
 
   const explicitFontOverrideCount = useMemo(

@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import FeatureTabCanvasField from '@/components/builder/canvas/FeatureTabCanvasField';
 import HeaderBrandLogo from '@/components/runtime/HeaderBrandLogo';
 import { HTML_BLOCK_CLASS, mergeHtmlBlockCssSources, scopeHtmlBlockCss, splitHtmlBlockStyleFromHtml } from '@/lib/htmlBlockCss';
 import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
@@ -50,19 +51,83 @@ export function LiveContainerBox({ title, body, align = 'left', className = '' }
   );
 }
 
-export function LiveGridBlock({ columns = 3, gapPx = 16, mobileStack = true, items = [], className = '' }) {
+export function LiveGridBlock({
+  columns = 3,
+  gapPx = 16,
+  mobileStack = true,
+  items = [],
+  className = '',
+  style,
+  builderMode = false,
+  builderEditable = false,
+  onPatchItem,
+  textEditBlurCommitGuard = null,
+  featureTabValueSyncGuard = null,
+}) {
   const cols = clamp(Number(columns) || 3, 1, 6);
   const gap = clamp(Number(gapPx) || 16, 0, 48);
   const list = Array.isArray(items) ? items : [];
+  const canvasEdit = builderMode && builderEditable;
+  const stopCanvasBubble = builderMode
+    ? (event) => {
+        event.stopPropagation();
+      }
+    : undefined;
+  const patchItemByIndex = useCallback(
+    (index, patch) => {
+      if (!onPatchItem || index < 0 || index >= list.length || !patch) return;
+      onPatchItem(index, patch);
+    },
+    [list.length, onPatchItem]
+  );
+  const gridStyle = useMemo(() => {
+    const base = style && typeof style === 'object' ? { ...style } : {};
+    return { ...base, '--bld-grid-cols': cols, '--bld-grid-gap': `${gap}px` };
+  }, [cols, gap, style]);
   return (
     <div
-      className={`bld-el bld-el-grid ${mobileStack ? 'bld-el-grid--mobile-stack' : ''} ${className}`.trim()}
-      style={{ '--bld-grid-cols': cols, '--bld-grid-gap': `${gap}px` }}
+      className={`bld-el bld-el-grid ${mobileStack ? 'bld-el-grid--mobile-stack' : ''} ${canvasEdit ? 'bld-el-grid--editable' : ''} ${className}`.trim()}
+      style={gridStyle}
+      data-grid-block=""
     >
+      {canvasEdit ? (
+        <p className="bld-el-grid__builder-hint" aria-hidden>
+          Click a title or description to edit
+        </p>
+      ) : null}
       {list.map((item, i) => (
-        <div key={String(item.id || i)} className="bld-el-grid__cell">
-          {item.title ? <h4 className="bld-el-grid__title">{item.title}</h4> : null}
-          {item.text ? <p className="bld-el-grid__text">{item.text}</p> : null}
+        <div key={String(item.id || i)} className="bld-el-grid__cell" data-grid-index={i}>
+          {canvasEdit || item.title ? (
+            canvasEdit ? (
+              <FeatureTabCanvasField
+                as="h4"
+                className="bld-el-grid__title bld-el-grid__editable"
+                value={item.title || ''}
+                blurCommitGuard={textEditBlurCommitGuard}
+                valueSyncGuard={featureTabValueSyncGuard}
+                onCommit={(next) => patchItemByIndex(i, { title: String(next || '').trim() })}
+                onPointerDown={stopCanvasBubble}
+              />
+            ) : item.title ? (
+              <h4 className="bld-el-grid__title">{item.title}</h4>
+            ) : null
+          ) : null}
+          {canvasEdit || item.text ? (
+            canvasEdit ? (
+              <FeatureTabCanvasField
+                as="p"
+                className="bld-el-grid__text bld-el-grid__editable"
+                value={item.text || ''}
+                multiline
+                blurCommitGuard={textEditBlurCommitGuard}
+                valueSyncGuard={featureTabValueSyncGuard}
+                onCommit={(next) => patchItemByIndex(i, { text: String(next || '').trim() })}
+                onPointerDown={stopCanvasBubble}
+              />
+            ) : item.text ? (
+              <p className="bld-el-grid__text">{item.text}</p>
+            ) : null
+          ) : null}
         </div>
       ))}
     </div>
@@ -190,6 +255,7 @@ export function LivePricingCard({
   ctaHref,
   popular = false,
   className = '',
+  style,
 }) {
   const lines = String(features || '')
     .split('\n')

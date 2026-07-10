@@ -50,6 +50,36 @@ const PRESETS = [
     description: '3×3 icon card grid with nine B2B freight services.',
   },
   {
+    id: 'courierPartners',
+    title: 'Courier Partners',
+    description: 'OUR NETWORK badge, headline, and 5×2 courier logo card grid.',
+  },
+  {
+    id: 'integrationBenefits',
+    title: 'Integration Benefits',
+    description: '04 — Why businesses choose integration (3×2 icon cards).',
+  },
+  {
+    id: 'integrationSteps',
+    title: 'How Integration Works',
+    description: '05 — Four numbered integration step cards.',
+  },
+  {
+    id: 'integrationFeatures',
+    title: 'Integration Features',
+    description: '06 — Twelve automation features in a compact grid.',
+  },
+  {
+    id: 'aiCourierRecommendation',
+    title: 'AI Courier Recommendation',
+    description: '07 — Four themed recommendation cards with bullet lists.',
+  },
+  {
+    id: 'businessTypes',
+    title: 'Supported Business Types',
+    description: '08 — Eight business use-case cards with icon circles.',
+  },
+  {
     id: 'features',
     title: 'Features row',
     description: 'Two columns with headings and short copy.',

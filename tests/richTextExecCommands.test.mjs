@@ -4,6 +4,7 @@ import {
   applyFontSizePxInRoot,
   applyRichColorInRoot,
   ensureFontSizeMarkupInRoot,
+  hasSavedWordSelectionInRoot,
   preserveRichTextSelectionForToolbar,
   readFontSizePxFromRoot,
   restoreRichTextSelection,
@@ -38,6 +39,40 @@ test('preserveRichTextSelectionForToolbar keeps highlighted range when caret col
 
   restoreRichTextSelection(root);
   assert.equal(selectionNonCollapsedInRoot(root), true);
+
+  root.remove();
+});
+
+test('applyRichColorInRoot uses saved word selection when live caret collapsed', () => {
+  if (typeof document === 'undefined') return;
+
+  const root = document.createElement('div');
+  root.contentEditable = 'true';
+  root.innerHTML = 'Why Ship with Dispatch?';
+  document.body.appendChild(root);
+
+  const sel = window.getSelection();
+  const textNode = root.firstChild;
+  const wordRange = document.createRange();
+  wordRange.setStart(textNode, 4);
+  wordRange.setEnd(textNode, 13);
+  sel.removeAllRanges();
+  sel.addRange(wordRange);
+  preserveRichTextSelectionForToolbar(root);
+  assert.equal(hasSavedWordSelectionInRoot(root), true);
+
+  const collapsed = document.createRange();
+  collapsed.selectNodeContents(root);
+  collapsed.collapse(false);
+  sel.removeAllRanges();
+  sel.addRange(collapsed);
+  assert.equal(selectionNonCollapsedInRoot(root), false);
+
+  const result = applyRichColorInRoot(root, 'foreColor', '#5528a9', { selectAllIfCollapsed: false });
+  assert.ok(result);
+  assert.match(result.after, /Ship with/);
+  assert.match(result.after, /bld-text-accent|color/i);
+  assert.doesNotMatch(result.after, /<span[^>]*>Why Ship with Dispatch\?<\/span>/);
 
   root.remove();
 });

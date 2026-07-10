@@ -948,7 +948,8 @@ export async function updateNode(nodeId, payload) {
     delete body.allowInteractionsOnLockedSection;
 
     const existingProps = normalizeNodeProps(parseSnapshot(existing.props_json) || {}, existing.node_type);
-    const mergedProps = body.props ? mergeNodePropsJsonPatch(existingProps, body.props) : existingProps;
+    const styleJsonOnly = isStyleJsonOnlyNodePayload(body) && !body.props;
+    const mergedProps = body.props ? mergeNodePropsJsonPatch(existingProps, body.props) : { ...existingProps };
     if (body.style_json !== undefined) {
       mergedProps.style_json = body.style_json;
     }
@@ -978,7 +979,6 @@ export async function updateNode(nodeId, payload) {
       }
     }
 
-    const nextProps = JSON.stringify(normalizeNodeProps(mergedProps, existing.node_type));
     const nextDisplayName = body.displayName ?? existing.display_name;
     const nextPosition = body.positionIndex ?? existing.position_index;
     const nextParent = body.parentNodeId !== undefined ? body.parentNodeId : existing.parent_node_id;
@@ -1010,6 +1010,19 @@ export async function updateNode(nodeId, payload) {
     }
     const dataForDb = jsonOrNullForDb(nextDataJson);
     const actionsForDb = jsonOrNullForDb(nextActionsJson);
+
+    let propsForWrite = mergedProps;
+    if (styleJsonOnly) {
+      const fresh = await getNodeById(nodeId, connection);
+      if (fresh) {
+        propsForWrite = normalizeNodeProps(parseSnapshot(fresh.props_json) || {}, existing.node_type);
+        if (body.style_json !== undefined) {
+          propsForWrite.style_json = body.style_json;
+        }
+      }
+    }
+
+    const nextProps = JSON.stringify(normalizeNodeProps(propsForWrite, existing.node_type));
 
     await connection.query(
       `UPDATE builder_nodes

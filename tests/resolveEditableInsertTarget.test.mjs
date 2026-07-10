@@ -37,11 +37,11 @@ test('stack selection appends at end', () => {
   assert.equal(r.insertIndex, 2);
 });
 
-test('widget after sibling in same stack appends at stack bottom', () => {
+test('widget after sibling in same stack inserts directly below selection', () => {
   const r = resolveEditableInsertTarget(tree, 4);
   assert.equal(r.ok, true);
   assert.equal(r.parentId, 3);
-  assert.equal(r.insertIndex, 2);
+  assert.equal(r.insertIndex, 1);
 });
 
 test('compound widget inserts after sibling in parent stack', () => {

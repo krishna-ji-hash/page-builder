@@ -1023,8 +1023,18 @@
 /* Nest strip can wrap to two rows — reserve a bit more than single-line chrome. */
 .bld-canvas__page .live-node.bld-column:has(> .bld-node__chrome--overlay.bld-node__chrome--nest),
 .bld-canvas__page .live-node.bld-stack:has(> .bld-node__chrome--overlay.bld-node__chrome--nest) {
-  padding-top: 96px;
+  padding-top: 72px;
   padding-bottom: 24px;
+}
+
+.bld-canvas__page .live-node.bld-column:has(> .bld-node__chrome--overlay.bld-node__chrome--nest.bld-node__chrome--layout-tools),
+.bld-canvas__page .live-node.bld-stack:has(> .bld-node__chrome--overlay.bld-node__chrome--nest.bld-node__chrome--layout-tools) {
+  padding-top: 88px;
+}
+
+.bld-canvas__page .live-node.bld-column:has(> .bld-node__chrome--overlay.bld-node__chrome--nest.bld-node__chrome--layout-tools-expanded),
+.bld-canvas__page .live-node.bld-stack:has(> .bld-node__chrome--overlay.bld-node__chrome--nest.bld-node__chrome--layout-tools-expanded) {
+  padding-top: 132px;
 }
 
 .bld-canvas__page .live-node.bld-column:has(> .bld-node__chrome--overlay.bld-node__chrome--nest .bld-node__chrome-text),
@@ -1074,7 +1084,8 @@
 .bld-node__chrome--overlay .bld-canvas-toolbar__more,
 .bld-node__chrome--overlay .bld-canvas-toolbar__dropdown,
 .bld-node__chrome--overlay .bld-canvas-toolbar__menu-item,
-.bld-node__chrome--overlay .bld-quick-layout-controls,
+.bld-node__chrome--overlay .bld-quick-layout-controls__btn,
+.bld-node__chrome--overlay .bld-quick-layout-controls__meta,
 .bld-node__chrome--overlay .bld-quick-text-toolbar,
 .bld-node__chrome--overlay .bld-wp-toolbar,
 .bld-node__chrome--overlay .bld-drag-handle-wrap,
@@ -1082,6 +1093,10 @@
 .bld-node__chrome--overlay textarea,
 .bld-node__chrome--overlay select {
   pointer-events: auto;
+}
+
+.bld-node__chrome--overlay .bld-quick-layout-controls {
+  pointer-events: none;
 }
 
 .bld-node__chrome-top {
@@ -1225,6 +1240,14 @@
   border-color: var(--bld-primary);
   color: #fff;
   background: var(--bld-primary);
+}
+
+.bld-quick-layout-controls--compact {
+  max-width: min(100%, 520px);
+}
+
+.bld-quick-layout-controls__btn--toggle {
+  font-weight: 800;
 }
 
 .bld-quick-layout-controls__meta {
@@ -2349,6 +2372,17 @@
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--bld-primary) 35%, transparent),
     0 0 0 8px color-mix(in srgb, var(--bld-primary) 10%, transparent);
+}
+
+.bld-canvas__page .bld-node__shell.bld-block--grid:has(.bld-el-grid__editable:focus-within) > .bld-node__chrome--overlay {
+  pointer-events: none;
+}
+
+.bld-canvas__page .bld-node__shell.bld-block--grid .bld-el-grid__editable,
+.bld-canvas__page .bld-node__shell.bld-block--grid .bld-el-grid__editable * {
+  pointer-events: auto;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .bld-quick-text-toolbar {

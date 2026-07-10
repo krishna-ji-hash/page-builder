@@ -13,6 +13,8 @@ export default function InlineEdit({
   className = '',
   multiline = false,
   htmlMode = false,
+  /** When true, Enter inserts a new paragraph block (`<p>`) instead of a line break. */
+  blockParagraphEnter = false,
   /** When true, skip blur-to-commit (e.g. native color picker open on floating toolbar). */
   blurCommitGuard,
 }) {
@@ -64,7 +66,21 @@ export default function InlineEdit({
       onBlur={handleBlur}
       onKeyDown={(event) => {
         event.stopPropagation();
-        if (event.key === 'Enter' && !event.shiftKey && !multiline && !htmlMode) {
+        if (
+          blockParagraphEnter &&
+          multiline &&
+          htmlMode &&
+          event.key === 'Enter' &&
+          !event.shiftKey
+        ) {
+          event.preventDefault();
+          try {
+            document.execCommand('insertParagraph');
+          } catch {
+            document.execCommand('insertHTML', false, '<p><br></p>');
+          }
+          onChange(event.currentTarget.innerHTML);
+        } else if (event.key === 'Enter' && !event.shiftKey && !multiline && !htmlMode) {
           event.preventDefault();
           onCommit();
         } else if (event.key === 'Escape') {

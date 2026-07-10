@@ -20,6 +20,7 @@ import {
   computeMoveDown,
   computeMoveUp,
   computeReorderFromDrop,
+  findAncestorRowNode,
   findNodeInTree,
   getSiblingContext,
 } from '@/lib/builderTree';
@@ -126,6 +127,7 @@ import {
   patchStatsCounterItemFields,
   resolveStatsCounterProps,
 } from '@/lib/statsCounterDefaults';
+import { patchGridBlockItemFields } from '@/lib/gridBlockDefaults';
 import {
   patchTabHeroPanel,
   resolveActiveTabHeroPanelIdFromDom,
@@ -154,6 +156,7 @@ import {
   ensureFontSizeMarkupInRoot,
   applyRichColorInRoot,
   execRichCommandInRoot,
+  hasSavedWordSelectionInRoot,
   readFontSizePxFromRoot,
   restoreRichTextSelection,
   saveRichTextSelection,
@@ -345,7 +348,7 @@ function getRichTextCommandRoot({
   const shell = nodeElementRef?.current;
   if (!shell) return null;
   if (
-    (nodeType === 'tabs' || nodeType === 'tab_hero' || nodeType === 'stats_counter') &&
+    (nodeType === 'tabs' || nodeType === 'tab_hero' || nodeType === 'stats_counter' || nodeType === 'grid_block') &&
     isFeatureTabFieldEditing
   ) {
     const focused = shell.querySelector(`${FEATURE_TAB_FIELD_SELECTOR}:focus`);
@@ -526,6 +529,7 @@ function renderNodeContent(node, renderOpts = {}) {
     onFeatureTabsPatch = null,
     onFeatureTabsImageFile = null,
     onStatsCounterPatch = null,
+    onGridBlockPatch = null,
     onTabHeroPatch = null,
     onTabHeroImageFile = null,
     onTabHeroActiveChange = null,
@@ -558,6 +562,7 @@ function renderNodeContent(node, renderOpts = {}) {
     onFeatureTabsPatch ||
     onFeatureTabsImageFile ||
     onStatsCounterPatch ||
+    onGridBlockPatch ||
     onTabHeroPatch ||
     onTabHeroImageFile ||
     onTabHeroActiveChange ||
@@ -587,6 +592,13 @@ function renderNodeContent(node, renderOpts = {}) {
             ? {
                 statsCounter: {
                   onPatchItem: onStatsCounterPatch,
+                },
+              }
+            : {}),
+          ...(onGridBlockPatch
+            ? {
+                gridBlock: {
+                  onPatchItem: onGridBlockPatch,
                 },
               }
             : {}),
@@ -714,7 +726,8 @@ function renderNodeContent(node, renderOpts = {}) {
     const textNorm = normalizeInlineTextProps(node.props || {});
     const textHtmlMode =
       isInlineEditing &&
-      (textNorm.richText.enabled ||
+      (isParagraph ||
+        textNorm.richText.enabled ||
         textEditToolbarOpen ||
         isProbablyInlineHtml(inlineDraftText) ||
         isProbablyInlineHtml(rawText));
@@ -730,6 +743,7 @@ function renderNodeContent(node, renderOpts = {}) {
           blurCommitGuard={inlineEditBlurCommitGuard}
           disabled={isSavingNode || sectionEditLocked}
           htmlMode={textHtmlMode}
+          blockParagraphEnter={isParagraph}
         />
       );
     }
@@ -826,7 +840,7 @@ function renderNodeContent(node, renderOpts = {}) {
     if (preview != null) return preview;
   }
 
-  if (node.nodeType === 'image' && nodeLooksLikeBrandLogo(node)) {
+  if (node.nodeType === 'image' && nodeLooksLikeBrandLogo(node, { tree: renderOpts.builderTree || null })) {
     const brandLive = renderViaLive();
     if (brandLive) return brandLive;
     const figureStyle =
@@ -1003,7 +1017,7 @@ function CanvasFloatingToolbar({
         <button
           type="button"
           className="bld-row__toolbar-btn bld-row__toolbar-btn--drag"
-          title="Drag to reorder layers · Turn on Free mode in the top bar to drag-position widgets · Hold Alt while dragging to duplicate"
+          title="Drag to reorder — drop on another layer or use ← → buttons · Hold Alt to duplicate"
           aria-label="Drag to reorder"
           aria-describedby={dragAltHintId}
           disabled={dragDisabled}
@@ -1253,6 +1267,7 @@ function NodeRenderer({
   const featureTabsElementsMode =
     node.nodeType === 'tabs' && isFeatureTabsElementPanelMode(node.props);
   const supportsStatsInlineEdit = node.nodeType === 'stats_counter';
+  const supportsGridInlineEdit = node.nodeType === 'grid_block';
   const supportsTabHeroCompoundEdit = node.nodeType === 'tab_hero';
   const supportsFloatingTextToolbar =
     supportsInlineTextEdit ||
@@ -1416,6 +1431,19 @@ function NodeRenderer({
     [node.id, node.nodeType, node.props, onUpdateNode, sectionEditLocked]
   );
   const statsCounterPatchHandler = node.nodeType === 'stats_counter' ? handleStatsCounterPatch : null;
+  const handleGridBlockPatch = useCallback(
+    async (index, patch) => {
+      if (sectionEditLocked || !onUpdateNode || node.nodeType !== 'grid_block' || !patch) return;
+      const items = Array.isArray(node.props?.items) ? node.props.items : [];
+      const nextItems = patchGridBlockItemFields(items, index, patch);
+      await onUpdateNode({
+        nodeId: node.id,
+        payload: { props: { ...(node.props || {}), items: nextItems } },
+      });
+    },
+    [node.id, node.nodeType, node.props, onUpdateNode, sectionEditLocked]
+  );
+  const gridBlockPatchHandler = node.nodeType === 'grid_block' ? handleGridBlockPatch : null;
   const handleTabHeroPatch = useCallback(
     async (panelId, patch) => {
       if (sectionEditLocked || !onUpdateNode || node.nodeType !== 'tab_hero' || !patch) return;
@@ -1628,6 +1656,7 @@ function NodeRenderer({
   const compoundFullWidthShell =
     !shellCarriesLeafLayout &&
     (node.nodeType === 'stats_counter' ||
+      node.nodeType === 'grid_block' ||
       node.nodeType === 'tab_hero' ||
       node.nodeType === 'tabs' ||
       node.nodeType === 'accordion');
@@ -1667,6 +1696,8 @@ function NodeRenderer({
   const [interactionPreviewStyle, setInteractionPreviewStyle] = useState(null);
   const [dragAssist, setDragAssist] = useState(null);
   const [overflowLocal, setOverflowLocal] = useState(null);
+  const overflowLocalRef = useRef(null);
+  const [quickLayoutExpanded, setQuickLayoutExpanded] = useState(false);
   const [imageToolbarFixedPos, setImageToolbarFixedPos] = useState(null);
   const imageToolbarRef = useRef(null);
   const nodeElementRef = useRef(null);
@@ -1700,6 +1731,14 @@ function NodeRenderer({
   });
   const neutralizeBodyColorsPreview = neutralizeBodyColors;
   const neutralizeBodyColorsPersist = neutralizeBodyColors;
+  const leafHtmlSanitizeOpts = useCallback(
+    (extra = {}) => ({
+      neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist,
+      ...(node.nodeType === 'paragraph' ? { paragraphBlocks: true } : {}),
+      ...extra,
+    }),
+    [neutralizeBodyColorsPersist, node.nodeType]
+  );
 
   const commitActiveFeatureTabPanelFromDom = useCallback(async () => {
     if (sectionEditLocked || node.nodeType !== 'tabs' || !featureTabsPatchHandler) return;
@@ -1827,15 +1866,19 @@ function NodeRenderer({
     deletingNodeId === node.id ? 'bld-node--deleting' : '',
     isInlineEditing ||
     isRichTextEditing ||
-    ((node.nodeType === 'tabs' || node.nodeType === 'tab_hero' || node.nodeType === 'stats_counter') &&
+    ((node.nodeType === 'tabs' ||
+      node.nodeType === 'tab_hero' ||
+      node.nodeType === 'stats_counter' ||
+      node.nodeType === 'grid_block') &&
       isFeatureTabFieldEditing)
       ? 'bld-node--editing-focus'
       : '',
     sectionEditLocked ? 'bld-node--section-locked' : '',
     node.nodeType === 'image' ? 'bld-block--image' : '',
-    node.nodeType === 'image' && nodeLooksLikeBrandLogo(node) ? 'bld-block--brand-logo' : '',
+    node.nodeType === 'image' && nodeLooksLikeBrandLogo(node, { tree }) ? 'bld-block--brand-logo' : '',
     node.nodeType === 'carousel' ? 'bld-block--carousel' : '',
     node.nodeType === 'stats_counter' ? 'bld-block--stats-counter' : '',
+    node.nodeType === 'grid_block' ? 'bld-block--grid' : '',
     node.nodeType === 'tab_hero' ? 'bld-block--tab-hero' : '',
     isSplitHeroCarouselNode(node) ? 'bld-block--split-hero-carousel' : '',
     isDividerLeaf ? 'live-divider bld-divider-shell' : '',
@@ -2665,7 +2708,10 @@ function NodeRenderer({
       if (sectionEditLocked) return;
       setTextEditToolbarOpen(true);
       if (
-        (node.nodeType === 'tabs' || node.nodeType === 'tab_hero' || node.nodeType === 'stats_counter') &&
+        (node.nodeType === 'tabs' ||
+          node.nodeType === 'tab_hero' ||
+          node.nodeType === 'stats_counter' ||
+          node.nodeType === 'grid_block') &&
         shouldStartFeatureTabTextEdit(event)
       ) {
         const field = event?.target?.closest?.(FEATURE_TAB_FIELD_SELECTOR);
@@ -2727,7 +2773,10 @@ function NodeRenderer({
     (event) => {
       if (!event || sectionEditLocked) return;
       const wantsCompoundField =
-        (node.nodeType === 'tabs' || node.nodeType === 'tab_hero' || node.nodeType === 'stats_counter') &&
+        (node.nodeType === 'tabs' ||
+          node.nodeType === 'tab_hero' ||
+          node.nodeType === 'stats_counter' ||
+          node.nodeType === 'grid_block') &&
         shouldStartFeatureTabTextEdit(event);
       const wantsLeaf = shouldStartTextEditFromCanvasClick(event, node.nodeType);
       if (!wantsCompoundField && !wantsLeaf) return;
@@ -2756,6 +2805,20 @@ function NodeRenderer({
       if (!isSelected) onSelectNode(node.id);
     },
     [sectionEditLocked, isSelected, node.id, onSelectNode]
+  );
+
+  const handleGridFieldPointerDownCapture = useCallback(
+    (event) => {
+      if (event.button !== 0 || sectionEditLocked) return;
+      if (!shouldStartFeatureTabTextEdit(event)) return;
+      if (!isSelected) {
+        pendingTextEditPointerRef.current = event;
+        onSelectNode(node.id);
+        return;
+      }
+      beginTextEditSession(event);
+    },
+    [sectionEditLocked, isSelected, node.id, onSelectNode, beginTextEditSession]
   );
 
   const handleTabHeroFieldPointerDownCapture = useCallback(
@@ -2804,7 +2867,10 @@ function NodeRenderer({
       );
     }
     if (
-      (node.nodeType === 'tabs' || node.nodeType === 'tab_hero' || node.nodeType === 'stats_counter') &&
+      (node.nodeType === 'tabs' ||
+        node.nodeType === 'tab_hero' ||
+        node.nodeType === 'stats_counter' ||
+        node.nodeType === 'grid_block') &&
       isFeatureTabFieldEditing &&
       nodeElementRef.current
     ) {
@@ -2813,7 +2879,9 @@ function NodeRenderer({
           ? '.live-tab-hero__card'
           : node.nodeType === 'stats_counter'
             ? '.live-stats-counter'
-            : '.live-feature-tabs__copy';
+            : node.nodeType === 'grid_block'
+              ? '.bld-el-grid'
+              : '.live-feature-tabs__copy';
       return (
         nodeElementRef.current.querySelector(`${FEATURE_TAB_FIELD_SELECTOR}:focus`) ||
         nodeElementRef.current.querySelector(anchorSel) ||
@@ -2907,10 +2975,29 @@ function NodeRenderer({
     return false;
   };
 
+  const persistGridBlockFieldFromRoot = async (root, htmlOverride = null) => {
+    if (!root || node.nodeType !== 'grid_block' || !gridBlockPatchHandler) return false;
+    const cell = root.closest?.('.bld-el-grid__cell');
+    const index = Number(cell?.getAttribute?.('data-grid-index'));
+    if (!Number.isInteger(index) || index < 0) return false;
+    const rawText =
+      typeof htmlOverride === 'string' ? htmlOverride : String(root.innerText || '').trim();
+    if (root.classList.contains('bld-el-grid__title')) {
+      await gridBlockPatchHandler(index, { title: rawText });
+      return true;
+    }
+    if (root.classList.contains('bld-el-grid__text')) {
+      await gridBlockPatchHandler(index, { text: rawText });
+      return true;
+    }
+    return false;
+  };
+
   const persistCompoundFieldFromRoot = async (root, htmlOverride = null) => {
     if (node.nodeType === 'tabs') return persistFeatureTabFieldFromRoot(root, htmlOverride);
     if (node.nodeType === 'tab_hero') return persistTabHeroFieldFromRoot(root, htmlOverride);
     if (node.nodeType === 'stats_counter') return persistStatsCounterFieldFromRoot(root, htmlOverride);
+    if (node.nodeType === 'grid_block') return persistGridBlockFieldFromRoot(root, htmlOverride);
     return false;
   };
 
@@ -2936,7 +3023,10 @@ function NodeRenderer({
 
   useEffect(() => {
     if (
-      (node.nodeType !== 'tabs' && node.nodeType !== 'tab_hero') ||
+      (node.nodeType !== 'tabs' &&
+        node.nodeType !== 'tab_hero' &&
+        node.nodeType !== 'stats_counter' &&
+        node.nodeType !== 'grid_block') ||
       !isSelected ||
       sectionEditLocked
     ) {
@@ -2965,7 +3055,10 @@ function NodeRenderer({
 
   useEffect(() => {
     if (
-      (node.nodeType !== 'tabs' && node.nodeType !== 'tab_hero') ||
+      (node.nodeType !== 'tabs' &&
+        node.nodeType !== 'tab_hero' &&
+        node.nodeType !== 'stats_counter' &&
+        node.nodeType !== 'grid_block') ||
       !isSelected ||
       sectionEditLocked
     ) {
@@ -3126,7 +3219,7 @@ function NodeRenderer({
         };
         const pos = computeFloatingToolbarBesidePosition(rect, toolbarSize, {
           gap: 12,
-          preferBelow: nodeLooksLikeBrandLogo(node),
+          preferBelow: nodeLooksLikeBrandLogo(node, { tree }),
         });
         setImageToolbarFixedPos(pos);
       });
@@ -3164,12 +3257,10 @@ function NodeRenderer({
     if (!root) return null;
     const html = String(root.innerHTML || '').trim();
     if (isProbablyInlineHtml(html)) {
-      return sanitizeInlineLeafHtml(html, {
-        neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist,
-      });
+      return sanitizeInlineLeafHtml(html, leafHtmlSanitizeOpts());
     }
     return String(root.innerText || '').trim();
-  }, [neutralizeBodyColorsPersist]);
+  }, [leafHtmlSanitizeOpts]);
 
   const handleInlineEditCommit = async (targetNode) => {
     if (isCommittingInlineEditRef.current) return;
@@ -3184,7 +3275,7 @@ function NodeRenderer({
         targetNode.nodeType === 'paragraph') &&
       isProbablyInlineHtml(nextText)
     ) {
-      nextText = sanitizeInlineLeafHtml(nextText, { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist });
+      nextText = sanitizeInlineLeafHtml(nextText, leafHtmlSanitizeOpts());
     }
     setIsInlineEditing(false);
     if (!onUpdateNode) {
@@ -3200,10 +3291,7 @@ function NodeRenderer({
       await onUpdateNode({
         nodeId: targetNode.id,
         payload: {
-          props: {
-            ...targetNode.props,
-            ...propsPatchForTextContent(targetNode.props || {}, nextText),
-          },
+          props: propsPatchForTextContent(targetNode.props || {}, nextText),
         },
       });
     } finally {
@@ -3213,7 +3301,10 @@ function NodeRenderer({
 
   const endTextEditSession = useCallback(async () => {
     if (
-      (node.nodeType === 'tabs' || node.nodeType === 'tab_hero' || node.nodeType === 'stats_counter') &&
+      (node.nodeType === 'tabs' ||
+        node.nodeType === 'tab_hero' ||
+        node.nodeType === 'stats_counter' ||
+        node.nodeType === 'grid_block') &&
       (isFeatureTabFieldEditing || activeTextEditRootRef.current)
     ) {
       const tabRoot =
@@ -3267,7 +3358,8 @@ function NodeRenderer({
       if (
         node.nodeType === 'tabs' ||
         node.nodeType === 'tab_hero' ||
-        node.nodeType === 'stats_counter'
+        node.nodeType === 'stats_counter' ||
+        node.nodeType === 'grid_block'
       ) {
         void persistCompoundFieldFromRoot(focusedField);
       }
@@ -3364,12 +3456,7 @@ function NodeRenderer({
     if (node.nodeType !== 'image' || !onUpdateNode) return;
     await onUpdateNode({
       nodeId: node.id,
-      payload: {
-        props: {
-          ...(node.props || {}),
-          ...patch,
-        },
-      },
+      payload: { props: patch },
     });
   };
 
@@ -3410,7 +3497,7 @@ function NodeRenderer({
 
   const commitBrandLogoWidthPx = async (nextWidth) => {
     if (sectionEditLocked || !onUpdateNode) return;
-    if (node.nodeType !== 'image' || !nodeLooksLikeBrandLogo(node)) return;
+    if (node.nodeType !== 'image' || !nodeLooksLikeBrandLogo(node, { tree })) return;
     const widthPx = Math.max(48, Math.min(400, Math.round(Number(nextWidth) || 160)));
     const propsPatch = brandLogoPropsPatchFromFormKey('logoWidth', widthPx, node.props || {});
     if (!propsPatch) return;
@@ -3442,7 +3529,7 @@ function NodeRenderer({
   };
 
   const adjustBrandLogoWidth = async (delta) => {
-    if (node.nodeType !== 'image' || !nodeLooksLikeBrandLogo(node)) return;
+    if (node.nodeType !== 'image' || !nodeLooksLikeBrandLogo(node, { tree })) return;
     const normalized = normalizeBrandLogoProps(node.props || {});
     const current = parseBrandLogoWidthPx(normalized.width, 160);
     const nextWidth = Math.max(48, Math.min(400, Math.round(current + delta)));
@@ -3450,7 +3537,7 @@ function NodeRenderer({
   };
 
   const quickBrandLogoFullWidth = async () => {
-    if (node.nodeType !== 'image' || !nodeLooksLikeBrandLogo(node)) return;
+    if (node.nodeType !== 'image' || !nodeLooksLikeBrandLogo(node, { tree })) return;
     await commitBrandLogoWidthPx(measureBrandLogoFillWidthPx());
   };
 
@@ -3517,9 +3604,19 @@ function NodeRenderer({
     toolbarColorPickerOpenRef.current = true;
     markToolbarInteract(4000);
     const root = prepareToolbarFormat();
-    toolbarColorHadWordSelectionRef.current =
-      Boolean(root && (selectionNonCollapsedInRoot(root) || toolbarColorHadWordSelectionRef.current));
+    toolbarColorHadWordSelectionRef.current = Boolean(
+      root &&
+        (selectionNonCollapsedInRoot(root) ||
+          hasSavedWordSelectionInRoot(root) ||
+          toolbarColorHadWordSelectionRef.current)
+    );
     return root;
+  };
+
+  const handleToolbarColorPickerMouseDown = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    beginToolbarColorPicker();
   };
 
   const handleFloatingToolbarPointerDown = (event) => {
@@ -3574,7 +3671,8 @@ function NodeRenderer({
       node.nodeType !== 'rich_text' &&
       node.nodeType !== 'tabs' &&
       node.nodeType !== 'tab_hero' &&
-      node.nodeType !== 'stats_counter'
+      node.nodeType !== 'stats_counter' &&
+      node.nodeType !== 'grid_block'
     ) {
       return false;
     }
@@ -3584,7 +3682,12 @@ function NodeRenderer({
     const result = execFormatOnTextRoot(root, command, value);
     if (!result) return false;
     const { before, after } = result;
-    if (node.nodeType === 'tabs' || node.nodeType === 'tab_hero' || node.nodeType === 'stats_counter') {
+    if (
+      node.nodeType === 'tabs' ||
+      node.nodeType === 'tab_hero' ||
+      node.nodeType === 'stats_counter' ||
+      node.nodeType === 'grid_block'
+    ) {
       await persistCompoundFieldFromRoot(root);
       return true;
     }
@@ -3739,7 +3842,12 @@ function NodeRenderer({
     if (root.innerHTML && /<[a-z]/i.test(root.innerHTML)) {
       root.innerHTML = stripToolbarFontSizeFromHtml(root.innerHTML);
     }
-    if (node.nodeType === 'tabs' || node.nodeType === 'tab_hero' || node.nodeType === 'stats_counter') {
+    if (
+      node.nodeType === 'tabs' ||
+      node.nodeType === 'tab_hero' ||
+      node.nodeType === 'stats_counter' ||
+      node.nodeType === 'grid_block'
+    ) {
       await persistCompoundFieldFromRoot(root);
       return;
     }
@@ -3799,10 +3907,25 @@ function NodeRenderer({
     preserveTextEditSelectionForToolbar(root);
     restoreRichTextSelection(root);
     const hadWordSelection =
-      selectionNonCollapsedInRoot(root) || toolbarColorHadWordSelectionRef.current;
+      selectionNonCollapsedInRoot(root) ||
+      toolbarColorHadWordSelectionRef.current ||
+      hasSavedWordSelectionInRoot(root);
+    const compoundField =
+      node.nodeType === 'tabs' ||
+      node.nodeType === 'tab_hero' ||
+      node.nodeType === 'stats_counter' ||
+      node.nodeType === 'grid_block';
+    const hasPartialAccent = Boolean(
+      root.querySelector?.('.bld-text-accent, .bld-text-highlight, [data-bld-inline="1"]')
+    );
 
-    if (node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'paragraph') {
-      const sanitizeOpts = { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist };
+    if (
+      node.nodeType === 'heading' ||
+      node.nodeType === 'text' ||
+      node.nodeType === 'paragraph' ||
+      compoundField
+    ) {
+      const sanitizeOpts = leafHtmlSanitizeOpts();
       const result = applyRichColorInRoot(root, 'foreColor', hex, {
         selectAllIfCollapsed: !hadWordSelection,
       });
@@ -3811,7 +3934,9 @@ function NodeRenderer({
         const before = sanitizeInlineLeafHtml(result.before, sanitizeOpts);
         if (after !== before) {
           lockTextEditRootForFormatting(root);
-          if (isInlineEditing) {
+          if (compoundField) {
+            await persistCompoundFieldFromRoot(root, after);
+          } else if (isInlineEditing) {
             setInlineDraftText(after);
           } else if (onUpdateNode) {
             await onUpdateNode({
@@ -3831,7 +3956,7 @@ function NodeRenderer({
       }
     }
 
-    if (!hadWordSelection) {
+    if (!hadWordSelection && !compoundField && !hasPartialAccent) {
       root.style.setProperty('color', hex);
       root.style.setProperty('--node-text', hex);
       await commitStylePatch({
@@ -3856,10 +3981,22 @@ function NodeRenderer({
     preserveTextEditSelectionForToolbar(root);
     restoreRichTextSelection(root);
     const hadWordSelection =
-      selectionNonCollapsedInRoot(root) || toolbarColorHadWordSelectionRef.current;
+      selectionNonCollapsedInRoot(root) ||
+      toolbarColorHadWordSelectionRef.current ||
+      hasSavedWordSelectionInRoot(root);
+    const compoundField =
+      node.nodeType === 'tabs' ||
+      node.nodeType === 'tab_hero' ||
+      node.nodeType === 'stats_counter' ||
+      node.nodeType === 'grid_block';
 
-    if (node.nodeType === 'heading' || node.nodeType === 'text' || node.nodeType === 'paragraph') {
-      const sanitizeOpts = { neutralizeHardcodedBodyTextColors: neutralizeBodyColorsPersist };
+    if (
+      node.nodeType === 'heading' ||
+      node.nodeType === 'text' ||
+      node.nodeType === 'paragraph' ||
+      compoundField
+    ) {
+      const sanitizeOpts = leafHtmlSanitizeOpts();
       const result = applyRichColorInRoot(root, 'hiliteColor', hex, {
         selectAllIfCollapsed: !hadWordSelection,
       });
@@ -3868,7 +4005,9 @@ function NodeRenderer({
         const before = sanitizeInlineLeafHtml(result.before, sanitizeOpts);
         if (after !== before) {
           lockTextEditRootForFormatting(root);
-          if (isInlineEditing) {
+          if (compoundField) {
+            await persistCompoundFieldFromRoot(root, after);
+          } else if (isInlineEditing) {
             setInlineDraftText(after);
           } else if (onUpdateNode) {
             await onUpdateNode({
@@ -3889,7 +4028,7 @@ function NodeRenderer({
     }
 
     const applied = await persistRichHtmlFromCommand('hiliteColor', hex);
-    if (!applied && !hadWordSelection) {
+    if (!applied && !hadWordSelection && !compoundField) {
       await commitStylePatch({
         colors: { backgroundColor: hex },
         background: { backgroundColor: hex },
@@ -4007,7 +4146,12 @@ function NodeRenderer({
         ? sanitizeRichHtml(before, sanitizeOpts) === sanitizeRichHtml(after, sanitizeOpts)
         : sanitizeInlineLeafHtml(before, sanitizeOpts) === sanitizeInlineLeafHtml(after, sanitizeOpts);
     if (unchanged) return;
-    if (node.nodeType === 'tabs' || node.nodeType === 'tab_hero' || node.nodeType === 'stats_counter') {
+    if (
+      node.nodeType === 'tabs' ||
+      node.nodeType === 'tab_hero' ||
+      node.nodeType === 'stats_counter' ||
+      node.nodeType === 'grid_block'
+    ) {
       await persistCompoundFieldFromRoot(root, after);
       return;
     }
@@ -4036,6 +4180,7 @@ function NodeRenderer({
       node.nodeType === 'tabs' ||
       node.nodeType === 'tab_hero' ||
       node.nodeType === 'stats_counter' ||
+      node.nodeType === 'grid_block' ||
       isInlineEditing ||
       node.nodeType === 'rich_text';
     const result = applyFontSizePxInRoot(root, nextPx, {
@@ -4240,7 +4385,11 @@ function NodeRenderer({
             <s>S</s>
           </button>
           <span className="bld-wp-toolbar__sep" aria-hidden />
-          <label className="bld-wp-toolbar__swatch" title="Text color (letter A) — select words first">
+          <label
+            className="bld-wp-toolbar__swatch"
+            title="Text color (letter A) — select words first"
+            onMouseDown={handleToolbarColorPickerMouseDown}
+          >
             <span className="bld-sr-only">Text color</span>
             <span className="bld-wp-toolbar__swatch-letter" aria-hidden>
               A
@@ -4249,13 +4398,17 @@ function NodeRenderer({
               type="color"
               className="bld-wp-toolbar__color-input"
               defaultValue={toolbarTextColorHex}
-              onPointerDown={() => beginToolbarColorPicker()}
+              onMouseDown={handleToolbarColorPickerMouseDown}
               onInput={(e) => applyToolbarTextColor(e.target.value)}
               onChange={(e) => applyToolbarTextColor(e.target.value)}
               onBlur={handleToolbarTextColorBlur}
             />
           </label>
-          <label className="bld-wp-toolbar__swatch" title="Highlight marker — select words first (not text color)">
+          <label
+            className="bld-wp-toolbar__swatch"
+            title="Highlight marker — select words first (not text color)"
+            onMouseDown={handleToolbarColorPickerMouseDown}
+          >
             <span className="bld-sr-only">Highlight color</span>
             <span className="bld-wp-toolbar__swatch-letter bld-wp-toolbar__swatch-letter--mark" aria-hidden>
               ■
@@ -4264,7 +4417,7 @@ function NodeRenderer({
               type="color"
               className="bld-wp-toolbar__color-input"
               defaultValue="#fef08a"
-              onPointerDown={() => beginToolbarColorPicker()}
+              onMouseDown={handleToolbarColorPickerMouseDown}
               onInput={(e) => applyToolbarHighlightColor(e.target.value)}
               onChange={(e) => applyToolbarHighlightColor(e.target.value)}
               onBlur={handleToolbarHighlightColorBlur}
@@ -4678,27 +4831,101 @@ function NodeRenderer({
 
   const verticalFlipTarget = resolveVerticalFlipTarget();
 
+  /** Stats section only — never force row→column on generic heading/feature stacks. */
   const ensureVerticalStackColumn = async (stackNode) => {
     if (!stackNode?.id || !onUpdateNode) return;
     const columnPayload = ensureStatsContentStackColumnPayload(stackNode, device, siteTheme);
     if (columnPayload) {
       await onUpdateNode({ nodeId: stackNode.id, payload: columnPayload });
-      return;
     }
-    const stackDir = String(
-      getDeviceStyle(stackNode.style_json, device)?.layout?.flexDirection || 'column'
-    ).trim();
-    if (stackDir === 'row' || stackDir === 'row-reverse') {
-      const payload = buildStatsContentStackLayoutUpdate(
-        stackNode,
-        device,
-        {
-          flexDirection: 'column',
-          alignItems: getDeviceStyle(stackNode.style_json, device)?.layout?.alignItems || 'stretch',
+  };
+
+  const resolveParentFlexDirection = (parentNode) => {
+    if (!parentNode) return 'column';
+    const raw = String(getDeviceStyle(parentNode.style_json, device)?.layout?.flexDirection || '').trim();
+    if (raw) return raw;
+    return parentNode.nodeType === 'row' ? 'row' : 'column';
+  };
+
+  const parentUsesRowAxis = (parentNode) => {
+    const dir = resolveParentFlexDirection(parentNode);
+    return dir === 'row' || dir === 'row-reverse';
+  };
+
+  const patchChildFlexHalf = async (child) => {
+    if (!child?.id || !onUpdateNode) return;
+    const next = applyDeviceStylePatch(
+      child.style_json,
+      device,
+      {
+        layout: {
+          flexGrow: '1',
+          flexShrink: '1',
+          flexBasis: 'calc(50% - 12px)',
+          minWidth: '0',
+          maxWidth: 'calc(50% - 12px)',
         },
-        siteTheme
-      );
-      await onUpdateNode({ nodeId: stackNode.id, payload });
+      },
+      child.nodeType,
+      siteTheme
+    );
+    await onUpdateNode({ nodeId: child.id, payload: { style_json: next.style_json } });
+  };
+
+  const patchChildFlexEqual = async (child) => {
+    if (!child?.id || !onUpdateNode) return;
+    const next = applyDeviceStylePatch(
+      child.style_json,
+      device,
+      {
+        layout: {
+          flexGrow: '1',
+          flexShrink: '1',
+          flexBasis: '0',
+          minWidth: '0',
+        },
+      },
+      child.nodeType,
+      siteTheme
+    );
+    await onUpdateNode({ nodeId: child.id, payload: { style_json: next.style_json } });
+  };
+
+  /** Image + copy (or any two blocks) side-by-side instead of stacked. */
+  const quickSideBySide = async () => {
+    if (!isLayoutContainer || sectionEditLocked) return;
+    const kids = Array.isArray(node.children) ? node.children : [];
+    if (kids.length !== 2) return;
+    await applyQuickFlexPatch({
+      layout: {
+        flexDirection: 'row',
+        flexWrap: 'nowrap',
+        alignItems: 'stretch',
+        justifyContent: 'flex-start',
+        gap: '32px',
+      },
+    });
+    for (const child of kids) {
+      await patchChildFlexEqual(child);
+    }
+  };
+
+  /** 3 left + 3 right (2-column wrap grid) for heading/feature lists. */
+  const quickTwoColumnGrid = async () => {
+    if (node.nodeType !== 'stack' || sectionEditLocked) return;
+    const kids = Array.isArray(node.children) ? node.children : [];
+    if (kids.length < 2) return;
+    await applyQuickFlexPatch({
+      layout: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        alignItems: 'flex-start',
+        justifyContent: 'flex-start',
+        gap: '24px',
+      },
+    });
+    for (const child of kids) {
+      await patchChildFlexHalf(child);
     }
   };
 
@@ -4771,10 +4998,14 @@ function NodeRenderer({
   const rowColumnCount =
     node.nodeType === 'row' ? (node.children || []).filter((c) => c.nodeType === 'column').length : 0;
 
+  useEffect(() => {
+    if (!isSelected) setQuickLayoutExpanded(false);
+  }, [isSelected]);
+
   const quickLayoutControls =
     isLayoutContainer && isSelected && !sectionEditLocked ? (
       <div
-        className="bld-quick-layout-controls"
+        className={`bld-quick-layout-controls${quickLayoutExpanded ? ' bld-quick-layout-controls--expanded' : ' bld-quick-layout-controls--compact'}`}
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
@@ -4800,43 +5031,29 @@ function NodeRenderer({
         <button type="button" className="bld-quick-layout-controls__btn" onClick={() => quickSetDirection('column')} disabled={isSavingNode}>
           Column
         </button>
-        {isRowMainAxis ? (
+        {(node.nodeType === 'stack' || node.nodeType === 'column') &&
+        (node.children?.length || 0) === 2 ? (
           <button
             type="button"
             className="bld-quick-layout-controls__btn"
-            onClick={() => void quickFlipHorizontal()}
+            onClick={() => void quickSideBySide()}
             disabled={isSavingNode}
-            title="Left ↔ Right (and Right ↔ Left): swaps the two columns in a section when possible; otherwise toggles row / row-reverse."
+            title="Place the two blocks side by side (e.g. image left, headings right)"
           >
-            L↔R
+            Side×2
           </button>
         ) : null}
-        {verticalFlipTarget ? (
+        {node.nodeType === 'stack' && (node.children?.length || 0) >= 4 ? (
           <button
             type="button"
             className="bld-quick-layout-controls__btn"
-            onClick={() => void quickFlipVertical()}
+            onClick={() => void quickTwoColumnGrid()}
             disabled={isSavingNode}
-            title="Top ↔ Bottom (and Bottom ↔ Top): swaps two stacked children when possible; otherwise toggles column / column-reverse."
+            title="2-column grid — 3 items left, 3 right (wrap)"
           >
-            T↔B
+            2-col
           </button>
         ) : null}
-        <button type="button" className="bld-quick-layout-controls__btn" onClick={() => quickSetJustify('flex-start')} disabled={isSavingNode}>
-          Left
-        </button>
-        <button type="button" className="bld-quick-layout-controls__btn" onClick={() => quickSetJustify('center')} disabled={isSavingNode}>
-          Align
-        </button>
-        <button type="button" className="bld-quick-layout-controls__btn" onClick={() => quickSetJustify('flex-end')} disabled={isSavingNode}>
-          Right
-        </button>
-        <button type="button" className="bld-quick-layout-controls__btn" onClick={quickCenter} disabled={isSavingNode}>
-          Center
-        </button>
-        <button type="button" className="bld-quick-layout-controls__btn" onClick={quickSpaceBetween} disabled={isSavingNode}>
-          Space Between
-        </button>
         <button
           type="button"
           className={`bld-quick-layout-controls__btn ${flexWrapIsNowrap ? 'is-active' : ''}`}
@@ -4847,18 +5064,68 @@ function NodeRenderer({
         >
           No wrap
         </button>
-        <button type="button" className="bld-quick-layout-controls__btn" onClick={() => quickGapDelta(4)} disabled={isSavingNode}>
-          Gap +
+        <button
+          type="button"
+          className={`bld-quick-layout-controls__btn bld-quick-layout-controls__btn--toggle${quickLayoutExpanded ? ' is-active' : ''}`}
+          onClick={() => setQuickLayoutExpanded((v) => !v)}
+          aria-expanded={quickLayoutExpanded}
+          title={quickLayoutExpanded ? 'Hide extra layout controls' : 'Show alignment, gap, and padding controls'}
+        >
+          {quickLayoutExpanded ? 'Less' : 'More'}
         </button>
-        <button type="button" className="bld-quick-layout-controls__btn" onClick={() => quickGapDelta(-4)} disabled={isSavingNode}>
-          Gap −
-        </button>
-        <button type="button" className="bld-quick-layout-controls__btn" onClick={() => quickPaddingDelta(4)} disabled={isSavingNode}>
-          Pad +
-        </button>
-        <button type="button" className="bld-quick-layout-controls__btn" onClick={() => quickPaddingDelta(-4)} disabled={isSavingNode}>
-          Pad −
-        </button>
+        {quickLayoutExpanded ? (
+          <>
+            {isRowMainAxis ? (
+              <button
+                type="button"
+                className="bld-quick-layout-controls__btn"
+                onClick={() => void quickFlipHorizontal()}
+                disabled={isSavingNode}
+                title="Left ↔ Right (and Right ↔ Left): swaps the two columns in a section when possible; otherwise toggles row / row-reverse."
+              >
+                L↔R
+              </button>
+            ) : null}
+            {verticalFlipTarget ? (
+              <button
+                type="button"
+                className="bld-quick-layout-controls__btn"
+                onClick={() => void quickFlipVertical()}
+                disabled={isSavingNode}
+                title="Top ↔ Bottom (and Bottom ↔ Top): swaps two stacked children when possible; otherwise toggles column / column-reverse."
+              >
+                T↔B
+              </button>
+            ) : null}
+            <button type="button" className="bld-quick-layout-controls__btn" onClick={() => quickSetJustify('flex-start')} disabled={isSavingNode}>
+              Left
+            </button>
+            <button type="button" className="bld-quick-layout-controls__btn" onClick={() => quickSetJustify('center')} disabled={isSavingNode}>
+              Align
+            </button>
+            <button type="button" className="bld-quick-layout-controls__btn" onClick={() => quickSetJustify('flex-end')} disabled={isSavingNode}>
+              Right
+            </button>
+            <button type="button" className="bld-quick-layout-controls__btn" onClick={quickCenter} disabled={isSavingNode}>
+              Center
+            </button>
+            <button type="button" className="bld-quick-layout-controls__btn" onClick={quickSpaceBetween} disabled={isSavingNode}>
+              Space Between
+            </button>
+            <button type="button" className="bld-quick-layout-controls__btn" onClick={() => quickGapDelta(4)} disabled={isSavingNode}>
+              Gap +
+            </button>
+            <button type="button" className="bld-quick-layout-controls__btn" onClick={() => quickGapDelta(-4)} disabled={isSavingNode}>
+              Gap −
+            </button>
+            <button type="button" className="bld-quick-layout-controls__btn" onClick={() => quickPaddingDelta(4)} disabled={isSavingNode}>
+              Pad +
+            </button>
+            <button type="button" className="bld-quick-layout-controls__btn" onClick={() => quickPaddingDelta(-4)} disabled={isSavingNode}>
+              Pad −
+            </button>
+          </>
+        ) : null}
       </div>
     ) : null;
 
@@ -4878,11 +5145,16 @@ function NodeRenderer({
   const moveDownAmongSiblings = canSiblingReorder ? computeMoveDown(tree, node.id) : null;
   const runSiblingReorder = async (patch) => {
     if (!patch || !onReorderNode) return;
-    if (siblingReorderParent?.nodeType === 'stack') {
+    if (
+      siblingReorderParent?.nodeType === 'stack' &&
+      isStatsSectionRow(findAncestorRowNode(tree, siblingReorderParent.id))
+    ) {
       await ensureVerticalStackColumn(siblingReorderParent);
     }
     await onReorderNode(patch);
   };
+
+  const siblingParentIsRow = parentUsesRowAxis(siblingReorderParent);
 
   const quickSiblingReorderControls = canSiblingReorder ? (
     <div
@@ -4895,18 +5167,18 @@ function NodeRenderer({
         className="bld-quick-layout-controls__btn"
         onClick={() => moveUpAmongSiblings && void runSiblingReorder(moveUpAmongSiblings)}
         disabled={isSavingNode || isReorderingNode || !moveUpAmongSiblings}
-        title="Move one step up among siblings"
+        title={siblingParentIsRow ? 'Move left among siblings' : 'Move up among siblings'}
       >
-        ↑ Top
+        {siblingParentIsRow ? '← Left' : '↑ Up'}
       </button>
       <button
         type="button"
         className="bld-quick-layout-controls__btn"
         onClick={() => moveDownAmongSiblings && void runSiblingReorder(moveDownAmongSiblings)}
         disabled={isSavingNode || isReorderingNode || !moveDownAmongSiblings}
-        title="Move one step down among siblings"
+        title={siblingParentIsRow ? 'Move right among siblings' : 'Move down among siblings'}
       >
-        ↓ Bottom
+        {siblingParentIsRow ? '→ Right' : '↓ Down'}
       </button>
     </div>
   ) : null;
@@ -4988,11 +5260,16 @@ function NodeRenderer({
 
   const isHoveredHere = hoveredNodeId === node.id;
 
-  // Local overflow measurement (selected/hovered only, debounced).
+  // Local overflow measurement (layout containers only, debounced; skip no-op updates).
   useEffect(() => {
+    if (!isLayoutContainer || (!isNodeActive && !isHoveredHere)) {
+      overflowLocalRef.current = null;
+      setOverflowLocal(null);
+      return undefined;
+    }
+
     const el = nodeElementRef.current;
     if (!el) return undefined;
-    if (!isNodeActive && !isHoveredHere) return undefined;
 
     let raf = 0;
     let t = 0;
@@ -5017,8 +5294,19 @@ function NodeRenderer({
         }
       }
 
-      onReportOverflow?.(node.id, { horizontal, vertical, flexWrapUnexpected, ts: Date.now() });
-      setOverflowLocal({ horizontal, vertical, flexWrapUnexpected });
+      const next = { horizontal, vertical, flexWrapUnexpected };
+      const prev = overflowLocalRef.current;
+      if (
+        prev &&
+        prev.horizontal === next.horizontal &&
+        prev.vertical === next.vertical &&
+        prev.flexWrapUnexpected === next.flexWrapUnexpected
+      ) {
+        return;
+      }
+      overflowLocalRef.current = next;
+      onReportOverflow?.(node.id, { ...next, ts: Date.now() });
+      setOverflowLocal(next);
     };
 
     const schedule = () => {
@@ -5026,7 +5314,7 @@ function NodeRenderer({
       t = window.setTimeout(() => {
         if (raf) cancelAnimationFrame(raf);
         raf = requestAnimationFrame(measure);
-      }, 120);
+      }, 280);
     };
 
     schedule();
@@ -5040,7 +5328,7 @@ function NodeRenderer({
       if (ro) ro.disconnect();
       window.removeEventListener('scroll', schedule, true);
     };
-  }, [isNodeActive, isHoveredHere, node.id, onReportOverflow]);
+  }, [isLayoutContainer, isNodeActive, isHoveredHere, node.id, onReportOverflow]);
 
   const supportsInlineContentPanel = false;
   const inlineContentPanel =
@@ -5545,7 +5833,9 @@ function NodeRenderer({
                 ? handleTextEditPointerDownCapture
                 : supportsStatsInlineEdit
                   ? handleStatsFieldPointerDownCapture
-                  : undefined
+                  : supportsGridInlineEdit
+                    ? handleGridFieldPointerDownCapture
+                    : undefined
           }
           onMouseDown={maybeStartDirectMove}
           onKeyDown={handleKeyDown}
@@ -5555,6 +5845,7 @@ function NodeRenderer({
               : node.nodeType === 'tabs' ||
                   node.nodeType === 'accordion' ||
                   node.nodeType === 'stats_counter' ||
+                  node.nodeType === 'grid_block' ||
                   node.nodeType === 'tab_hero' ||
                   node.nodeType === 'carousel'
                 ? 'group'
@@ -5584,7 +5875,7 @@ function NodeRenderer({
             ) : null}
             {needsShellChromeOverlay ? (
               <div
-                className={`bld-node__chrome bld-node__chrome--overlay${isContainer ? ' bld-node__chrome--nest' : ''}`.trim()}
+                className={`bld-node__chrome bld-node__chrome--overlay${isContainer ? ' bld-node__chrome--nest' : ''}${quickChromeLayoutControls ? ' bld-node__chrome--layout-tools' : ''}${quickLayoutExpanded ? ' bld-node__chrome--layout-tools-expanded' : ''}`.trim()}
               >
                 <div className="bld-node__chrome-top">
                   {isContainer ? (
@@ -5723,6 +6014,7 @@ function NodeRenderer({
                   onFeatureTabsPatch: featureTabsPatchHandler,
                   onFeatureTabsImageFile: featureTabsImageHandler,
                   onStatsCounterPatch: statsCounterPatchHandler,
+                  onGridBlockPatch: gridBlockPatchHandler,
                   onTabHeroPatch: tabHeroPatchHandler,
                   onTabHeroImageFile: tabHeroImageHandler,
                   onTabHeroActiveChange: tabHeroActiveChangeHandler,
@@ -5776,6 +6068,7 @@ function NodeRenderer({
                 onFeatureTabsPatch: featureTabsPatchHandler,
                 onFeatureTabsImageFile: featureTabsImageHandler,
                 onStatsCounterPatch: statsCounterPatchHandler,
+                onGridBlockPatch: gridBlockPatchHandler,
                 onTabHeroPatch: tabHeroPatchHandler,
                 onTabHeroImageFile: tabHeroImageHandler,
                 onTabHeroActiveChange: tabHeroActiveChangeHandler,
@@ -5832,7 +6125,7 @@ function NodeRenderer({
                     {node.nodeType === 'image' ? (
                       <div
                         className={`bld-image-toolbar bld-image-toolbar--compact bld-image-toolbar--floating${
-                          nodeLooksLikeBrandLogo(node) ? ' bld-image-toolbar--brand-logo' : ''
+                          nodeLooksLikeBrandLogo(node, { tree }) ? ' bld-image-toolbar--brand-logo' : ''
                         }`.trim()}
                       >
                         <div className="bld-image-toolbar__line bld-image-toolbar__line--actions">
@@ -5862,7 +6155,7 @@ function NodeRenderer({
                           >
                             ✕
                           </button>
-                          {nodeLooksLikeBrandLogo(node) ? (
+                          {nodeLooksLikeBrandLogo(node, { tree }) ? (
                             <span className="bld-image-toolbar__width-readout" aria-live="polite">
                               {parseBrandLogoWidthPx(
                                 normalizeBrandLogoProps(node.props || {}).width,
@@ -5913,16 +6206,16 @@ function NodeRenderer({
                           type="button"
                           className="bld-image-toolbar__btn"
                           title={
-                            nodeLooksLikeBrandLogo(node)
+                            nodeLooksLikeBrandLogo(node, { tree })
                               ? 'Fill header logo area'
                               : 'Full width (all devices)'
                           }
                           aria-label={
-                            nodeLooksLikeBrandLogo(node) ? 'Fill logo container' : 'Full width'
+                            nodeLooksLikeBrandLogo(node, { tree }) ? 'Fill logo container' : 'Full width'
                           }
                           onClick={(event) => {
                             event.stopPropagation();
-                            void (nodeLooksLikeBrandLogo(node)
+                            void (nodeLooksLikeBrandLogo(node, { tree })
                               ? quickBrandLogoFullWidth()
                               : quickImageFullWidth());
                           }}
@@ -5937,7 +6230,7 @@ function NodeRenderer({
                           aria-label="Decrease width"
                           onClick={(event) => {
                             event.stopPropagation();
-                            void (nodeLooksLikeBrandLogo(node)
+                            void (nodeLooksLikeBrandLogo(node, { tree })
                               ? adjustBrandLogoWidth(-30)
                               : adjustImageBlockWidth(-30));
                           }}
@@ -5952,7 +6245,7 @@ function NodeRenderer({
                           aria-label="Increase width"
                           onClick={(event) => {
                             event.stopPropagation();
-                            void (nodeLooksLikeBrandLogo(node)
+                            void (nodeLooksLikeBrandLogo(node, { tree })
                               ? adjustBrandLogoWidth(30)
                               : adjustImageBlockWidth(30));
                           }}
@@ -5960,7 +6253,7 @@ function NodeRenderer({
                         >
                           W+
                         </button>
-                        {!nodeLooksLikeBrandLogo(node) ? (
+                        {!nodeLooksLikeBrandLogo(node, { tree }) ? (
                           <>
                             <span className="bld-image-toolbar__sep-v" aria-hidden />
                             <button
@@ -6461,6 +6754,15 @@ export default function BuilderCanvas({
   const overflowFlushTimerRef = useRef(null);
   const reportOverflow = useCallback((nodeId, diag) => {
     if (!nodeId) return;
+    const prev = overflowByNodeIdRef.current?.[nodeId];
+    if (
+      prev &&
+      prev.horizontal === diag.horizontal &&
+      prev.vertical === diag.vertical &&
+      prev.flexWrapUnexpected === diag.flexWrapUnexpected
+    ) {
+      return;
+    }
     overflowByNodeIdRef.current = {
       ...(overflowByNodeIdRef.current || {}),
       [nodeId]: diag,

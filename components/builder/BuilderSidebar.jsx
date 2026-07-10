@@ -738,6 +738,30 @@ export default function BuilderSidebar({
                   <span className="bld-block-card__icon">B2B</span>
                   <span className="bld-block-card__label">B2B Services</span>
                 </button>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('courierPartners')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">CP</span>
+                  <span className="bld-block-card__label">Courier Partners</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('integrationBenefits')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">IB</span>
+                  <span className="bld-block-card__label">Integration Benefits</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('integrationSteps')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">4S</span>
+                  <span className="bld-block-card__label">Integration Steps</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('integrationFeatures')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">IF</span>
+                  <span className="bld-block-card__label">Integration Features</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('aiCourierRecommendation')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">AI</span>
+                  <span className="bld-block-card__label">AI Courier</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('businessTypes')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">BT</span>
+                  <span className="bld-block-card__label">Business Types</span>
+                </button>
                 <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('features')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">≡</span>
                   <span className="bld-block-card__label">Features</span>

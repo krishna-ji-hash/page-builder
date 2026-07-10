@@ -5,6 +5,7 @@ import {
   brandLogoDisplayUrls,
   brandLogoHasRenderableUrl,
   brandLogoPropsPatchFromFormKey,
+  imageSrcPropsPatch,
   isBrandLogoInspectorNode,
   nodeIsInsideSiteHeader,
   nodeLooksLikeBrandLogo,
@@ -18,6 +19,81 @@ test('nodeLooksLikeBrandLogo detects header image and logo_block', () => {
   assert.equal(nodeLooksLikeBrandLogo({ nodeType: 'logo_block' }), true);
   assert.equal(nodeLooksLikeBrandLogo({ nodeType: 'image', displayName: 'Logo' }), true);
   assert.equal(nodeLooksLikeBrandLogo({ nodeType: 'image', displayName: 'Hero photo' }), false);
+  assert.equal(nodeLooksLikeBrandLogo({ nodeType: 'image', displayName: 'India Post logo' }), false);
+  assert.equal(
+    nodeLooksLikeBrandLogo({
+      nodeType: 'image',
+      displayName: 'India Post logo',
+      props: { lightLogoUrl: '/uploads/p1/india-post.webp' },
+    }),
+    true
+  );
+});
+
+test('nodeLooksLikeBrandLogo excludes courier partner grid images', () => {
+  const tree = [
+    {
+      id: 10,
+      nodeType: 'row',
+      children: [
+        {
+          id: 11,
+          nodeType: 'stack',
+          props: { meta: { tplRole: 'courier-partner-card' } },
+          children: [
+            {
+              id: 12,
+              nodeType: 'image',
+              displayName: 'India Post logo',
+              props: { src: '/builder-placeholder.svg', lightLogoUrl: '/uploads/p1/india.webp' },
+            },
+          ],
+        },
+      ],
+    },
+  ];
+  assert.equal(
+    nodeLooksLikeBrandLogo(tree[0].children[0].children[0], { tree }),
+    false
+  );
+});
+
+test('partner-logo-image meta is not brand logo even without tree context', () => {
+  const node = {
+    nodeType: 'image',
+    displayName: 'Ecom Express logo',
+    props: {
+      src: '/uploads/new.webp',
+      lightLogoUrl: '/uploads/old.webp',
+      meta: { tplRole: 'partner-logo-image' },
+    },
+  };
+  assert.equal(nodeLooksLikeBrandLogo(node), false);
+});
+
+test('imageSrcPropsPatch clears stale brand fields on courier partner upload', () => {
+  const tree = [
+    {
+      id: 10,
+      nodeType: 'row',
+      children: [
+        {
+          id: 11,
+          nodeType: 'stack',
+          props: { meta: { tplRole: 'courier-partner-card' } },
+          children: [{ id: 12, nodeType: 'image', props: { lightLogoUrl: '/old.webp' } }],
+        },
+      ],
+    },
+  ];
+  const patch = imageSrcPropsPatch('/uploads/new.webp', { lightLogoUrl: '/old.webp', src: '/old.webp' }, {
+    tree,
+    nodeId: 12,
+    alt: 'Ecom Express',
+  });
+  assert.equal(patch.src, '/uploads/new.webp');
+  assert.equal(patch.lightLogoUrl, '');
+  assert.equal(patch.alt, 'Ecom Express');
 });
 
 test('nodeLooksLikeBrandLogo treats header row images as brand logo', () => {
