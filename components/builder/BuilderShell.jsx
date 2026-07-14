@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   autoFixTree,
@@ -18,6 +19,17 @@ import { flushActiveCanvasInlineEdits } from '@/lib/canvasInlineEditFlush.js';
 import { buildReduceAnimationIntensityStyleJson, collectAnimatedNodeIds } from '@/lib/audits/auditQuickFix.js';
 import { prepareTreeForBulkSave } from '@/lib/inlineImagePersist.js';
 import { adminBuilderPagePath, previewPagePath } from '@/lib/builder/adminBuilderRoutes';
+import {
+  BLOG_POST_TEMPLATE_SLUG,
+  BLOG_POST_TEMPLATE_TITLE,
+  isBlogPostTemplatePage,
+} from '@/lib/blogPostTemplatePage.js';
+import { adminFlatProjectSectionPath } from '@/lib/admin/adminRoutes';
+import { cmsItemToDetailPost } from '@/lib/cmsBlogPostUtils';
+import {
+  injectBlogPostIntoPageTree,
+  pageTreeHasBlogDetailWidget,
+} from '@/lib/injectBlogPostIntoPageTree';
 import { dPreviewPagePath } from '@/lib/admin/dBuilderRoutes';
 import { buildDraftContentFromTree, extractTreeFromDraftJson, normalizeDraftJsonObject } from '@/lib/admin/dBuilderDraftJson';
 import { buildPublicPreviewUrl } from '@/lib/admin/publicPreviewUrl';
@@ -482,7 +494,7 @@ function computePastePlacement(tree, selectedId, sourceType) {
   return { parentId: ctx.parentId, newIndex: ctx.index + 1 };
 }
 
-export default function BuilderShell({ pageId, apiMode = 'legacy' }) {
+export default function BuilderShell({ pageId, apiMode = 'legacy', blogPreviewSlug = '' }) {
   const pid = Number(pageId);
   const pageIdValid = Number.isInteger(pid) && pid > 0;
   const isAdminApi = apiMode === 'admin';
@@ -499,6 +511,8 @@ export default function BuilderShell({ pageId, apiMode = 'legacy' }) {
   const [page, setPage] = useState(null);
   const [draftVersion, setDraftVersion] = useState(null);
   const [tree, setTree] = useState([]);
+  const [blogPreviewPost, setBlogPreviewPost] = useState(null);
+  const [blogPreviewLoading, setBlogPreviewLoading] = useState(false);
   const [projectPages, setProjectPages] = useState([]);
   const [reusableBlocks, setReusableBlocks] = useState([]);
   const [globalComponents, setGlobalComponents] = useState([]);
@@ -980,22 +994,77 @@ export default function BuilderShell({ pageId, apiMode = 'legacy' }) {
     [interiorScopeRow]
   );
 
-  const liveUrl = isAdminApi
-    ? adminProject && page?.slug
-      ? buildPublicPreviewUrl(adminProject, page.slug)
-      : null
-    : page?.projectSlug && page?.slug
+  const liveUrl = useMemo(() => {
+    const previewSlug = String(blogPreviewSlug || '').trim();
+    if (previewSlug && isBlogPostTemplatePage(page)) {
+      if (isAdminApi && adminProject) {
+        return buildPublicPreviewUrl(adminProject, `blog/${previewSlug}`, { isActiveProject: true });
+      }
+      if (page?.projectSlug) {
+        return publicPagePath(page.projectSlug, `blog/${previewSlug}`, { publicSite: true });
+      }
+    }
+    if (isAdminApi) {
+      return adminProject && page?.slug ? buildPublicPreviewUrl(adminProject, page.slug) : null;
+    }
+    return page?.projectSlug && page?.slug
       ? publicPagePath(page.projectSlug, page.slug, { publicSite: true })
       : null;
+  }, [adminProject, blogPreviewSlug, isAdminApi, page]);
   const previewUrl = isAdminApi
     ? dPreviewPagePath(pid)
     : page?.projectSlug && page?.slug
       ? previewPagePath(page.projectSlug, page.slug)
       : null;
   const canOpenLivePreview = isAdminApi
-    ? Boolean(liveUrl && adminHasPublished)
-    : Boolean(liveUrl && page?.publishedVersionId);
+    ? Boolean(liveUrl && (adminHasPublished || (blogPreviewSlug && blogPreviewPost)))
+    : Boolean(liveUrl && (page?.publishedVersionId || (blogPreviewSlug && blogPreviewPost)));
   const projectTemplates = Array.isArray(page?.projectConfig?.pageTemplates) ? page.projectConfig.pageTemplates : [];
+
+  const blogListHref = useMemo(() => {
+    if (page?.projectSlug) {
+      return publicPagePath(page.projectSlug, 'blog', { publicSite: true });
+    }
+    return '/blog';
+  }, [page?.projectSlug]);
+
+  const canvasTree = useMemo(() => {
+    if (!blogPreviewPost || !Array.isArray(tree) || !tree.length) return tree;
+    if (!isBlogPostTemplatePage(page)) return tree;
+    if (!pageTreeHasBlogDetailWidget(tree)) return tree;
+    return injectBlogPostIntoPageTree(tree, blogPreviewPost, blogListHref, [blogPreviewPost]);
+  }, [tree, blogPreviewPost, page, blogListHref]);
+
+  useEffect(() => {
+    const slug = String(blogPreviewSlug || '').trim();
+    const projectId = Number(page?.projectId);
+    if (!slug || !isBlogPostTemplatePage(page) || !Number.isInteger(projectId) || projectId <= 0) {
+      setBlogPreviewPost(null);
+      setBlogPreviewLoading(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setBlogPreviewLoading(true);
+    fetch(`/api/projects/${projectId}/cms/collections/blog/items?status=all&limit=200`, { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : { items: [] }))
+      .then((data) => {
+        if (cancelled) return;
+        const items = Array.isArray(data?.items) ? data.items : [];
+        const item = items.find((row) => String(row?.slug || '').toLowerCase() === slug.toLowerCase());
+        setBlogPreviewPost(item ? cmsItemToDetailPost(item) : null);
+      })
+      .catch(() => {
+        if (!cancelled) setBlogPreviewPost(null);
+      })
+      .finally(() => {
+        if (!cancelled) setBlogPreviewLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [blogPreviewSlug, page?.projectId, page?.slug]);
 
   // Auto-seed an empty page with a full-page template once (UX: user can start styling immediately).
   useEffect(() => {
@@ -4579,6 +4648,45 @@ export default function BuilderShell({ pageId, apiMode = 'legacy' }) {
           onToggleGrid={() => setShowGrid((p) => !p)}
         />
 
+        {page?.slug === 'blog' ? (
+          <div className="bld-shell__page-hint bld-shell__page-hint--blog" role="status">
+            <strong>Blog listing page</strong> — yeh sirf <code>/blog</code> listing ke liye hai. Article ka pura
+            design (title, image, sidebar, CTA) alag page par edit karo:{' '}
+            <Link
+              className="bld-shell__page-hint-link"
+              href={adminBuilderPagePath(page?.projectSlug, BLOG_POST_TEMPLATE_SLUG)}
+            >
+              {BLOG_POST_TEMPLATE_TITLE}
+            </Link>
+            .
+          </div>
+        ) : null}
+        {isBlogPostTemplatePage(page) ? (
+          <div className="bld-shell__page-hint bld-shell__page-hint--template" role="status">
+            {blogPreviewSlug ? (
+              <>
+                <strong>Previewing article:</strong>{' '}
+                {blogPreviewLoading
+                  ? 'Loading post…'
+                  : blogPreviewPost?.title || blogPreviewSlug}
+                {blogPreviewPost ? null : !blogPreviewLoading ? ' (not found in Blog workspace)' : null}
+                {' — '}
+                template styling applies to every <code>/blog/[slug]</code>. Edit copy in{' '}
+                <Link className="bld-shell__page-hint-link" href={adminFlatProjectSectionPath('blog')}>
+                  Blog workspace
+                </Link>
+                , then publish the template when design is ready.
+              </>
+            ) : (
+              <>
+                <strong>Article template</strong> — har live post <code>/blog/[slug]</code> is design ko use karega.
+                Open a post from <Link className="bld-shell__page-hint-link" href={adminFlatProjectSectionPath('blog')}>Blog workspace</Link>{' '}
+                with <strong>Open in builder</strong> to preview real content here.
+              </>
+            )}
+          </div>
+        ) : null}
+
         {isAdminApi ? (
           <PageRevisionsModal
             open={versionHistoryOpen}
@@ -5225,7 +5333,7 @@ export default function BuilderShell({ pageId, apiMode = 'legacy' }) {
             <BuilderCanvas
               device={device}
               onDeviceChange={setDevice}
-              tree={tree}
+              tree={canvasTree}
               selectedNodeId={selectedNodeId}
               onSelectNode={handleNodeSelect}
               isLoading={isLoading}

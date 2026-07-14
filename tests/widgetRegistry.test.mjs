@@ -20,6 +20,10 @@ test('isWidgetAllowed: website has core marketing widgets only', () => {
   assert.equal(isWidgetAllowed('website', 'menu'), true);
   assert.equal(isWidgetAllowed('website', 'tabs'), true);
   assert.equal(isWidgetAllowed('website', 'accordion'), true);
+  assert.equal(isWidgetAllowed('website', 'faq_full_page'), true);
+  assert.equal(isWidgetAllowed('website', 'blog_full_page'), true);
+  assert.equal(isWidgetAllowed('website', 'blog_hub_hero'), true);
+  assert.equal(isWidgetAllowed('website', 'blog_articles_grid'), true);
   assert.equal(isWidgetAllowed('website', 'divider'), true);
   assert.equal(isWidgetAllowed('website', 'table'), true);
   assert.equal(isWidgetAllowed('website', 'form'), true);

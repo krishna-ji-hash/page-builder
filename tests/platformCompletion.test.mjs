@@ -80,6 +80,15 @@ describe('wizard page definitions use known section keys', () => {
     'integrationFeatures',
     'aiCourierRecommendation',
     'businessTypes',
+    'faqFullPage',
+    'blogFullPage',
+    'blogHubHero',
+    'blogCategoryTabs',
+    'blogFeaturedArticle',
+    'blogArticlesGrid',
+    'blogGuidesSection',
+    'blogNewsletterSection',
+    'blogFinalCta',
   ]);
 
   it('only references catalogued section template keys', () => {

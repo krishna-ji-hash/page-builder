@@ -1,15 +1,11 @@
 import { resolveAdminProjectRoute } from '@/lib/admin/adminProjectPage';
-import AdminProjectBlog from '@/components/admin/workspace/AdminProjectBlog';
+import AdminBlogPostsList from '@/components/admin/blog/AdminBlogPostsList';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-export const metadata = {
-  title: 'Blog',
-  description: 'Manage blog posts and SEO',
-};
+export const metadata = { title: 'Blog Posts', description: 'Manage blog posts' };
 
 export default async function ProjectBlogPage({ params }) {
-  const { projectId } = await resolveAdminProjectRoute(params, 'blog');
-  return <AdminProjectBlog projectId={projectId} />;
+  const ctx = await resolveAdminProjectRoute(params, 'blog');
+  return <AdminBlogPostsList projectId={ctx.projectId} projectSlug={ctx.projectSlug} />;
 }

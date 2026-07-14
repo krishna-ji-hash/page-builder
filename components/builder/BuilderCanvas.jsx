@@ -142,6 +142,16 @@ import { buildFeatureTabPanelPatchFromDom } from '@/lib/featureTabPanelCommit';
 import { sanitizeFeatureTabFieldHtml, featureTabFieldHasInlineHtml } from '@/lib/featureTabInlineHtml';
 import { BLD_FORMATTING_LOCK_ATTR } from '@/components/builder/canvas/FeatureTabCanvasField';
 import { appendFaqItem, patchFaqItems, resolveFaqAccordionProps } from '@/lib/faqAccordionDefaults';
+import { patchFaqFullPageItems, resolveFaqFullPageProps, appendFaqFullPageItem, applyFaqFullPageContentPatch } from '@/lib/faqFullPageDefaults';
+import {
+  appendBlogPost,
+  applyBlogFullPageContentPatch,
+  patchBlogPostById,
+  resolveBlogFullPageProps,
+} from '@/lib/blogFullPageDefaults';
+import { applyBlogDetailPageContentPatch } from '@/lib/blogDetailPageDefaults';
+import { isAnyBlogDetailWidgetNodeType } from '@/lib/blogDetailSectionRegistry';
+import { isAnyBlogWidgetNodeType } from '@/lib/blogSectionRegistry';
 import Menu from '@/components/runtime/Menu';
 import { applyBindingsToString } from '@/lib/cms/cmsBindings';
 import { isProbablyInlineHtml, sanitizeInlineLeafHtml } from '@/lib/inlineTextHtml';
@@ -536,6 +546,14 @@ function renderNodeContent(node, renderOpts = {}) {
     onFaqOpenChange = null,
     onFaqAccordionPatch = null,
     onFaqAccordionAddItem = null,
+    onFaqFullPageOpenChange = null,
+    onFaqFullPagePatch = null,
+    onFaqFullPageContentPatch = null,
+    onFaqFullPageAddItem = null,
+    onBlogFullPageContentPatch = null,
+    onBlogFullPagePatchPost = null,
+    onBlogFullPageAddPost = null,
+    onBlogDetailPageContentPatch = null,
     onSplitHeroSlidePatch = null,
     onSplitHeroSlideImageFile = null,
     siteTheme = null,
@@ -567,6 +585,11 @@ function renderNodeContent(node, renderOpts = {}) {
     onTabHeroImageFile ||
     onTabHeroActiveChange ||
     onFaqOpenChange ||
+    onFaqFullPageOpenChange ||
+    onFaqFullPageAddItem ||
+    onBlogFullPageContentPatch ||
+    onBlogFullPageAddPost ||
+    onBlogDetailPageContentPatch ||
     onSplitHeroSlidePatch ||
     sectionEditLocked ||
     textEditBlurCommitGuard ||
@@ -617,6 +640,32 @@ function renderNodeContent(node, renderOpts = {}) {
                   onOpenItemChange: onFaqOpenChange,
                   onPatchItem: onFaqAccordionPatch,
                   onAddItem: onFaqAccordionAddItem,
+                },
+              }
+            : {}),
+          ...(onFaqFullPageOpenChange
+            ? {
+                faqFullPage: {
+                  onOpenItemChange: onFaqFullPageOpenChange,
+                  onPatchItem: onFaqFullPagePatch,
+                  onPatchContent: onFaqFullPageContentPatch,
+                  ...(onFaqFullPageAddItem ? { onAddItem: onFaqFullPageAddItem } : {}),
+                },
+              }
+            : {}),
+          ...(onBlogFullPageContentPatch
+            ? {
+                blogFullPage: {
+                  onPatchContent: onBlogFullPageContentPatch,
+                  onPatchPost: onBlogFullPagePatchPost,
+                  ...(onBlogFullPageAddPost ? { onAddPost: onBlogFullPageAddPost } : {}),
+                },
+              }
+            : {}),
+          ...(onBlogDetailPageContentPatch
+            ? {
+                blogDetailPage: {
+                  onPatchContent: onBlogDetailPageContentPatch,
                 },
               }
             : {}),
@@ -1502,13 +1551,14 @@ function NodeRenderer({
   const tabHeroActiveChangeHandler = node.nodeType === 'tab_hero' ? handleTabHeroActiveChange : null;
   const handleFaqOpenChange = useCallback(
     async (itemId) => {
-      if (sectionEditLocked || !onUpdateNode || node.nodeType !== 'accordion') return;
+      if (sectionEditLocked || !onUpdateNode) return;
+      if (node.nodeType !== 'accordion' && node.nodeType !== 'faq_full_page') return;
       const nextId = String(itemId || '').trim();
       if (String(node.props?.openItemId || '') === nextId) return;
       await onUpdateNode({
-        nodeId: node.id,               
+        nodeId: node.id,
         payload: {
-          props: {        
+          props: {
             openItemId: nextId,
           },
         },
@@ -1519,20 +1569,38 @@ function NodeRenderer({
   const faqOpenChangeHandler = node.nodeType === 'accordion' ? handleFaqOpenChange : null;
   const handleFaqAccordionPatch = useCallback(
     async (itemId, patch) => {
-      if (sectionEditLocked || !onUpdateNode || node.nodeType !== 'accordion' || !patch) return;
-      const { items } = resolveFaqAccordionProps(node.props);
-      const index = items.findIndex((it) => it.id === itemId);
-      if (index < 0) return;
-      const next = patchFaqItems(items, index, patch);
-      await onUpdateNode({
-        nodeId: node.id,
-        payload: {
-          props: {
-            ...(node.props || {}),
-            items: next,
+      if (sectionEditLocked || !onUpdateNode || !patch) return;
+      if (node.nodeType === 'accordion') {
+        const { items } = resolveFaqAccordionProps(node.props);
+        const index = items.findIndex((it) => it.id === itemId);
+        if (index < 0) return;
+        const next = patchFaqItems(items, index, patch);
+        await onUpdateNode({
+          nodeId: node.id,
+          payload: {
+            props: {
+              ...(node.props || {}),
+              items: next,
+            },
           },
-        },
-      });
+        });
+        return;
+      }
+      if (node.nodeType === 'faq_full_page') {
+        const { items } = resolveFaqFullPageProps(node.props);
+        const index = items.findIndex((it) => it.id === itemId);
+        if (index < 0) return;
+        const next = patchFaqFullPageItems(items, index, patch);
+        await onUpdateNode({
+          nodeId: node.id,
+          payload: {
+            props: {
+              ...(node.props || {}),
+              items: next,
+            },
+          },
+        });
+      }
     },
     [node.id, node.nodeType, node.props, onUpdateNode, sectionEditLocked]
   );
@@ -1554,6 +1622,95 @@ function NodeRenderer({
     });
   }, [node.id, node.nodeType, node.props, onUpdateNode, sectionEditLocked]);
   const faqAccordionAddItemHandler = node.nodeType === 'accordion' ? handleFaqAccordionAddItem : null;
+  const handleFaqFullPageContentPatch = useCallback(
+    async (key, value) => {
+      if (sectionEditLocked || !onUpdateNode || node.nodeType !== 'faq_full_page' || !key) return;
+      const propsPatch = applyFaqFullPageContentPatch(node.props, key, value);
+      await onUpdateNode({
+        nodeId: node.id,
+        payload: {
+          props: propsPatch,
+        },
+      });
+    },
+    [node.id, node.nodeType, node.props, onUpdateNode, sectionEditLocked]
+  );
+  const faqFullPageOpenChangeHandler = node.nodeType === 'faq_full_page' ? handleFaqOpenChange : null;
+  const faqFullPagePatchHandler = node.nodeType === 'faq_full_page' ? handleFaqAccordionPatch : null;
+  const faqFullPageContentPatchHandler =
+    node.nodeType === 'faq_full_page' ? handleFaqFullPageContentPatch : null;
+  const handleFaqFullPageAddItem = useCallback(
+    async (category) => {
+      if (sectionEditLocked || !onUpdateNode || node.nodeType !== 'faq_full_page') return;
+      const { items } = resolveFaqFullPageProps(node.props);
+      const next = appendFaqFullPageItem(items, category);
+      const newItem = next[next.length - 1];
+      await onUpdateNode({
+        nodeId: node.id,
+        payload: {
+          props: {
+            items: next,
+            openItemId: newItem?.id || '',
+          },
+        },
+      });
+    },
+    [node.id, node.nodeType, node.props, onUpdateNode, sectionEditLocked]
+  );
+  const faqFullPageAddItemHandler = node.nodeType === 'faq_full_page' ? handleFaqFullPageAddItem : null;
+  const handleBlogFullPageContentPatch = useCallback(
+    async (key, value) => {
+      if (sectionEditLocked || !onUpdateNode || !isAnyBlogWidgetNodeType(node.nodeType) || !key) return;
+      const propsPatch = applyBlogFullPageContentPatch(node.props, key, value);
+      await onUpdateNode({
+        nodeId: node.id,
+        payload: { props: propsPatch },
+      });
+    },
+    [node.id, node.nodeType, node.props, onUpdateNode, sectionEditLocked]
+  );
+  const handleBlogFullPagePostPatch = useCallback(
+    async (postId, patch) => {
+      if (sectionEditLocked || !onUpdateNode || !isAnyBlogWidgetNodeType(node.nodeType) || !postId || !patch) return;
+      const { posts } = resolveBlogFullPageProps(node.props);
+      const next = patchBlogPostById(posts, postId, patch);
+      await onUpdateNode({
+        nodeId: node.id,
+        payload: { props: { posts: next } },
+      });
+    },
+    [node.id, node.nodeType, node.props, onUpdateNode, sectionEditLocked]
+  );
+  const handleBlogFullPageAddPost = useCallback(
+    async (category) => {
+      if (sectionEditLocked || !onUpdateNode || !isAnyBlogWidgetNodeType(node.nodeType)) return;
+      const { posts } = resolveBlogFullPageProps(node.props);
+      const next = appendBlogPost(posts, category);
+      await onUpdateNode({
+        nodeId: node.id,
+        payload: { props: { posts: next } },
+      });
+    },
+    [node.id, node.nodeType, node.props, onUpdateNode, sectionEditLocked]
+  );
+  const blogFullPageContentPatchHandler =
+    isAnyBlogWidgetNodeType(node.nodeType) ? handleBlogFullPageContentPatch : null;
+  const blogFullPagePostPatchHandler = isAnyBlogWidgetNodeType(node.nodeType) ? handleBlogFullPagePostPatch : null;
+  const blogFullPageAddPostHandler = isAnyBlogWidgetNodeType(node.nodeType) ? handleBlogFullPageAddPost : null;
+  const handleBlogDetailPageContentPatch = useCallback(
+    async (key, value) => {
+      if (sectionEditLocked || !onUpdateNode || !isAnyBlogDetailWidgetNodeType(node.nodeType) || !key) return;
+      const propsPatch = applyBlogDetailPageContentPatch(node.props, key, value);
+      await onUpdateNode({
+        nodeId: node.id,
+        payload: { props: propsPatch },
+      });
+    },
+    [node.id, node.nodeType, node.props, onUpdateNode, sectionEditLocked]
+  );
+  const blogDetailPageContentPatchHandler = isAnyBlogDetailWidgetNodeType(node.nodeType)
+    ? handleBlogDetailPageContentPatch
+    : null;
   const handleSplitHeroSlidePatch = useCallback(
     async (slideId, patch) => {
       if (sectionEditLocked || !onUpdateNode || node.nodeType !== 'carousel' || !patch) return;
@@ -2564,7 +2721,7 @@ function NodeRenderer({
       }
     }
     const interactiveSelector =
-      'button,input,textarea,select,a,[role="button"],[role="tab"],.live-feature-tabs__tab,.live-feature-tabs__image-btn,.live-faq-accordion__chevron-btn,.live-faq-accordion__add-btn,.live-faq-accordion__editable,.bld-demo-feature-tabs .live-feature-tabs__copy--editable,.live-tab-hero__tab,.live-tab-hero__image-btn,.live-tab-hero__editable,[data-bld-feature-tab-field],[contenteditable="true"],[contenteditable=""],.bld-transform-handle,.bld-node-controls,.bld-canvas-toolbar,.bld-canvas-toolbar__dropdown,.live-carousel__split-nav,.live-carousel__split-arrow,.live-carousel__split-dot,.live-carousel__arrow,.live-carousel__dot';
+      'button,input,textarea,select,a,[role="button"],[role="tab"],.live-feature-tabs__tab,.live-feature-tabs__image-btn,.live-faq-accordion__chevron-btn,.live-faq-accordion__add-btn,.live-faq-accordion__editable,.live-faq-full-page__tab,.live-faq-full-page__add-btn,.live-faq-full-page__accordion-toggle,.live-faq-full-page__editable,.live-faq-full-page__cta-feature-label,.live-faq-full-page__cta-btn-text,.live-faq-full-page__popular-chip,.live-faq-full-page__empty-reset,.live-blog-full-page__tab,.live-blog-full-page__add-btn,.live-blog-full-page__editable,.live-blog-full-page__search-btn,.live-blog-full-page__topic-chip,.live-blog-full-page__read-more,.live-blog-full-page__back-btn,.live-blog-full-page__hero-note-add,.live-blog-full-page__hero-note-remove,.bld-demo-feature-tabs .live-feature-tabs__copy--editable,.live-tab-hero__tab,.live-tab-hero__image-btn,.live-tab-hero__editable,[data-bld-feature-tab-field],[contenteditable="true"],[contenteditable=""],.bld-transform-handle,.bld-node-controls,.bld-canvas-toolbar,.bld-canvas-toolbar__dropdown,.live-carousel__split-nav,.live-carousel__split-arrow,.live-carousel__split-dot,.live-carousel__arrow,.live-carousel__dot';
     if (target.closest(interactiveSelector)) return;
     startMoveWithMouse(event);
   };
@@ -6021,6 +6178,14 @@ function NodeRenderer({
                   onFaqOpenChange: faqOpenChangeHandler,
                   onFaqAccordionPatch: faqAccordionPatchHandler,
                   onFaqAccordionAddItem: faqAccordionAddItemHandler,
+                  onFaqFullPageOpenChange: faqFullPageOpenChangeHandler,
+                  onFaqFullPagePatch: faqFullPagePatchHandler,
+                  onFaqFullPageContentPatch: faqFullPageContentPatchHandler,
+                  onFaqFullPageAddItem: faqFullPageAddItemHandler,
+                  onBlogFullPageContentPatch: blogFullPageContentPatchHandler,
+                  onBlogFullPagePatchPost: blogFullPagePostPatchHandler,
+                  onBlogFullPageAddPost: blogFullPageAddPostHandler,
+                  onBlogDetailPageContentPatch: blogDetailPageContentPatchHandler,
                   onSplitHeroSlidePatch: splitHeroSlidePatchHandler,
                   onSplitHeroSlideImageFile: splitHeroSlideImageHandler,
                   siteTheme,
@@ -6075,6 +6240,14 @@ function NodeRenderer({
                 onFaqOpenChange: faqOpenChangeHandler,
                 onFaqAccordionPatch: faqAccordionPatchHandler,
                 onFaqAccordionAddItem: faqAccordionAddItemHandler,
+                onFaqFullPageOpenChange: faqFullPageOpenChangeHandler,
+                onFaqFullPagePatch: faqFullPagePatchHandler,
+                onFaqFullPageContentPatch: faqFullPageContentPatchHandler,
+                onFaqFullPageAddItem: faqFullPageAddItemHandler,
+                onBlogFullPageContentPatch: blogFullPageContentPatchHandler,
+                onBlogFullPagePatchPost: blogFullPagePostPatchHandler,
+                onBlogFullPageAddPost: blogFullPageAddPostHandler,
+                onBlogDetailPageContentPatch: blogDetailPageContentPatchHandler,
                 onSplitHeroSlidePatch: splitHeroSlidePatchHandler,
                 onSplitHeroSlideImageFile: splitHeroSlideImageHandler,
                 siteTheme,

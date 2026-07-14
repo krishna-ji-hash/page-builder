@@ -102,6 +102,7 @@ function normalizeItemRow(r) {
     slug: r.slug,
     title: r.title || '',
     data: parseJsonValue(r.data_json, {}) || {},
+    seo: parseJsonValue(r.seo_json, {}) || {},
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     publishedAt: r.published_at,
@@ -212,7 +213,7 @@ function buildFilterSql(filterGroup, params) {
 export async function listItemsByCollectionId(projectId, collectionId, query = {}) {
   const pool = getDbPool();
   const q = normalizeCmsRepeatQuery(query);
-  const status = q.status === 'draft' ? 'draft' : 'published';
+  const statusFilter = q.status === 'all' ? null : q.status === 'draft' ? 'draft' : 'published';
   const limit = Number.isFinite(Number(q.limit)) ? Math.max(0, Math.min(200, Number(q.limit))) : 50;
   const offset = Number.isFinite(Number(q.offset)) ? Math.max(0, Math.min(100000, Number(q.offset))) : 0;
   const sortBy = typeof q.sortBy === 'string' && q.sortBy ? q.sortBy : 'published_at';
@@ -222,8 +223,12 @@ export async function listItemsByCollectionId(projectId, collectionId, query = {
   const sortCol =
     sortBy === 'created_at' ? 'created_at' : sortBy === 'updated_at' ? 'updated_at' : sortBy === 'title' ? 'title' : 'published_at';
 
-  const where = ['c.project_id = ?', 'i.collection_id = ?', 'i.status = ?'];
-  const params = [projectId, collectionId, status];
+  const where = ['c.project_id = ?', 'i.collection_id = ?'];
+  const params = [projectId, collectionId];
+  if (statusFilter) {
+    where.push('i.status = ?');
+    params.push(statusFilter);
+  }
 
   // Presets + quick filters
   if (q.featuredOnly) {
@@ -291,13 +296,14 @@ export async function createItem(projectId, collectionSlug, input) {
   const slug = safeSlug(input?.slug || input?.title || 'item').slice(0, 180);
   const title = typeof input?.title === 'string' ? input.title.trim().slice(0, 220) : '';
   const data = isPlainObject(input?.data) ? input.data : {};
+  const seo = isPlainObject(input?.seo) ? input.seo : {};
   const publishedAt = status === 'published' ? new Date() : null;
   const [res] = await pool.query(
-    `INSERT INTO cms_items (collection_id, status, slug, title, data_json, published_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [col.id, status, slug, title, JSON.stringify(data), publishedAt]
+    `INSERT INTO cms_items (collection_id, status, slug, title, data_json, seo_json, published_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [col.id, status, slug, title, JSON.stringify(data), JSON.stringify(seo), publishedAt]
   );
-  return { id: res.insertId, collectionId: col.id, status, slug, title, data, publishedAt };
+  return { id: res.insertId, collectionId: col.id, status, slug, title, data, seo, publishedAt };
 }
 
 export async function updateItem(projectId, collectionSlug, itemId, input) {
@@ -311,6 +317,7 @@ export async function updateItem(projectId, collectionSlug, itemId, input) {
   const slug = input?.slug != null ? safeSlug(input.slug).slice(0, 180) : null;
   const title = input?.title != null ? String(input.title).trim().slice(0, 220) : null;
   const data = input?.data != null ? (isPlainObject(input.data) ? input.data : {}) : null;
+  const seo = input?.seo != null ? (isPlainObject(input.seo) ? input.seo : {}) : null;
   const publishedAt = status === 'published' ? new Date() : status === 'draft' ? null : undefined;
 
   const sets = [];
@@ -334,6 +341,10 @@ export async function updateItem(projectId, collectionSlug, itemId, input) {
   if (data != null) {
     sets.push('data_json = ?');
     params.push(JSON.stringify(data));
+  }
+  if (seo != null) {
+    sets.push('seo_json = ?');
+    params.push(JSON.stringify(seo));
   }
   if (!sets.length) return true;
 

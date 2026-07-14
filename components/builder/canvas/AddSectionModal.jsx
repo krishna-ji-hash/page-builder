@@ -80,6 +80,76 @@ const PRESETS = [
     description: '08 — Eight business use-case cards with icon circles.',
   },
   {
+    id: 'faqFullPage',
+    title: 'FAQ Full Page',
+    description: 'Hero search, category tabs, 2-column accordion, and support CTA — all in one section.',
+  },
+  {
+    id: 'blogFullPage',
+    title: 'Blog Full Page',
+    description: 'Hero, category tabs, featured article, article grid, guides, newsletter and CTA.',
+  },
+  {
+    id: 'blogDetailPage',
+    title: 'Blog Detail Page (All)',
+    description: 'Adds hero, article body, sidebar and bottom CTA — full /blog/[slug] layout.',
+  },
+  {
+    id: 'blogDetailHero',
+    title: 'Blog Detail Hero',
+    description: 'Article hero with back link, badge, title, summary and feature image.',
+  },
+  {
+    id: 'blogDetailArticle',
+    title: 'Blog Detail Article',
+    description: 'Article content blocks and key takeaways card.',
+  },
+  {
+    id: 'blogDetailSidebar',
+    title: 'Blog Detail Sidebar',
+    description: 'Demo CTA and related topics sidebar cards.',
+  },
+  {
+    id: 'blogDetailBottomCta',
+    title: 'Blog Detail CTA',
+    description: 'Bottom sales/contact call-to-action strip.',
+  },
+  {
+    id: 'blogHubHero',
+    title: 'Blog Hub Hero',
+    description: 'Knowledge hub hero with search, popular topics and stats.',
+  },
+  {
+    id: 'blogCategoryTabs',
+    title: 'Blog Category Tabs',
+    description: 'Horizontal category filter tabs for blog content.',
+  },
+  {
+    id: 'blogFeaturedArticle',
+    title: 'Blog Featured Article',
+    description: 'Large featured article card with image overlay.',
+  },
+  {
+    id: 'blogArticlesGrid',
+    title: 'Blog Articles Grid',
+    description: 'Latest articles grid with read-more article detail.',
+  },
+  {
+    id: 'blogGuidesSection',
+    title: 'Blog Guides',
+    description: 'Popular shipping guides row with icons.',
+  },
+  {
+    id: 'blogNewsletterSection',
+    title: 'Blog Newsletter',
+    description: 'Email signup strip for logistics tips.',
+  },
+  {
+    id: 'blogFinalCta',
+    title: 'Blog Final CTA',
+    description: 'Bottom call-to-action for demo and contact.',
+  },
+  {
     id: 'features',
     title: 'Features row',
     description: 'Two columns with headings and short copy.',

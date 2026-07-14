@@ -6,8 +6,13 @@ import ProjectWorkspaceChrome from '@/components/admin/workspace/ProjectWorkspac
 import PublicUrlActions from '@/components/admin/d/PublicUrlActions';
 import PageSeoSettingsPanel from '@/components/admin/d/PageSeoSettingsPanel';
 import { buildPublicPreviewUrl } from '@/lib/admin/publicPreviewUrl';
-import { dBuilderPagePath } from '@/lib/admin/dBuilderRoutes';
+import { dBuilderPagePath, dPreviewPagePath } from '@/lib/admin/dBuilderRoutes';
 import { normalizeBuilderSlug } from '@/lib/builder/projectPageRules';
+import {
+  BLOG_POST_TEMPLATE_SLUG,
+  BLOG_POST_TEMPLATE_TITLE,
+  isBlogPostTemplatePage,
+} from '@/lib/blogPostTemplatePage.js';
 import '@/styles/admin/platform.css';
 import '@/styles/admin/project-pages.css';
 
@@ -32,9 +37,17 @@ export default function DProjectPages({
   const [query, setQuery] = useState('');
   const [newPage, setNewPage] = useState({ title: '', slug: '' });
   const [creating, setCreating] = useState(false);
+  const [creatingBlogTemplate, setCreatingBlogTemplate] = useState(false);
   const [createError, setCreateError] = useState('');
+  const [createSuccess, setCreateSuccess] = useState('');
   const [busyPageId, setBusyPageId] = useState(null);
   const [seoPageId, setSeoPageId] = useState(null);
+  /** Absolute origin only after mount — avoids SSR/client URL mismatch. */
+  const [previewOrigin, setPreviewOrigin] = useState('');
+
+  useEffect(() => {
+    setPreviewOrigin(window.location.origin);
+  }, []);
 
   const load = useCallback(async () => {
     if (!Number.isInteger(pid) || pid <= 0) {
@@ -139,11 +152,38 @@ export default function DProjectPages({
 
   const publishedCount = pages.filter((p) => p.status === 'published').length;
   const draftCount = pages.length - publishedCount;
+  const blogTemplatePage = pages.find((page) => isBlogPostTemplatePage(page)) || null;
+
+  const handleEnsureBlogTemplate = async () => {
+    setCreatingBlogTemplate(true);
+    setCreateError('');
+    setCreateSuccess('');
+    try {
+      const res = await fetch(`/api/projects/${pid}/pages/ensure-blog-template`, {
+        method: 'POST',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to create blog article template');
+      setCreateSuccess(
+        data.created
+          ? `"${BLOG_POST_TEMPLATE_TITLE}" created — open builder to style article pages.`
+          : `"${BLOG_POST_TEMPLATE_TITLE}" is ready — open builder to edit article styling.`
+      );
+      await reloadPages();
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCreatingBlogTemplate(false);
+    }
+  };
 
   const isActiveProject = project && Number(activeProjectId) === Number(project.id);
   const publicUrlOptions = useMemo(
-    () => ({ isActiveProject: Boolean(isActiveProject) }),
-    [isActiveProject]
+    () => ({
+      isActiveProject: Boolean(isActiveProject),
+      ...(previewOrigin ? { origin: previewOrigin } : {}),
+    }),
+    [isActiveProject, previewOrigin]
   );
 
   const filteredPages = useMemo(() => {
@@ -246,6 +286,73 @@ export default function DProjectPages({
             </form>
           </section>
 
+          <section className="proj-pages__template" aria-labelledby="d-blog-template-heading">
+            <div className="proj-pages__add-head">
+              <h2 id="d-blog-template-heading" className="proj-pages__add-title">
+                Blog article template
+              </h2>
+              <p className="proj-pages__add-sub">
+                Design how individual blog articles look at <code>/blog/[slug]</code>. This is separate
+                from your <strong>blog</strong> listing page.
+              </p>
+            </div>
+            {createSuccess ? (
+              <p className="proj-pages__add-success" role="status">
+                {createSuccess}
+              </p>
+            ) : null}
+            <div className="proj-pages__template-card">
+              <div>
+                <p className="proj-pages__template-name">{BLOG_POST_TEMPLATE_TITLE}</p>
+                <p className="proj-pages__template-meta">
+                  Slug: <code>{BLOG_POST_TEMPLATE_SLUG}</code> · Powers live URLs like{' '}
+                  <code>/blog/what-is-logistics-aggregator</code>
+                </p>
+                {blogTemplatePage ? (
+                  <p className="proj-pages__template-status">
+                    Status:{' '}
+                    <strong>{blogTemplatePage.status === 'published' ? 'Published' : 'Draft'}</strong>
+                    {blogTemplatePage.status !== 'published'
+                      ? ' — publish after styling so live articles use your design.'
+                      : ' — live articles use this design.'}
+                  </p>
+                ) : null}
+              </div>
+              <div className="proj-pages__template-actions">
+                {blogTemplatePage ? (
+                  <>
+                    <Link
+                      className="proj-pages__btn proj-pages__btn--primary"
+                      href={dBuilderPagePath(blogTemplatePage.id, project.slug, BLOG_POST_TEMPLATE_SLUG, {
+                        id: activeProjectId,
+                        slug: activeProjectSlug,
+                      })}
+                    >
+                      Open builder
+                    </Link>
+                    <Link
+                      className="proj-pages__btn"
+                      href={dPreviewPagePath(blogTemplatePage.id, project.slug, BLOG_POST_TEMPLATE_SLUG)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Preview template
+                    </Link>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="proj-pages__btn proj-pages__btn--primary"
+                    onClick={handleEnsureBlogTemplate}
+                    disabled={creatingBlogTemplate}
+                  >
+                    {creatingBlogTemplate ? 'Creating…' : 'Create blog article template'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </section>
+
           {pages.length ? (
             <div className="proj-pages__toolbar">
               <label className="proj-pages__search">
@@ -276,17 +383,27 @@ export default function DProjectPages({
             <ul className="proj-pages__list">
               {filteredPages.map((page) => {
                 const published = page.status === 'published';
-                const publicUrl = buildPublicPreviewUrl(project, page.slug, publicUrlOptions);
+                const isBlogTemplate = isBlogPostTemplatePage(page);
+                const publicUrl = isBlogTemplate
+                  ? null
+                  : buildPublicPreviewUrl(project, page.slug, publicUrlOptions);
                 return (
                   <li key={page.id} className="proj-pages__row">
-                    <div className="proj-pages__card">
+                    <div className={`proj-pages__card${isBlogTemplate ? ' proj-pages__card--template' : ''}`}>
                       <span
                         className={`proj-pages__dot proj-pages__dot--${published ? 'published' : 'draft'}`}
                         aria-hidden="true"
                       />
-                      <span className="proj-pages__name">{page.title}</span>
+                      <span className="proj-pages__name">
+                        {page.title}
+                        {isBlogTemplate ? (
+                          <span className="proj-pages__template-badge">Article template</span>
+                        ) : null}
+                      </span>
                       <code className="proj-pages__slug">{page.slug}</code>
-                      {publicUrl ? (
+                      {isBlogTemplate ? (
+                        <span className="proj-pages__path proj-pages__path--muted">/blog/[article-slug]</span>
+                      ) : publicUrl ? (
                         <a
                           className="proj-pages__path"
                           href={publicUrl}

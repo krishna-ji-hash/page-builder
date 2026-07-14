@@ -56,6 +56,38 @@ import {
 import { isHtmlBlockFormKey } from '@/lib/advancedElementInspectorBatch2';
 import { appendFaqItem, normalizeFaqItems, patchFaqItems, removeFaqItemAt } from '@/lib/faqAccordionDefaults';
 import {
+  appendFaqFullPageItem,
+  normalizeFaqFullPageItems,
+  patchFaqFullPageItems,
+  patchFaqFullPageCategoryLabel,
+  patchFaqFullPagePopularSearch,
+  patchFaqFullPageCtaFeatureLabel,
+  removeFaqFullPageItemAt,
+} from '@/lib/faqFullPageDefaults';
+import {
+  appendBlogPost,
+  normalizeBlogPosts,
+  patchBlogPosts,
+  removeBlogPostAt,
+  resolveOptionalTextProp,
+} from '@/lib/blogFullPageDefaults';
+import {
+  applyBlogDetailPageContentPatch,
+  appendBlogDetailContentBlock,
+  removeBlogDetailContentBlockAt,
+  resolveBlogDetailPageProps,
+} from '@/lib/blogDetailPageDefaults';
+import {
+  findDescendantBlogWidgetNode,
+  getBlogSectionDef,
+  isAnyBlogWidgetNodeType,
+} from '@/lib/blogSectionRegistry';
+import {
+  findDescendantBlogDetailWidgetNode,
+  getBlogDetailSectionDef,
+  isAnyBlogDetailWidgetNodeType,
+} from '@/lib/blogDetailSectionRegistry';
+import {
   ensureTickerRowSlideArrays,
   getTickerSlidesForRow,
   splitLegacySlidesForTicker,
@@ -212,6 +244,12 @@ function inspectorRoleLabel(node) {
   if (node.nodeType === 'stack') return 'Stack';
   if (node.nodeType === 'tabs') return 'Feature tabs';
   if (node.nodeType === 'accordion') return 'FAQ accordion';
+  if (node.nodeType === 'faq_full_page') return 'FAQ full page';
+  if (node.nodeType === 'blog_detail_page') return 'Blog detail page';
+  if (node.nodeType === 'blog_detail_hero') return 'Blog detail hero';
+  if (node.nodeType === 'blog_detail_article') return 'Blog detail article';
+  if (node.nodeType === 'blog_detail_sidebar') return 'Blog detail sidebar';
+  if (node.nodeType === 'blog_detail_bottom_cta') return 'Blog detail CTA';
   if (node.nodeType === 'stats_counter') return 'Stats Counter';
   if (node.nodeType === 'tab_hero') return 'Tab Hero';
   if (node.nodeType === 'icon') return 'Icon';
@@ -540,20 +578,60 @@ export default function BuilderInspector({
     return findDescendantNodeByType(selectedNode, 'tabs');
   }, [selectedNode]);
 
+  const nestedFaqFullPageNode = useMemo(() => {
+    if (!selectedNode || selectedNode.nodeType === 'faq_full_page') return null;
+    return findDescendantNodeByType(selectedNode, 'faq_full_page');
+  }, [selectedNode]);
+
+  const nestedBlogWidgetNode = useMemo(() => {
+    if (!selectedNode || isAnyBlogWidgetNodeType(selectedNode.nodeType)) return null;
+    return findDescendantBlogWidgetNode(selectedNode);
+  }, [selectedNode]);
+
   useEffect(() => {
     if (
       selectedNode?.nodeType === 'tabs' ||
       selectedNode?.nodeType === 'accordion' ||
-      nestedFeatureTabsNode
+      selectedNode?.nodeType === 'faq_full_page' ||
+      isAnyBlogWidgetNodeType(selectedNode?.nodeType) ||
+      nestedFeatureTabsNode ||
+      nestedFaqFullPageNode ||
+      nestedBlogWidgetNode
     ) {
       setActiveTab('content');
     }
-  }, [selectedNode?.id, selectedNode?.nodeType, nestedFeatureTabsNode?.id, setActiveTab]);
+  }, [
+    selectedNode?.id,
+    selectedNode?.nodeType,
+    nestedFeatureTabsNode?.id,
+    nestedFaqFullPageNode?.id,
+    nestedBlogWidgetNode?.id,
+    setActiveTab,
+  ]);
 
   const nestedFaqAccordionNode = useMemo(() => {
     if (!selectedNode || selectedNode.nodeType === 'accordion') return null;
     return findDescendantNodeByType(selectedNode, 'accordion');
   }, [selectedNode]);
+
+  const faqFullPageTarget =
+    selectedNode?.nodeType === 'faq_full_page' ? selectedNode : nestedFaqFullPageNode;
+
+  const blogFullPageTarget = useMemo(() => {
+    if (!selectedNode) return null;
+    if (isAnyBlogWidgetNodeType(selectedNode.nodeType)) return selectedNode;
+    return nestedBlogWidgetNode;
+  }, [selectedNode, nestedBlogWidgetNode]);
+
+  const blogDetailPageTarget = useMemo(() => {
+    if (!selectedNode) return null;
+    if (isAnyBlogDetailWidgetNodeType(selectedNode.nodeType)) return selectedNode;
+    return findDescendantBlogDetailWidgetNode(selectedNode);
+  }, [selectedNode]);
+
+  const blogDetailWidgetSectionDef = getBlogDetailSectionDef(blogDetailPageTarget?.nodeType);
+
+  const blogWidgetSectionDef = getBlogSectionDef(blogFullPageTarget?.nodeType);
 
   const stackAccentContext = useMemo(
     () => resolveAccentLineTarget(pageTree, selectedNode?.id, selectedNode),
@@ -821,6 +899,42 @@ export default function BuilderInspector({
     carouselSlidesJson: '',
     featureTabsJson: '',
     faqAccordionJson: '',
+    faqFullPageJson: '',
+    faqFullPageHeroTitle: '',
+    faqFullPageHeroSubtitle: '',
+    faqFullPageSearchPlaceholder: '',
+    faqFullPageCategoryEyebrow: '',
+    faqFullPageCtaTitle: '',
+    faqFullPageCtaSubtitle: '',
+    faqFullPageCtaPrimaryLabel: '',
+    faqFullPageCtaPrimaryHref: '',
+    faqFullPageCtaSecondaryLabel: '',
+    faqFullPageCtaSecondaryHref: '',
+    blogFullPagePostsJson: '',
+    blogFullPageHeroPill: '',
+    blogFullPageHeroTitle: '',
+    blogFullPageHeroSubtitle: '',
+    blogFullPageSearchPlaceholder: '',
+    blogFullPageHeroNoteTitle: '',
+    blogFullPageHeroNoteText: '',
+    blogFullPageFeaturedTitle: '',
+    blogFullPageFeaturedDescription: '',
+    blogFullPageFeaturedImage: '',
+    blogFullPageFeaturedButtonLabel: '',
+    blogFullPageFeaturedBody: '',
+    blogFullPageLatestTitle: '',
+    blogFullPageNewsletterTitle: '',
+    blogFullPageCtaTitle: '',
+    blogFullPageCtaPrimaryLabel: '',
+    blogFullPageCtaSecondaryLabel: '',
+    blogDetailCategory: '',
+    blogDetailTitle: '',
+    blogDetailDescription: '',
+    blogDetailImage: '',
+    blogDetailContentJson: '',
+    blogDetailRelatedTitle: '',
+    blogDetailLeadFormTitle: '',
+    blogDetailNewsletterTitle: '',
     socialIconsJson: '',
     gridItemsJson: '',
     featureListJson: '',
@@ -1131,6 +1245,19 @@ export default function BuilderInspector({
     const tabsEditNode =
       selectedNode.nodeType === 'tabs' ? selectedNode : findDescendantNodeByType(selectedNode, 'tabs');
     const tabsEditProps = tabsEditNode?.props;
+    const faqFullPageEditNode =
+      selectedNode.nodeType === 'faq_full_page'
+        ? selectedNode
+        : findDescendantNodeByType(selectedNode, 'faq_full_page');
+    const faqFullPageProps = faqFullPageEditNode?.props || null;
+    const blogFullPageEditNode = isAnyBlogWidgetNodeType(selectedNode.nodeType)
+      ? selectedNode
+      : findDescendantBlogWidgetNode(selectedNode);
+    const blogFullPageProps = blogFullPageEditNode?.props || null;
+    const blogDetailPageEditNode = isAnyBlogDetailWidgetNodeType(selectedNode.nodeType)
+      ? selectedNode
+      : findDescendantBlogDetailWidgetNode(selectedNode);
+    const blogDetailPageProps = blogDetailPageEditNode?.props || null;
 
     const nodeCarouselVariant = String(selectedNode.props?.variant || selectedNode.props?.settings?.variant || 'image');
     const pendingVariant = pendingCarouselVariantRef.current;
@@ -1402,6 +1529,73 @@ export default function BuilderInspector({
         null,
         2
       ),
+      ...(faqFullPageProps
+        ? {
+            faqFullPageJson: JSON.stringify(
+              Array.isArray(faqFullPageProps.items) ? faqFullPageProps.items : [],
+              null,
+              2
+            ),
+            faqFullPageHeroTitle: String(faqFullPageProps.heroTitle || ''),
+            faqFullPageHeroSubtitle: String(faqFullPageProps.heroSubtitle || ''),
+            faqFullPageSearchPlaceholder: String(faqFullPageProps.searchPlaceholder || ''),
+            faqFullPageCategoryEyebrow: String(faqFullPageProps.categoryEyebrow || ''),
+            faqFullPageCtaTitle: String(faqFullPageProps.ctaTitle || ''),
+            faqFullPageCtaSubtitle: String(faqFullPageProps.ctaSubtitle || ''),
+            faqFullPageCtaPrimaryLabel: String(faqFullPageProps.ctaPrimary?.label || ''),
+            faqFullPageCtaPrimaryHref: String(faqFullPageProps.ctaPrimary?.href || ''),
+            faqFullPageCtaSecondaryLabel: String(faqFullPageProps.ctaSecondary?.label || ''),
+            faqFullPageCtaSecondaryHref: String(faqFullPageProps.ctaSecondary?.href || ''),
+          }
+        : {}),
+      ...(blogFullPageProps
+        ? {
+            blogFullPagePostsJson: JSON.stringify(
+              Array.isArray(blogFullPageProps.posts) ? blogFullPageProps.posts : [],
+              null,
+              2
+            ),
+            blogFullPageHeroPill: String(blogFullPageProps.heroPill || ''),
+            blogFullPageHeroTitle: String(blogFullPageProps.heroTitle || ''),
+            blogFullPageHeroSubtitle: String(blogFullPageProps.heroSubtitle || ''),
+            blogFullPageSearchPlaceholder: String(blogFullPageProps.searchPlaceholder || ''),
+            blogFullPageHeroNoteTitle: resolveOptionalTextProp(
+              blogFullPageProps,
+              'heroNoteTitle',
+              'New Guide Published'
+            ),
+            blogFullPageHeroNoteText: resolveOptionalTextProp(
+              blogFullPageProps,
+              'heroNoteText',
+              'Reduce RTO using smarter courier allocation.'
+            ),
+            blogFullPageFeaturedTitle: String(blogFullPageProps.featured?.title || ''),
+            blogFullPageFeaturedDescription: String(blogFullPageProps.featured?.description || ''),
+            blogFullPageFeaturedImage: String(blogFullPageProps.featured?.image || ''),
+            blogFullPageFeaturedButtonLabel: String(blogFullPageProps.featured?.buttonLabel || ''),
+            blogFullPageFeaturedBody: String(blogFullPageProps.featured?.body || ''),
+            blogFullPageLatestTitle: String(blogFullPageProps.latestTitle || ''),
+            blogFullPageNewsletterTitle: String(blogFullPageProps.newsletterTitle || ''),
+            blogFullPageCtaTitle: String(blogFullPageProps.ctaTitle || ''),
+            blogFullPageCtaPrimaryLabel: String(blogFullPageProps.ctaPrimaryLabel || ''),
+            blogFullPageCtaSecondaryLabel: String(blogFullPageProps.ctaSecondaryLabel || ''),
+          }
+        : {}),
+      ...(blogDetailPageProps
+        ? (() => {
+            const resolvedDetail = resolveBlogDetailPageProps(blogDetailPageProps);
+            return {
+              blogDetailCategory: resolvedDetail.category,
+              blogDetailTitle: resolvedDetail.title,
+              blogDetailDescription: resolvedDetail.description,
+              blogDetailImage: resolvedDetail.image,
+              blogDetailContentJson: JSON.stringify(resolvedDetail.content, null, 2),
+              blogDetailRelatedTitle: resolvedDetail.relatedTitle,
+              blogDetailLeadFormTitle: resolvedDetail.leadFormTitle,
+              blogDetailNewsletterTitle: resolvedDetail.newsletterTitle,
+            };
+          })()
+        : {}),
       ...(isHeaderRowNode(selectedNode)
         ? (() => {
             const hb = normalizeHeaderBehavior(selectedNode.props?.meta?.headerBehavior);
@@ -1569,6 +1763,36 @@ export default function BuilderInspector({
     if (editingDisabledBySectionLock) return;
     await onUpdateNode({
       nodeId: featureTabsTarget.id,
+      payload: { props: changes },
+    });
+  };
+
+  const updateFaqFullPageProps = async (changes) => {
+    if (!faqFullPageTarget?.id || !onUpdateNode) return;
+    if (isLinkedGlobalPlaceholder(faqFullPageTarget)) return;
+    if (editingDisabledBySectionLock) return;
+    await onUpdateNode({
+      nodeId: faqFullPageTarget.id,
+      payload: { props: changes },
+    });
+  };
+
+  const updateBlogFullPageProps = async (changes) => {
+    if (!blogFullPageTarget?.id || !onUpdateNode) return;
+    if (isLinkedGlobalPlaceholder(blogFullPageTarget)) return;
+    if (editingDisabledBySectionLock) return;
+    await onUpdateNode({
+      nodeId: blogFullPageTarget.id,
+      payload: { props: changes },
+    });
+  };
+
+  const updateBlogDetailPageProps = async (changes) => {
+    if (!blogDetailPageTarget?.id || !onUpdateNode) return;
+    if (isLinkedGlobalPlaceholder(blogDetailPageTarget)) return;
+    if (editingDisabledBySectionLock) return;
+    await onUpdateNode({
+      nodeId: blogDetailPageTarget.id,
       payload: { props: changes },
     });
   };
@@ -2578,6 +2802,317 @@ export default function BuilderInspector({
       await updateProps({ items: next, openItemId: stillOpen ? openId : '' });
       setForm((prevForm) => ({ ...prevForm, faqAccordionJson: JSON.stringify(next, null, 2) }));
       return;
+    }
+    if (faqFullPageTarget) {
+      if (key === 'faqFullPageHeroTitle') {
+        await updateFaqFullPageProps({ heroTitle: String(value ?? '') });
+        return;
+      }
+      if (key === 'faqFullPageHeroSubtitle') {
+        await updateFaqFullPageProps({ heroSubtitle: String(value ?? '') });
+        return;
+      }
+      if (key === 'faqFullPageSearchPlaceholder') {
+        await updateFaqFullPageProps({ searchPlaceholder: String(value ?? '') });
+        return;
+      }
+      if (key === 'faqFullPageCategoryEyebrow') {
+        await updateFaqFullPageProps({ categoryEyebrow: String(value ?? '') });
+        return;
+      }
+      if (key === 'faqFullPagePatchCategory') {
+        const payload = value && typeof value === 'object' ? value : null;
+        const id = String(payload?.id || '');
+        if (!id) return;
+        const categories = patchFaqFullPageCategoryLabel(
+          faqFullPageTarget.props?.categories,
+          id,
+          String(payload?.label ?? '')
+        );
+        await updateFaqFullPageProps({ categories });
+        return;
+      }
+      if (key === 'faqFullPagePatchPopularSearch') {
+        const payload = value && typeof value === 'object' ? value : null;
+        const index = Number(payload?.index);
+        if (!Number.isInteger(index)) return;
+        const popularSearches = patchFaqFullPagePopularSearch(
+          faqFullPageTarget.props?.popularSearches,
+          index,
+          {
+            ...(payload?.label != null ? { label: String(payload.label) } : {}),
+            ...(payload?.query != null ? { query: String(payload.query) } : {}),
+          }
+        );
+        await updateFaqFullPageProps({ popularSearches });
+        return;
+      }
+      if (key === 'faqFullPagePatchCtaFeature') {
+        const payload = value && typeof value === 'object' ? value : null;
+        const id = String(payload?.id || '');
+        if (!id) return;
+        const ctaFeatures = patchFaqFullPageCtaFeatureLabel(
+          faqFullPageTarget.props?.ctaFeatures,
+          id,
+          String(payload?.label ?? '')
+        );
+        await updateFaqFullPageProps({ ctaFeatures });
+        return;
+      }
+      if (key === 'faqFullPageCtaTitle') {
+        await updateFaqFullPageProps({ ctaTitle: String(value ?? '') });
+        return;
+      }
+      if (key === 'faqFullPageCtaSubtitle') {
+        await updateFaqFullPageProps({ ctaSubtitle: String(value ?? '') });
+        return;
+      }
+      if (key === 'faqFullPageCtaPrimaryLabel') {
+        await updateFaqFullPageProps({ ctaPrimary: { ...(faqFullPageTarget.props?.ctaPrimary || {}), label: String(value ?? '') } });
+        return;
+      }
+      if (key === 'faqFullPageCtaPrimaryHref') {
+        await updateFaqFullPageProps({ ctaPrimary: { ...(faqFullPageTarget.props?.ctaPrimary || {}), href: String(value ?? '') } });
+        return;
+      }
+      if (key === 'faqFullPageCtaSecondaryLabel') {
+        await updateFaqFullPageProps({ ctaSecondary: { ...(faqFullPageTarget.props?.ctaSecondary || {}), label: String(value ?? '') } });
+        return;
+      }
+      if (key === 'faqFullPageCtaSecondaryHref') {
+        await updateFaqFullPageProps({ ctaSecondary: { ...(faqFullPageTarget.props?.ctaSecondary || {}), href: String(value ?? '') } });
+        return;
+      }
+      if (key === 'faqFullPageJson') {
+        try {
+          const parsed = JSON.parse(value || '[]');
+          if (!Array.isArray(parsed)) {
+            setJsonErrors((prev) => ({ ...prev, faqFullPageJson: 'Items JSON must be an array.' }));
+            return;
+          }
+          const normalized = normalizeFaqFullPageItems(parsed);
+          setJsonErrors((prev) => ({ ...prev, faqFullPageJson: '' }));
+          await updateFaqFullPageProps({ items: normalized });
+        } catch {
+          setJsonErrors((prev) => ({ ...prev, faqFullPageJson: 'Invalid JSON format.' }));
+        }
+        return;
+      }
+      if (key === 'faqFullPagePatch') {
+        const payload = value && typeof value === 'object' ? value : null;
+        const idx = Number(payload?.index);
+        const patch = payload?.patch && typeof payload.patch === 'object' ? payload.patch : null;
+        const current = normalizeFaqFullPageItems(faqFullPageTarget.props?.items);
+        if (!Number.isInteger(idx) || idx < 0 || idx >= current.length || !patch) return;
+        const next = patchFaqFullPageItems(current, idx, patch);
+        await updateFaqFullPageProps({ items: next });
+        setForm((prevForm) => ({ ...prevForm, faqFullPageJson: JSON.stringify(next, null, 2) }));
+        return;
+      }
+      if (key === 'faqFullPageAddItem') {
+        const payload = value && typeof value === 'object' ? value : {};
+        const category = String(payload.category || 'shipping');
+        const current = normalizeFaqFullPageItems(faqFullPageTarget.props?.items);
+        const next = appendFaqFullPageItem(current, category);
+        const newItem = next[next.length - 1];
+        await updateFaqFullPageProps({ items: next, openItemId: newItem?.id || '' });
+        setForm((prevForm) => ({ ...prevForm, faqFullPageJson: JSON.stringify(next, null, 2) }));
+        return;
+      }
+      if (key === 'faqFullPageRemoveItem') {
+        const idx = Number(value);
+        const current = normalizeFaqFullPageItems(faqFullPageTarget.props?.items);
+        const next = removeFaqFullPageItemAt(current, idx);
+        const openId = String(faqFullPageTarget.props?.openItemId || '');
+        const stillOpen = next.some((it) => it.id === openId);
+        await updateFaqFullPageProps({ items: next, openItemId: stillOpen ? openId : '' });
+        setForm((prevForm) => ({ ...prevForm, faqFullPageJson: JSON.stringify(next, null, 2) }));
+        return;
+      }
+    }
+    if (blogDetailPageTarget) {
+      if (key === 'blogDetailCategory') {
+        await updateBlogDetailPageProps({ category: String(value ?? '') });
+        return;
+      }
+      if (key === 'blogDetailTitle') {
+        await updateBlogDetailPageProps({ title: String(value ?? '') });
+        return;
+      }
+      if (key === 'blogDetailDescription') {
+        await updateBlogDetailPageProps({ description: String(value ?? '') });
+        return;
+      }
+      if (key === 'blogDetailImage') {
+        await updateBlogDetailPageProps({ image: String(value ?? '') });
+        return;
+      }
+      if (key === 'blogDetailRelatedTitle') {
+        await updateBlogDetailPageProps({ relatedTitle: String(value ?? '') });
+        return;
+      }
+      if (key === 'blogDetailLeadFormTitle') {
+        await updateBlogDetailPageProps({ leadFormTitle: String(value ?? '') });
+        return;
+      }
+      if (key === 'blogDetailNewsletterTitle') {
+        await updateBlogDetailPageProps({ newsletterTitle: String(value ?? '') });
+        return;
+      }
+      if (key === 'blogDetailContentJson') {
+        try {
+          const parsed = JSON.parse(String(value ?? '[]'));
+          if (!Array.isArray(parsed)) {
+            setJsonErrors((prev) => ({ ...prev, blogDetailContentJson: 'Content JSON must be an array.' }));
+            return;
+          }
+          setJsonErrors((prev) => ({ ...prev, blogDetailContentJson: '' }));
+          const patch = applyBlogDetailPageContentPatch(blogDetailPageTarget.props, 'contentJson', value);
+          await updateBlogDetailPageProps(patch);
+        } catch {
+          setJsonErrors((prev) => ({ ...prev, blogDetailContentJson: 'Invalid JSON format.' }));
+        }
+        return;
+      }
+      if (key === 'blogDetailAddSection') {
+        const patch = appendBlogDetailContentBlock(blogDetailPageTarget.props);
+        await updateBlogDetailPageProps(patch);
+        const next = resolveBlogDetailPageProps({ ...blogDetailPageTarget.props, ...patch });
+        setForm((prevForm) => ({
+          ...prevForm,
+          blogDetailContentJson: JSON.stringify(next.content, null, 2),
+        }));
+        return;
+      }
+      if (key === 'blogDetailRemoveSection') {
+        const index = Number(value);
+        const patch = removeBlogDetailContentBlockAt(blogDetailPageTarget.props, index);
+        await updateBlogDetailPageProps(patch);
+        const next = resolveBlogDetailPageProps({ ...blogDetailPageTarget.props, ...patch });
+        setForm((prevForm) => ({
+          ...prevForm,
+          blogDetailContentJson: JSON.stringify(next.content, null, 2),
+        }));
+        return;
+      }
+    }
+    if (blogFullPageTarget) {
+      if (key === 'blogFullPageHeroPill') {
+        await updateBlogFullPageProps({ heroPill: String(value ?? '') });
+        return;
+      }
+      if (key === 'blogFullPageHeroTitle') {
+        await updateBlogFullPageProps({ heroTitle: String(value ?? '') });
+        return;
+      }
+      if (key === 'blogFullPageHeroSubtitle') {
+        await updateBlogFullPageProps({ heroSubtitle: String(value ?? '') });
+        return;
+      }
+      if (key === 'blogFullPageSearchPlaceholder') {
+        await updateBlogFullPageProps({ searchPlaceholder: String(value ?? '') });
+        return;
+      }
+      if (key === 'blogFullPageHeroNoteTitle') {
+        await updateBlogFullPageProps({ heroNoteTitle: String(value ?? '') });
+        return;
+      }
+      if (key === 'blogFullPageHeroNoteText') {
+        await updateBlogFullPageProps({ heroNoteText: String(value ?? '') });
+        return;
+      }
+      if (key === 'blogFullPageClearHeroNote') {
+        await updateBlogFullPageProps({ heroNoteTitle: '', heroNoteText: '' });
+        setForm((prevForm) => ({
+          ...prevForm,
+          blogFullPageHeroNoteTitle: '',
+          blogFullPageHeroNoteText: '',
+        }));
+        return;
+      }
+      if (key === 'blogFullPageFeaturedTitle') {
+        await updateBlogFullPageProps({ featured: { ...(blogFullPageTarget.props?.featured || {}), title: String(value ?? '') } });
+        return;
+      }
+      if (key === 'blogFullPageFeaturedDescription') {
+        await updateBlogFullPageProps({ featured: { ...(blogFullPageTarget.props?.featured || {}), description: String(value ?? '') } });
+        return;
+      }
+      if (key === 'blogFullPageFeaturedImage') {
+        await updateBlogFullPageProps({ featured: { ...(blogFullPageTarget.props?.featured || {}), image: String(value ?? '') } });
+        return;
+      }
+      if (key === 'blogFullPageFeaturedButtonLabel') {
+        await updateBlogFullPageProps({ featured: { ...(blogFullPageTarget.props?.featured || {}), buttonLabel: String(value ?? '') } });
+        return;
+      }
+      if (key === 'blogFullPageFeaturedBody') {
+        await updateBlogFullPageProps({ featured: { ...(blogFullPageTarget.props?.featured || {}), body: String(value ?? '') } });
+        return;
+      }
+      if (key === 'blogFullPageLatestTitle') {
+        await updateBlogFullPageProps({ latestTitle: String(value ?? '') });
+        return;
+      }
+      if (key === 'blogFullPageNewsletterTitle') {
+        await updateBlogFullPageProps({ newsletterTitle: String(value ?? '') });
+        return;
+      }
+      if (key === 'blogFullPageCtaTitle') {
+        await updateBlogFullPageProps({ ctaTitle: String(value ?? '') });
+        return;
+      }
+      if (key === 'blogFullPageCtaPrimaryLabel') {
+        await updateBlogFullPageProps({ ctaPrimaryLabel: String(value ?? '') });
+        return;
+      }
+      if (key === 'blogFullPageCtaSecondaryLabel') {
+        await updateBlogFullPageProps({ ctaSecondaryLabel: String(value ?? '') });
+        return;
+      }
+      if (key === 'blogFullPagePostsJson') {
+        try {
+          const parsed = JSON.parse(value || '[]');
+          if (!Array.isArray(parsed)) {
+            setJsonErrors((prev) => ({ ...prev, blogFullPagePostsJson: 'Posts JSON must be an array.' }));
+            return;
+          }
+          const normalized = normalizeBlogPosts(parsed);
+          setJsonErrors((prev) => ({ ...prev, blogFullPagePostsJson: '' }));
+          await updateBlogFullPageProps({ posts: normalized });
+        } catch {
+          setJsonErrors((prev) => ({ ...prev, blogFullPagePostsJson: 'Invalid JSON format.' }));
+        }
+        return;
+      }
+      if (key === 'blogFullPagePatchPost') {
+        const payload = value && typeof value === 'object' ? value : null;
+        const idx = Number(payload?.index);
+        const patch = payload?.patch && typeof payload.patch === 'object' ? payload.patch : null;
+        const current = normalizeBlogPosts(blogFullPageTarget.props?.posts);
+        if (!Number.isInteger(idx) || idx < 0 || idx >= current.length || !patch) return;
+        const next = patchBlogPosts(current, idx, patch);
+        await updateBlogFullPageProps({ posts: next });
+        setForm((prevForm) => ({ ...prevForm, blogFullPagePostsJson: JSON.stringify(next, null, 2) }));
+        return;
+      }
+      if (key === 'blogFullPageAddPost') {
+        const payload = value && typeof value === 'object' ? value : {};
+        const category = String(payload.category || 'shipping-guide');
+        const current = normalizeBlogPosts(blogFullPageTarget.props?.posts);
+        const next = appendBlogPost(current, category);
+        await updateBlogFullPageProps({ posts: next });
+        setForm((prevForm) => ({ ...prevForm, blogFullPagePostsJson: JSON.stringify(next, null, 2) }));
+        return;
+      }
+      if (key === 'blogFullPageRemovePost') {
+        const idx = Number(value);
+        const current = normalizeBlogPosts(blogFullPageTarget.props?.posts);
+        const next = removeBlogPostAt(current, idx);
+        await updateBlogFullPageProps({ posts: next });
+        setForm((prevForm) => ({ ...prevForm, blogFullPagePostsJson: JSON.stringify(next, null, 2) }));
+        return;
+      }
     }
     if (selectedNode.nodeType === 'stats_counter' && key === 'statsCounterAnimate') {
       await updateProps({ animate: Boolean(value) });
@@ -4032,6 +4567,44 @@ export default function BuilderInspector({
             </button>
           </div>
         ) : null}
+        {nestedFaqFullPageNode &&
+        selectedNode?.nodeType !== 'faq_full_page' &&
+        typeof onSelectNode === 'function' ? (
+          <div className="bld-panel" style={{ paddingTop: 10, paddingBottom: 10 }}>
+            <p className="bld-field-note" style={{ margin: '0 0 10px' }}>
+              Edit FAQs on the canvas — select <strong>FAQ full page</strong> (not {inspectorRoleLabel(selectedNode)}).
+            </p>
+            <button
+              type="button"
+              className="bld-btn bld-btn--primary"
+              onClick={() => {
+                onSelectNode(nestedFaqFullPageNode.id);
+                setActiveTab('content');
+              }}
+            >
+              Edit FAQ full page
+            </button>
+          </div>
+        ) : null}
+        {nestedBlogWidgetNode &&
+        !isAnyBlogWidgetNodeType(selectedNode?.nodeType) &&
+        typeof onSelectNode === 'function' ? (
+          <div className="bld-panel" style={{ paddingTop: 10, paddingBottom: 10 }}>
+            <p className="bld-field-note" style={{ margin: '0 0 10px' }}>
+              Edit blog on the canvas — select <strong>Blog full page</strong> (not {inspectorRoleLabel(selectedNode)}).
+            </p>
+            <button
+              type="button"
+              className="bld-btn bld-btn--primary"
+              onClick={() => {
+                onSelectNode(nestedBlogWidgetNode.id);
+                setActiveTab('content');
+              }}
+            >
+              Edit blog full page
+            </button>
+          </div>
+        ) : null}
         {variant === 'panel' && (onInsertDivider || onApplyStackAccent) ? (
           <LineToolsPanel
             onInsertHorizontal={() => onInsertDivider?.('horizontal', 'inside')}
@@ -4076,9 +4649,23 @@ export default function BuilderInspector({
           sectionStripLayoutRow={sectionStripLayoutRow}
           onPatchStripRowPaddingY={patchStripRowPaddingY}
           nestedFeatureTabsNode={nestedFeatureTabsNode}
+          nestedFaqFullPageNode={nestedFaqFullPageNode}
+          nestedBlogFullPageNode={nestedBlogWidgetNode}
+          blogWidgetSectionKey={blogWidgetSectionDef?.sectionKey || null}
+          blogWidgetSectionLabel={blogWidgetSectionDef?.label || 'Blog section'}
           onSelectFeatureTabs={
             nestedFeatureTabsNode && typeof onSelectNode === 'function'
               ? () => onSelectNode(nestedFeatureTabsNode.id)
+              : undefined
+          }
+          onSelectFaqFullPage={
+            nestedFaqFullPageNode && typeof onSelectNode === 'function'
+              ? () => onSelectNode(nestedFaqFullPageNode.id)
+              : undefined
+          }
+          onSelectBlogFullPage={
+            nestedBlogWidgetNode && typeof onSelectNode === 'function'
+              ? () => onSelectNode(nestedBlogWidgetNode.id)
               : undefined
           }
           onSetupFeatureTabsElementMode={onSetupFeatureTabsElementMode}
@@ -4137,9 +4724,23 @@ export default function BuilderInspector({
           onResetButtonStyle={handleResetButtonStyle}
           disabled={editingDisabledBySectionLock}
           nestedFeatureTabsNode={nestedFeatureTabsNode}
+          nestedFaqFullPageNode={nestedFaqFullPageNode}
+          nestedBlogFullPageNode={nestedBlogWidgetNode}
+          blogWidgetSectionKey={blogWidgetSectionDef?.sectionKey || null}
+          blogWidgetSectionLabel={blogWidgetSectionDef?.label || 'Blog section'}
           onSelectFeatureTabs={
             nestedFeatureTabsNode && typeof onSelectNode === 'function'
               ? () => onSelectNode(nestedFeatureTabsNode.id)
+              : undefined
+          }
+          onSelectFaqFullPage={
+            nestedFaqFullPageNode && typeof onSelectNode === 'function'
+              ? () => onSelectNode(nestedFaqFullPageNode.id)
+              : undefined
+          }
+          onSelectBlogFullPage={
+            nestedBlogWidgetNode && typeof onSelectNode === 'function'
+              ? () => onSelectNode(nestedBlogWidgetNode.id)
               : undefined
           }
           jsonErrors={jsonErrors}

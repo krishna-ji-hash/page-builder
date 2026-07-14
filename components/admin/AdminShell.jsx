@@ -18,6 +18,7 @@ import {
   parseAdminPathname,
   projectSlugFromParsed,
 } from '@/lib/admin/adminRoutes';
+import { BLOG_NAV_ITEMS, adminBlogPath } from '@/lib/admin/blogAdminRoutes';
 import { projectSidebarLabel } from '@/lib/admin/projectWorkspaceMeta';
 import { ACTIVE_PROJECT_CHANGED } from '@/lib/admin/activeProjectEvents';
 import { PROJECT_LIST_CHANGED } from '@/lib/admin/projectListEvents';
@@ -107,6 +108,81 @@ function workspaceSectionHref(section, parsed, projects, activePathOpts) {
     return adminFlatProjectSectionPath(section);
   }
   return adminProjectSectionPath(slug || project, section, activePathOpts);
+}
+
+function BlogNavDropdown({ parsed, projects, sidebarCollapsed, activePathOpts }) {
+  const blogActive = parsed.section === 'blog';
+  const [open, setOpen] = useState(blogActive);
+
+  useEffect(() => {
+    if (blogActive) setOpen(true);
+  }, [blogActive]);
+
+  useEffect(() => {
+    if (sidebarCollapsed) setOpen(false);
+  }, [sidebarCollapsed]);
+
+  const projectRef =
+    parsed.kind === 'active-project'
+      ? { id: activePathOpts?.activeProjectId, slug: activePathOpts?.activeProjectSlug }
+      : {
+          slug: projectSlugFromParsed(parsed, projects) || parsed.projectSlug || parsed.projectKey,
+          id: parsed.projectId,
+        };
+
+  function hrefFor(item) {
+    return adminBlogPath(projectRef, item.path, {
+      id: activePathOpts?.activeProjectId,
+      slug: activePathOpts?.activeProjectSlug,
+    });
+  }
+
+  function itemActive(item) {
+    const sub = String(parsed.blogSub || '');
+    if (item.id === 'posts') return blogActive && (!sub || sub === 'posts');
+    if (item.id === 'edit') return false;
+    if (item.id === 'new') return sub === 'new';
+    return sub === item.path || sub.startsWith(`${item.path}/`);
+  }
+
+  return (
+    <li
+      className={`admin-shell__nav-item admin-shell__nav-item--dropdown${open ? ' is-open' : ''}${
+        sidebarCollapsed ? ' is-collapsed-sidebar' : ''
+      }`}
+    >
+      <button
+        type="button"
+        className={`admin-shell__nav-link admin-shell__nav-toggle${blogActive ? ' is-active' : ''}`}
+        aria-expanded={open}
+        data-tooltip={sidebarCollapsed ? 'Blog' : undefined}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="admin-shell__nav-leading">
+          <span className="admin-shell__nav-icon">{workspaceIcon('blog')}</span>
+          <span className="admin-shell__nav-text">Blog</span>
+        </span>
+        <svg className="admin-shell__chevron" viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M6 8l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+        </svg>
+      </button>
+      <div className={`admin-shell__subnav-wrap${open ? ' is-open' : ''}`} aria-hidden={!open}>
+        <ul className="admin-shell__subnav" id="admin-blog-subnav">
+          {BLOG_NAV_ITEMS.map((item) => (
+            <li key={item.id} className="admin-shell__subnav-item">
+              <Link
+                href={hrefFor(item)}
+                className={`admin-shell__subnav-link${itemActive(item) ? ' is-active' : ''}`}
+              >
+                <span className="admin-shell__subnav-dot" aria-hidden="true" />
+                <span className="admin-shell__subnav-name">{item.label}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </li>
+  );
 }
 
 function ProjectsNavDropdown({ parsed, projects, sidebarCollapsed, activeProjectId, activePathOpts }) {
@@ -551,21 +627,31 @@ export default function AdminShell({ children }) {
 
             {isProjectRoute ? (
               <NavSection label="Workspace">
-                {PROJECT_SECTIONS.map((section) => (
-                  <NavItem
-                    key={section.id}
-                    href={workspaceSectionHref(section.id, parsed, projects, activePathOpts)}
-                    active={
-                      parsed.kind === 'active-project'
-                        ? parsed.section === section.id
-                        : parsed.section === section.id
-                    }
-                    icon={workspaceIcon(section.id)}
-                    collapsed={sidebarCollapsed}
-                  >
-                    {section.label}
-                  </NavItem>
-                ))}
+                {PROJECT_SECTIONS.map((section) =>
+                  section.id === 'blog' ? (
+                    <BlogNavDropdown
+                      key={section.id}
+                      parsed={parsed}
+                      projects={projects}
+                      sidebarCollapsed={sidebarCollapsed}
+                      activePathOpts={activePathOpts}
+                    />
+                  ) : (
+                    <NavItem
+                      key={section.id}
+                      href={workspaceSectionHref(section.id, parsed, projects, activePathOpts)}
+                      active={
+                        parsed.kind === 'active-project'
+                          ? parsed.section === section.id
+                          : parsed.section === section.id
+                      }
+                      icon={workspaceIcon(section.id)}
+                      collapsed={sidebarCollapsed}
+                    >
+                      {section.label}
+                    </NavItem>
+                  )
+                )}
               </NavSection>
             ) : null}
 

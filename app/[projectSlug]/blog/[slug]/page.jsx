@@ -9,11 +9,17 @@ import {
 } from '@/lib/themeTokens';
 import { resolveMaybeAsyncParams, isPublicSlug } from '@/lib/routeParams';
 import { getItemBySlug } from '@/services/builder/cmsService';
-import { applyBindingsToTree, applyBindingsToString } from '@/lib/cms/cmsBindings';
+import { applyBindingsToTree } from '@/lib/cms/cmsBindings';
 import { livePageCssVarOverridesForPage, resolveBodyLayout } from '@/lib/livePageCssVars';
 import { resolveSeoMetadata } from '@/lib/seo/seoEngine';
 import JsonLd from '@/components/seo/JsonLd';
 import LiveDoc from '@/components/live/LiveDoc';
+import { publicPagePath } from '@/lib/publicSiteUrls';
+import { resolveBlogPostForDetail } from '@/lib/publishedBlogPosts';
+import {
+  buildBlogDetailMetadata,
+  renderPublicBlogDetailPage,
+} from '@/lib/renderPublicBlogDetailPage';
 import '@/styles/live/live-site.css';
 import '@/styles/shared/menu.css';
 import '@/styles/shared/button.css';
@@ -26,6 +32,9 @@ export async function generateMetadata({ params }) {
   const projectSlug = String(resolved.projectSlug || '');
   const slug = String(resolved.slug || '');
   if (!isPublicSlug(projectSlug) || !isPublicSlug(slug)) return {};
+
+  const sitePost = await resolveBlogPostForDetail(slug, projectSlug);
+  if (sitePost) return buildBlogDetailMetadata({ slug, projectSlug });
 
   const page = await getPublishedPageForPublic(projectSlug, 'blog-post');
   if (!page) return {};
@@ -50,7 +59,15 @@ export default async function BlogPostRoute({ params }) {
   const slug = String(resolved.slug || '');
   if (!isPublicSlug(projectSlug) || !isPublicSlug(slug)) notFound();
 
-  // Convention: project should have a published "blog-post" page used as the template.
+  const sitePost = await resolveBlogPostForDetail(slug, projectSlug);
+  if (sitePost) {
+    return renderPublicBlogDetailPage({
+      slug,
+      projectSlug,
+      blogListHref: publicPagePath(projectSlug, 'blog'),
+    });
+  }
+
   const page = await getPublishedPageForPublic(projectSlug, 'blog-post');
   if (!page?.snapshot_json) notFound();
 
@@ -74,7 +91,6 @@ export default async function BlogPostRoute({ params }) {
     cmsContext: { item, sys: { slug, collection: 'blog' } },
   });
 
-  // Bind `{{item.*}}` and `{{sys.*}}` into the page snapshot (single pass).
   const boundNodes = applyBindingsToTree(page.snapshot_json, {
     item,
     sys: { slug, collection: 'blog' },
@@ -115,4 +131,3 @@ export default async function BlogPostRoute({ params }) {
     </div>
   );
 }
-

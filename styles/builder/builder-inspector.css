@@ -1,4 +1,6 @@
 @import '../shared/faq-accordion.css';
+@import '../shared/faq-full-page.css';
+@import '../shared/blog-full-page.css';
 
 .bld-inspector {
   display: flex;

@@ -1,4 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
+import { Suspense } from 'react';
 import BuilderShellClient from './BuilderShellClient';
 import {
   adminBuilderPagePath,
@@ -47,7 +48,11 @@ export default async function AdminBuilderEditorPage({ params }) {
       if (!flatPageId) {
         notFound();
       }
-      return <BuilderShellClient pageId={flatPageId} />;
+      return (
+        <Suspense fallback={<div style={{ padding: 24, color: '#64748b' }}>Loading builder…</div>}>
+          <BuilderShellClient pageId={flatPageId} />
+        </Suspense>
+      );
     }
 
     notFound();
@@ -71,5 +76,9 @@ export default async function AdminBuilderEditorPage({ params }) {
     notFound();
   }
 
-  return <BuilderShellClient pageId={resolvedPageId} />;
+  return (
+    <Suspense fallback={<div style={{ padding: 24, color: '#64748b' }}>Loading builder…</div>}>
+      <BuilderShellClient pageId={resolvedPageId} />
+    </Suspense>
+  );
 }

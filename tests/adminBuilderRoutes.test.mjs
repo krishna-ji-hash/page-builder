@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   adminBuilderPagePath,
+  adminBuilderBlogPostPreviewPath,
   adminFlatBuilderPagePath,
 } from '../lib/builder/adminBuilderRoutes.js';
 
@@ -42,5 +43,13 @@ test('adminBuilderPagePath keeps slug for non-active project', () => {
   assert.equal(
     adminBuilderPagePath('dispatch', 'home', { id: 14, slug: 'd' }),
     '/admin/builder/dispatch/home'
+  );
+});
+
+test('adminBuilderBlogPostPreviewPath adds post query for article template', () => {
+  process.env.NEXT_PUBLIC_PUBLIC_PROJECT_SLUG = 'd';
+  assert.equal(
+    adminBuilderBlogPostPreviewPath('d', 'my-article'),
+    '/admin/builder/blog-post?post=my-article'
   );
 });

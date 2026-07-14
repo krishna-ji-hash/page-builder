@@ -29,6 +29,14 @@ test('active project on localhost without domain uses site root', () => {
   assert.equal(about, 'http://localhost:3000/about');
 });
 
+test('active project without origin returns relative path (SSR-safe)', () => {
+  assert.equal(
+    buildPublicPreviewUrl(mainSite, 'page-slug', { isActiveProject: true }),
+    '/page-slug'
+  );
+  assert.equal(buildProjectHomePreviewUrl(mainSite, { isActiveProject: true }), '/');
+});
+
 test('non-active project on localhost without domain has no preview url', () => {
   const home = buildProjectHomePreviewUrl(mainSite, {
     origin: 'http://localhost:3000',

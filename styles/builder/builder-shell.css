@@ -158,6 +158,40 @@
   animation: bld-shell-toast-in 0.22s ease-out;
 }
 
+.bld-shell__page-hint {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 10px 16px;
+  font-size: var(--bld-fs-md);
+  line-height: 1.45;
+  color: var(--bld-text);
+  background: color-mix(in srgb, var(--bld-primary) 14%, var(--bld-surface));
+  border-bottom: 1px solid color-mix(in srgb, var(--bld-primary) 35%, var(--bld-border));
+}
+
+.bld-shell__page-hint--template {
+  background: color-mix(in srgb, #22c55e 12%, var(--bld-surface));
+  border-bottom-color: color-mix(in srgb, #22c55e 35%, var(--bld-border));
+}
+
+.bld-shell__page-hint-link {
+  color: var(--bld-primary);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.bld-shell__page-hint-link:hover {
+  color: var(--bld-primary-2);
+}
+
+.bld-shell__page-hint code {
+  font-size: 0.95em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--bld-text) 8%, transparent);
+}
+
 @keyframes bld-shell-toast-in {
   from {
     opacity: 0;

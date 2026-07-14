@@ -71,6 +71,7 @@ Used via `prisma` in `lib/prisma.ts` and `services/admin/*` where already implem
 | Forms | `form_submissions`, `form_analytics` | mysql2 | Public write endpoints | |
 | SEO suite | `seo_redirects`, `pages.seo_json` | mysql2 | Audits & redirects | |
 | CMS | `cms_collections`, `cms_items` | mysql2 | Builder-linked content | |
+| Blog CMS | `blog_posts`, `blog_categories`, `blog_tags`, `blog_post_tags`, `blog_authors`, `blog_settings` | mysql2 | First-class project blog; not page records | Soft-delete via `deleted_at`; unique `(project_id, slug)` |
 | Global components | `global_components`, `global_component_revisions` | mysql2 | Render expansion | |
 | Activity log | `admin_activity_logs` | mysql2 | Append-only | |
 | Migrations | `migrations` | SQL runner | `lib/runMigrations.mjs` | Tracked, idempotent |

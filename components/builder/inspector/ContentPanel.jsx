@@ -16,6 +16,16 @@ import FeatureTabsControls from '@/components/builder/inspector/FeatureTabsContr
 import SectionHeadingControls from '@/components/builder/inspector/SectionHeadingControls';
 import ColumnHeadingControls from '@/components/builder/inspector/ColumnHeadingControls';
 import FaqAccordionControls from '@/components/builder/inspector/FaqAccordionControls';
+import FaqFullPageControls from '@/components/builder/inspector/FaqFullPageControls';
+import BlogFullPageControls from '@/components/builder/inspector/BlogFullPageControls';
+import BlogDetailPageControls from '@/components/builder/inspector/BlogDetailPageControls';
+import { findDescendantBlogWidgetNode, getBlogSectionDef, isAnyBlogWidgetNodeType } from '@/lib/blogSectionRegistry';
+import {
+  findDescendantBlogDetailWidgetNode,
+  getBlogDetailSectionDef,
+  isAnyBlogDetailWidgetNodeType,
+  isBlogDetailSectionNodeType,
+} from '@/lib/blogDetailSectionRegistry';
 import StatsCounterControls from '@/components/builder/inspector/StatsCounterControls';
 import TabHeroControls from '@/components/builder/inspector/TabHeroControls';
 import AdvancedElementControls, { isAdvancedElementNodeType } from '@/components/builder/inspector/AdvancedElementControls';
@@ -48,7 +58,13 @@ export default function ContentPanel({
   sectionStripLayoutRow = null,
   onPatchStripRowPaddingY = null,
   nestedFeatureTabsNode = null,
+  nestedFaqFullPageNode = null,
+  nestedBlogFullPageNode = null,
+  blogWidgetSectionKey = null,
+  blogWidgetSectionLabel = 'Blog section',
   onSelectFeatureTabs = null,
+  onSelectFaqFullPage = null,
+  onSelectBlogFullPage = null,
   onSetupFeatureTabsElementMode = null,
 }) {
   const [mediaOpen, setMediaOpen] = useState(false);
@@ -318,6 +334,23 @@ export default function ContentPanel({
     return nestedFeatureTabsNode || null;
   }, [selectedNode, nestedFeatureTabsNode]);
 
+  const faqFullPageEditNode = useMemo(() => {
+    if (!selectedNode) return null;
+    if (selectedNode.nodeType === 'faq_full_page') return selectedNode;
+    return nestedFaqFullPageNode || null;
+  }, [selectedNode, nestedFaqFullPageNode]);
+
+  const blogFullPageEditNode = useMemo(() => {
+    if (!selectedNode) return null;
+    if (isAnyBlogWidgetNodeType(selectedNode.nodeType)) return selectedNode;
+    return nestedBlogFullPageNode || findDescendantBlogWidgetNode(selectedNode);
+  }, [selectedNode, nestedBlogFullPageNode]);
+
+  const blogSectionKey = useMemo(() => {
+    if (blogWidgetSectionKey) return blogWidgetSectionKey;
+    return getBlogSectionDef(blogFullPageEditNode?.nodeType)?.sectionKey || null;
+  }, [blogFullPageEditNode?.nodeType, blogWidgetSectionKey]);
+
   const courierPartnerParts = useMemo(
     () => (isCourierPartnerCardStack(selectedNode) ? getCourierPartnerCardParts(selectedNode) : null),
     [selectedNode]
@@ -355,6 +388,18 @@ export default function ContentPanel({
   const isCarousel = selectedNode.nodeType === 'carousel';
   const isTabs = Boolean(featureTabsEditNode);
   const isAccordion = selectedNode.nodeType === 'accordion';
+  const isFaqFullPage = Boolean(faqFullPageEditNode);
+  const isBlogFullPage = Boolean(blogFullPageEditNode);
+  const isBlogDetailPage = Boolean(
+    selectedNode?.nodeType === 'blog_detail_page' ||
+      isBlogDetailSectionNodeType(selectedNode?.nodeType) ||
+      findDescendantBlogDetailWidgetNode(selectedNode)
+  );
+  const blogDetailPageEditNode = isAnyBlogDetailWidgetNodeType(selectedNode?.nodeType)
+    ? selectedNode
+    : findDescendantBlogDetailWidgetNode(selectedNode);
+  const blogDetailSectionKey =
+    getBlogDetailSectionDef(blogDetailPageEditNode?.nodeType)?.sectionKey || null;
   const isStatsCounter = selectedNode.nodeType === 'stats_counter';
   const isTabHero = selectedNode.nodeType === 'tab_hero';
   const isDivider = selectedNode.nodeType === 'divider';
@@ -1832,6 +1877,38 @@ export default function ContentPanel({
           form={form}
           onChange={onChange}
           jsonErrors={jsonErrors}
+        />
+      ) : null}
+      {isFaqFullPage ? (
+        <FaqFullPageControls
+          selectedNode={faqFullPageEditNode}
+          form={form}
+          onChange={onChange}
+          jsonErrors={jsonErrors}
+          editingViaParent={selectedNode?.nodeType !== 'faq_full_page'}
+          onFocusFaqFullPage={onSelectFaqFullPage}
+        />
+      ) : null}
+      {isBlogFullPage ? (
+        <BlogFullPageControls
+          selectedNode={blogFullPageEditNode}
+          form={form}
+          onChange={onChange}
+          jsonErrors={jsonErrors}
+          editingViaParent={!isAnyBlogWidgetNodeType(selectedNode?.nodeType)}
+          onFocusBlogFullPage={onSelectBlogFullPage}
+          sectionKey={blogSectionKey}
+          sectionLabel={blogWidgetSectionLabel}
+        />
+      ) : null}
+      {isBlogDetailPage ? (
+        <BlogDetailPageControls
+          selectedNode={blogDetailPageEditNode}
+          form={form}
+          onChange={onChange}
+          jsonErrors={jsonErrors}
+          sectionKey={blogDetailSectionKey}
+          sectionLabel={blogDetailSectionKey ? `Blog ${blogDetailSectionKey}` : 'Blog detail page'}
         />
       ) : null}
       {isStatsCounter ? <StatsCounterControls selectedNode={selectedNode} onChange={onChange} /> : null}

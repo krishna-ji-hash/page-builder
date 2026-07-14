@@ -21,6 +21,8 @@
     "db:backup": "node --env-file=.env scripts/db-backup.mjs",
     "db:restore": "node --env-file=.env scripts/db-restore.mjs",
     "db:seed": "node --env-file=.env scripts/seed.mjs",
+    "seed:blog-posts": "node --env-file=.env scripts/seed-cms-blog-posts.mjs",
+    "seed:blog-cms": "node --env-file=.env scripts/seed-blog-cms.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "prisma db seed",

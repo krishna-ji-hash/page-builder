@@ -65,6 +65,12 @@ export const WORKSPACE_ICONS = {
       <path d="M4.5 5.5v4c0 1.1 2.46 2 5.5 2s5.5-.9 5.5-2v-4M4.5 9.5v4c0 1.1 2.46 2 5.5 2s5.5-.9 5.5-2v-4" stroke="currentColor" strokeWidth="1.5" />
     </svg>
   ),
+  blog: (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="M4.5 4.5h11v11h-11z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+      <path d="M7 8h6M7 10.5h6M7 13h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  ),
   forms: (
     <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
       <rect x="4.5" y="3.5" width="11" height="13" rx="1.5" stroke="currentColor" strokeWidth="1.5" />

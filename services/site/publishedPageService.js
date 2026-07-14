@@ -6,7 +6,10 @@ import { getGlobalComponentsByIds } from '@/services/builder/globalComponentsSer
 import { expandLinkedGlobalComponents } from '@/lib/globalComponentExpand';
 import { expandCms } from '@/lib/cms/cmsExpand';
 import * as cmsService from '@/services/builder/cmsService';
+import { loadCmsBlogWidgetPosts, mergeCmsPostsIntoBlogListingTree } from '@/lib/cmsBlogPosts';
+import { loadProjectBlogWidgetPosts } from '@/lib/projectBlogPosts';
 import { publicPagePath } from '@/lib/publicSiteUrls';
+import { dedupePostsBySlug } from '@/lib/publishedBlogPostUtils';
 
 /**
  * Data sources (audit):
@@ -57,6 +60,24 @@ async function expandFrozenGlobalSection(section, projectId) {
   if (!section || typeof section !== 'object') return null;
   const expanded = await expandNodesWithLinkedGlobals([section], projectId);
   return expanded[0] || null;
+}
+
+async function finalizePublishedSnapshot(snapshotJson, row, pageContext = null) {
+  let nodes = snapshotJson;
+  if (Array.isArray(nodes) && nodes.length) {
+    nodes = await expandCms(nodes, { projectId: row.project_id, cmsService, pageContext });
+  }
+  if (row.slug === 'blog' && Array.isArray(nodes) && nodes.length) {
+    const [dbPosts, cmsPosts] = await Promise.all([
+      loadProjectBlogWidgetPosts(row.project_slug),
+      loadCmsBlogWidgetPosts(row.project_slug),
+    ]);
+    const merged = dedupePostsBySlug([...(dbPosts || []), ...(cmsPosts || [])]);
+    if (merged.length) {
+      nodes = mergeCmsPostsIntoBlogListingTree(nodes, merged);
+    }
+  }
+  return nodes;
 }
 
 async function buildPublishedPageFromJsonRow(row, pageContext = null) {
@@ -111,7 +132,7 @@ async function buildPublishedPageFromJsonRow(row, pageContext = null) {
   };
 
   if (Array.isArray(snapshotJson) && snapshotJson.length) {
-    snapshotJson = await expandCms(snapshotJson, { projectId: row.project_id, cmsService, pageContext });
+    snapshotJson = await finalizePublishedSnapshot(snapshotJson, row, pageContext);
   }
 
   return {
@@ -236,7 +257,7 @@ async function getPublishedPageRaw(projectSlug, pageSlug, pageContext = null) {
   };
 
   if (Array.isArray(snapshotJson) && snapshotJson.length) {
-    snapshotJson = await expandCms(snapshotJson, { projectId: row.project_id, cmsService, pageContext });
+    snapshotJson = await finalizePublishedSnapshot(snapshotJson, row, pageContext);
   }
 
   return {

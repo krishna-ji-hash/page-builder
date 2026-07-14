@@ -5,6 +5,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { adminBuilderPagePath, previewPagePath } from '@/lib/builder/adminBuilderRoutes';
 import { normalizeBuilderSlug } from '@/lib/builder/projectPageRules';
 import { publicPagePath } from '@/lib/publicSiteUrls';
+import {
+  BLOG_POST_TEMPLATE_SLUG,
+  BLOG_POST_TEMPLATE_TITLE,
+  isBlogPostTemplatePage,
+} from '@/lib/blogPostTemplatePage.js';
+import { adminFlatProjectSectionPath } from '@/lib/admin/adminRoutes';
 import '@/styles/admin/platform.css';
 import '@/styles/admin/project-pages.css';
 
@@ -20,6 +26,7 @@ export default function AdminProjectPages({ projectId }) {
   const [query, setQuery] = useState('');
   const [newPage, setNewPage] = useState({ title: '', slug: '' });
   const [creating, setCreating] = useState(false);
+  const [creatingBlogTemplate, setCreatingBlogTemplate] = useState(false);
   const [createError, setCreateError] = useState('');
   const [createSuccess, setCreateSuccess] = useState('');
   const addFormRef = useRef(null);
@@ -112,6 +119,30 @@ export default function AdminProjectPages({ projectId }) {
 
   const publishedCount = pages.filter((p) => p.status === 'published').length;
   const draftCount = pages.length - publishedCount;
+  const blogTemplatePage = pages.find((page) => isBlogPostTemplatePage(page)) || null;
+
+  const handleEnsureBlogTemplate = async () => {
+    setCreatingBlogTemplate(true);
+    setCreateError('');
+    setCreateSuccess('');
+    try {
+      const res = await fetch(`/api/projects/${projectId}/pages/ensure-blog-template`, {
+        method: 'POST',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to create blog article template');
+      setCreateSuccess(
+        data.created
+          ? `"${BLOG_POST_TEMPLATE_TITLE}" created — open builder to style article pages.`
+          : `"${BLOG_POST_TEMPLATE_TITLE}" is ready — open builder to edit article styling.`
+      );
+      await reloadPages();
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCreatingBlogTemplate(false);
+    }
+  };
 
   const filteredPages = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -245,6 +276,90 @@ export default function AdminProjectPages({ projectId }) {
             </form>
           </section>
 
+          <section className="proj-pages__template" aria-labelledby="proj-pages-blog-posts-heading">
+            <div className="proj-pages__add-head">
+              <h2 id="proj-pages-blog-posts-heading" className="proj-pages__add-title">
+                Blog posts
+              </h2>
+              <p className="proj-pages__add-sub">
+                Add and publish articles dynamically from the dashboard. Published posts appear on your{' '}
+                <strong>blog</strong> listing and at <code>/blog/[slug]</code>.
+              </p>
+            </div>
+            <div className="proj-pages__template-card">
+              <div>
+                <p className="proj-pages__template-name">Dynamic blog manager</p>
+                <p className="proj-pages__template-meta">
+                  Create unlimited posts with title, content, images, categories, and SEO — no builder edits required.
+                </p>
+              </div>
+              <div className="proj-pages__template-actions">
+                <Link className="proj-pages__btn proj-pages__btn--primary" href={adminFlatProjectSectionPath('blog')}>
+                  Manage blog posts
+                </Link>
+              </div>
+            </div>
+          </section>
+
+          <section className="proj-pages__template" aria-labelledby="proj-pages-blog-template-heading">
+            <div className="proj-pages__add-head">
+              <h2 id="proj-pages-blog-template-heading" className="proj-pages__add-title">
+                Blog article template
+              </h2>
+              <p className="proj-pages__add-sub">
+                Design how individual blog articles look at <code>/blog/[slug]</code>. This is separate
+                from your <strong>blog</strong> listing page.
+              </p>
+            </div>
+            <div className="proj-pages__template-card">
+              <div>
+                <p className="proj-pages__template-name">{BLOG_POST_TEMPLATE_TITLE}</p>
+                <p className="proj-pages__template-meta">
+                  Slug: <code>{BLOG_POST_TEMPLATE_SLUG}</code> · Powers live URLs like{' '}
+                  <code>/blog/what-is-logistics-aggregator</code>
+                </p>
+                {blogTemplatePage ? (
+                  <p className="proj-pages__template-status">
+                    Status:{' '}
+                    <strong>{blogTemplatePage.status === 'published' ? 'Published' : 'Draft'}</strong>
+                    {blogTemplatePage.status !== 'published'
+                      ? ' — publish after styling so live articles use your design.'
+                      : ' — live articles use this design.'}
+                  </p>
+                ) : null}
+              </div>
+              <div className="proj-pages__template-actions">
+                {blogTemplatePage ? (
+                  <>
+                    <Link
+                      className="proj-pages__btn proj-pages__btn--primary"
+                      href={adminBuilderPagePath(project.slug, BLOG_POST_TEMPLATE_SLUG)}
+                    >
+                      Open builder
+                    </Link>
+                    <Link
+                      className="proj-pages__btn"
+                      href={previewPagePath(project.slug, BLOG_POST_TEMPLATE_SLUG)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Preview template
+                    </Link>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="proj-pages__btn proj-pages__btn--primary"
+                    onClick={handleEnsureBlogTemplate}
+                    disabled={creatingBlogTemplate}
+                  >
+                    {creatingBlogTemplate ? 'Creating…' : 'Create blog article template'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </section>
+
           {!pages.length ? (
             <div className="proj-pages__empty">
               <p className="proj-pages__empty-title">No pages yet</p>
@@ -283,14 +398,25 @@ export default function AdminProjectPages({ projectId }) {
                 <ul className="proj-pages__list">
                   {filteredPages.map((page) => {
                     const published = page.status === 'published';
-                    const livePath = publicPagePath(project.slug, page.slug);
+                    const isBlogTemplate = isBlogPostTemplatePage(page);
+                    const livePath = isBlogTemplate
+                      ? '/blog/[article-slug]'
+                      : publicPagePath(project.slug, page.slug);
                     return (
-                      <li key={page.id} className="proj-pages__card">
+                      <li
+                        key={page.id}
+                        className={`proj-pages__card${isBlogTemplate ? ' proj-pages__card--template' : ''}`}
+                      >
                         <span
                           className={`proj-pages__dot proj-pages__dot--${published ? 'published' : 'draft'}`}
                           aria-hidden="true"
                         />
-                        <span className="proj-pages__name">{page.title}</span>
+                        <span className="proj-pages__name">
+                          {page.title}
+                          {isBlogTemplate ? (
+                            <span className="proj-pages__template-badge">Article template</span>
+                          ) : null}
+                        </span>
                         <code className="proj-pages__slug">{page.slug}</code>
                         <span className="proj-pages__path">{livePath}</span>
                         <span className={`proj-pages__status proj-pages__status--${published ? 'published' : 'draft'}`}>
@@ -318,7 +444,7 @@ export default function AdminProjectPages({ projectId }) {
                             </svg>
                             Preview
                           </Link>
-                          {published ? (
+                          {published && !isBlogTemplate ? (
                             <Link
                               className="proj-pages__btn"
                               href={livePath}
@@ -329,6 +455,19 @@ export default function AdminProjectPages({ projectId }) {
                                 <path d="M6 3.5h6.5V10M6 10L10.5 5.5 6 10z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
                               </svg>
                               Live
+                            </Link>
+                          ) : null}
+                          {published && isBlogTemplate ? (
+                            <Link
+                              className="proj-pages__btn"
+                              href="/blog/what-is-logistics-aggregator"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                                <path d="M6 3.5h6.5V10M6 10L10.5 5.5 6 10z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                              Sample article
                             </Link>
                           ) : null}
                           {published ? (

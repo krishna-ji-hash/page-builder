@@ -7,6 +7,8 @@ export const revalidate = 0;
 const RESERVED_ROOT_SEGMENTS = new Set([
   "admin",
   "api",
+  "blog",
+  "blog-post",
   "d",
   "preview",
   "_next",

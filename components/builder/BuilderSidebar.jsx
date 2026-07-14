@@ -778,6 +778,62 @@ export default function BuilderSidebar({
                   <span className="bld-block-card__icon">FAQ</span>
                   <span className="bld-block-card__label">FAQ</span>
                 </button>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('faqFullPage')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">FAQ+</span>
+                  <span className="bld-block-card__label">FAQ Full Page</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('blogFullPage')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">BLOG</span>
+                  <span className="bld-block-card__label">Blog Full Page</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('blogDetailPage')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">B↗</span>
+                  <span className="bld-block-card__label">Blog Detail All</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('blogDetailHero')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">BD①</span>
+                  <span className="bld-block-card__label">Detail Hero</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('blogDetailArticle')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">BD②</span>
+                  <span className="bld-block-card__label">Detail Article</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('blogDetailSidebar')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">BD③</span>
+                  <span className="bld-block-card__label">Detail Sidebar</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('blogDetailBottomCta')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">BD④</span>
+                  <span className="bld-block-card__label">Detail CTA</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('blogHubHero')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">B①</span>
+                  <span className="bld-block-card__label">Blog Hero</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('blogCategoryTabs')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">B②</span>
+                  <span className="bld-block-card__label">Blog Tabs</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('blogFeaturedArticle')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">B③</span>
+                  <span className="bld-block-card__label">Blog Featured</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('blogArticlesGrid')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">B④</span>
+                  <span className="bld-block-card__label">Blog Articles</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('blogGuidesSection')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">B⑤</span>
+                  <span className="bld-block-card__label">Blog Guides</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('blogNewsletterSection')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">B⑥</span>
+                  <span className="bld-block-card__label">Blog Newsletter</span>
+                </button>
+                <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('blogFinalCta')} disabled={isCreatingNode}>
+                  <span className="bld-block-card__icon">B⑦</span>
+                  <span className="bld-block-card__label">Blog CTA</span>
+                </button>
                 <button type="button" className="bld-block-card" onClick={() => callInsertSectionTemplate('getInTouch')} disabled={isCreatingNode}>
                   <span className="bld-block-card__icon">✉</span>
                   <span className="bld-block-card__label">Get in Touch</span>

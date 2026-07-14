@@ -1,9 +1,11 @@
-﻿import ActiveProjectSectionPage, { activeProjectSectionMetadata } from '@/lib/admin/activeProjectSectionPage';
+﻿import { resolveAdminActiveProjectRoute } from '@/lib/admin/adminProjectPage';
+import AdminBlogPostsList from '@/components/admin/blog/AdminBlogPostsList';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const metadata = activeProjectSectionMetadata('blog');
+export const metadata = { title: 'Blog Posts · Project' };
 
 export default async function Page() {
-  return ActiveProjectSectionPage({ section: 'blog' });
+  const ctx = await resolveAdminActiveProjectRoute('blog');
+  return <AdminBlogPostsList projectId={ctx.projectId} projectSlug={ctx.projectSlug} />;
 }
