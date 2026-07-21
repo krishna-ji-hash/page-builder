@@ -1,7 +1,9 @@
 /**
- * Run DB migrations (if possible), then start Next dev server on a fixed port.
+ * Ensure PostgreSQL is reachable, then start Next dev server on a fixed port.
  * - Kills stale dev servers on the same port (avoids 3000 vs 3001 split-brain ENOENT)
  * - Pre-compiles builder routes before you open the browser (avoids missing page.js)
+ *
+ * Does not start legacy MySQL servers and does not run legacy MySQL migrate/bootstrap tooling.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -33,30 +35,22 @@ function printSingleDevUrl() {
   process.stdout.write('[dev] ═══════════════════════════════════════\n\n');
 }
 
-const ensureMysqlArgs = fs.existsSync(envFile)
-  ? ['--env-file=.env', path.join(root, 'scripts', 'ensure-mysql.mjs')]
-  : [path.join(root, 'scripts', 'ensure-mysql.mjs')];
-const ensureDb = spawnSync(process.execPath, ensureMysqlArgs, { cwd: root, stdio: 'inherit' });
+const ensurePostgresArgs = fs.existsSync(envFile)
+  ? ['--env-file=.env', path.join(root, 'scripts', 'ensure-postgres.mjs')]
+  : [path.join(root, 'scripts', 'ensure-postgres.mjs')];
+const ensureDb = spawnSync(process.execPath, ensurePostgresArgs, { cwd: root, stdio: 'inherit' });
 if (ensureDb.status !== 0) {
+  process.stderr.write(
+    '\n[dev] PostgreSQL check failed. Set DATABASE_URL in .env (postgresql://…@localhost:5432/documents_pg?schema=documents), start Postgres, then retry.\n'
+  );
+  process.stderr.write('[dev] Tip: skip DB check with npm run dev:simple\n\n');
   process.exit(ensureDb.status ?? 1);
 }
 
-const migrateArgs = fs.existsSync(envFile)
-  ? ['--env-file=.env', path.join(root, 'scripts', 'migrate.mjs')]
-  : [path.join(root, 'scripts', 'migrate.mjs')];
-
-const mig = spawnSync(process.execPath, migrateArgs, { cwd: root, stdio: 'inherit' });
-if (mig.status !== 0) {
-  process.stderr.write(
-    '\n[dev] Migration step failed. Start DB (npm run db:xampp or XAMPP MySQL), fix .env (see .env.example), or skip migrate with: npm run dev:simple\n\n'
-  );
-  process.exit(mig.status ?? 1);
-}
-
-if (fs.existsSync(envFile) && process.env.ADMIN_BOOTSTRAP_PASSWORD) {
-  const bootstrapArgs = ['--env-file=.env', path.join(root, 'scripts', 'bootstrap-admin.mjs')];
-  spawnSync(process.execPath, bootstrapArgs, { cwd: root, stdio: 'inherit' });
-}
+// Legacy MySQL migrate/bootstrap tooling is intentionally skipped (DB already on PostgreSQL).
+process.stdout.write(
+  '[dev] Skipping legacy MySQL migrate/bootstrap scripts (use PostgreSQL; schema already present).\n'
+);
 
 if (process.env.BLD_DEV_CLEAN === '1') {
   try {
