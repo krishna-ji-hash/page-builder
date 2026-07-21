@@ -1,0 +1,217 @@
+// Multi-project custom-domain routing (WordPress/Webflow style).
+// Maps to existing MySQL tables; additive columns via migration only.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Admin users (`admin_users` table — existing auth).
+model User {
+  id           BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  email        String    @unique @db.VarChar(255)
+  passwordHash String    @map("password_hash") @db.VarChar(255)
+  displayName  String    @default("") @map("display_name") @db.VarChar(128)
+  role         UserRole  @default(editor)
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  pageVersions PageVersion[]
+
+  @@map("admin_users")
+}
+
+enum UserRole {
+  super_admin
+  admin
+  editor
+  viewer
+}
+
+model Project {
+  id         BigInt        @id @default(autoincrement()) @db.UnsignedBigInt
+  name       String        @db.VarChar(255)
+  slug       String        @unique @db.VarChar(120)
+  /// Primary custom domain (denormalized from `project_domains` when set).
+  domain         String?            @unique @db.VarChar(253)
+  domainStatus   ProjectDomainStatus @default(PENDING) @map("domain_status")
+  lastVerifiedAt DateTime?          @map("last_verified_at")
+  homeSlug       String             @default("home") @map("home_slug") @db.VarChar(180)
+  status     ProjectStatus @default(ACTIVE)
+  title      String?       @db.VarChar(255)
+  type       ProjectType   @default(website)
+  configJson Json?         @map("config_json")
+  createdAt  DateTime      @default(now()) @map("created_at")
+  updatedAt  DateTime      @updatedAt @map("updated_at")
+
+  pages        Page[]
+  menus        Menu[]
+  mediaAssets  MediaAsset[]
+  siteSettings SiteSetting[]
+
+  @@map("projects")
+}
+
+enum ProjectStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum ProjectDomainStatus {
+  PENDING
+  VERIFIED
+  FAILED
+}
+
+enum ProjectType {
+  website
+  dashboard
+  admin
+  app
+}
+
+model Page {
+  id                 BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
+  projectId          BigInt     @map("project_id") @db.UnsignedBigInt
+  title              String     @db.VarChar(255)
+  slug               String     @db.VarChar(180)
+  status             PageStatus @default(draft)
+  /// Builder edits this JSON tree (synced from draft `builder_nodes`).
+  draftJson          Json?      @map("draft_json")
+  /// Public/live routes render this JSON snapshot only.
+  publishedJson      Json?      @map("published_json")
+  publishedAt        DateTime?  @map("published_at")
+  publishedVersionId BigInt?    @map("published_version_id") @db.UnsignedBigInt
+  seoJson            Json?      @map("seo_json")
+  seoTitle           String?    @map("seo_title") @db.VarChar(255)
+  seoDescription     String?    @map("seo_description") @db.VarChar(512)
+  seoKeywords        String?    @map("seo_keywords") @db.VarChar(512)
+  ogImage            String?    @map("og_image") @db.VarChar(2048)
+  robotsIndex        Boolean    @default(true) @map("robots_index")
+  robotsFollow       Boolean    @default(true) @map("robots_follow")
+  canonicalUrl       String?    @map("canonical_url") @db.VarChar(2048)
+  createdAt          DateTime   @default(now()) @map("created_at")
+  updatedAt          DateTime   @updatedAt @map("updated_at")
+
+  project  Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  versions PageVersion[]
+  menuItems MenuItem[]
+
+  @@unique([projectId, slug], map: "uq_pages_project_slug")
+  @@map("pages")
+}
+
+enum MenuLocation {
+  HEADER
+  FOOTER
+}
+
+model Menu {
+  id        BigInt       @id @default(autoincrement()) @db.UnsignedBigInt
+  projectId BigInt       @map("project_id") @db.UnsignedBigInt
+  name      String       @db.VarChar(120)
+  location  MenuLocation
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+
+  project Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  items   MenuItem[]
+
+  @@index([projectId, location], map: "idx_menus_project_location")
+  @@map("menus")
+}
+
+model MenuItem {
+  id        BigInt  @id @default(autoincrement()) @db.UnsignedBigInt
+  menuId    BigInt  @map("menu_id") @db.UnsignedBigInt
+  label     String  @db.VarChar(180)
+  url       String  @default("") @db.VarChar(2048)
+  pageId    BigInt? @map("page_id") @db.UnsignedBigInt
+  target    String  @default("_self") @db.VarChar(16)
+  sortOrder Int     @default(0) @map("sort_order")
+  parentId  BigInt? @map("parent_id") @db.UnsignedBigInt
+
+  menu     Menu      @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  page     Page?     @relation(fields: [pageId], references: [id], onDelete: SetNull)
+  parent   MenuItem? @relation("MenuItemHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children MenuItem[] @relation("MenuItemHierarchy")
+
+  @@index([menuId, sortOrder], map: "idx_menu_items_menu_sort")
+  @@index([parentId], map: "idx_menu_items_parent")
+  @@map("menu_items")
+}
+
+/// WordPress-style immutable revisions (`pages.draftJson` / publish snapshots).
+/// Separate from legacy `page_versions` rows used by `builder_nodes`.
+model PageVersion {
+  id            BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
+  pageId        BigInt            @map("page_id") @db.UnsignedBigInt
+  versionNumber Int               @map("version_number") @db.UnsignedInt
+  snapshotJson  Json              @map("snapshot_json")
+  source        PageVersionSource
+  createdAt     DateTime          @default(now()) @map("created_at")
+  createdById   BigInt?           @map("created_by_id") @db.UnsignedBigInt
+
+  page      Page  @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  createdBy User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([pageId, versionNumber], map: "uq_page_revisions_page_version")
+  @@index([pageId, createdAt(sort: Desc)], map: "idx_page_revisions_page_created")
+  @@map("page_revisions")
+}
+
+enum PageVersionSource {
+  DRAFT_SAVE
+  PUBLISH
+  RESTORE
+}
+
+enum PageStatus {
+  draft
+  published
+  archived
+}
+
+/// Project media library (`media_assets` — legacy table, Prisma-managed).
+model MediaAsset {
+  id           BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  projectId    BigInt   @map("project_id") @db.UnsignedBigInt
+  fileName     String   @map("storage_name") @db.VarChar(255)
+  originalName String   @map("original_name") @db.VarChar(255)
+  mimeType     String   @map("mime_type") @db.VarChar(191)
+  size         BigInt   @default(0) @map("bytes") @db.UnsignedBigInt
+  url          String   @map("public_url") @db.VarChar(1024)
+  storageKey   String?  @map("storage_path") @db.VarChar(1024)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  folder   String? @db.VarChar(255)
+  kind     String  @db.VarChar(32)
+  thumbUrl String? @map("thumb_url") @db.VarChar(1024)
+  width    Int?
+  height   Int?
+  title    String? @db.VarChar(255)
+  altText  String? @map("alt_text") @db.VarChar(255)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, id], map: "idx_media_assets_project")
+  @@index([projectId, createdAt], map: "idx_media_assets_project_created")
+  @@index([projectId, folder], map: "idx_media_assets_project_folder")
+  @@map("media_assets")
+}
+
+/// Singleton row (`id` = "main") — which project is active for flat dev URLs.
+model SiteSetting {
+  id              String   @id @default("main") @db.VarChar(32)
+  activeProjectId BigInt?  @map("active_project_id") @db.UnsignedBigInt
+  activeProject   Project? @relation(fields: [activeProjectId], references: [id], onDelete: SetNull)
+
+  @@map("site_settings")
+}

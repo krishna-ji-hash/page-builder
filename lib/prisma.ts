@@ -5,22 +5,21 @@ const globalForPrisma = globalThis as typeof globalThis & {
   prisma?: PrismaClient;
 };
 
-function buildDatabaseUrl(): string {
-  if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
-  const host = process.env.MYSQL_HOST || '127.0.0.1';
-  const port = process.env.MYSQL_PORT || '3306';
-  const user = encodeURIComponent(process.env.MYSQL_USER || 'root');
-  const password = encodeURIComponent(process.env.MYSQL_PASSWORD ?? '');
-  const database = process.env.MYSQL_DATABASE || 'documents';
-  const auth = password ? `${user}:${password}` : user;
-  return `mysql://${auth}@${host}:${port}/${database}`;
+function requirePostgresDatabaseUrl(): string {
+  const url = String(process.env.DATABASE_URL || '').trim();
+  if (!url) {
+    throw new Error('DATABASE_URL is required and must be a PostgreSQL connection URL.');
+  }
+  const lower = url.toLowerCase();
+  if (!lower.startsWith('postgresql://') && !lower.startsWith('postgres://')) {
+    throw new Error('DATABASE_URL is required and must be a PostgreSQL connection URL.');
+  }
+  return url;
 }
 
 function createPrismaClient(): PrismaClient {
   ensureEnvValidated();
-  if (!process.env.DATABASE_URL) {
-    process.env.DATABASE_URL = buildDatabaseUrl();
-  }
+  requirePostgresDatabaseUrl();
   return new PrismaClient({
     log: process.env.PRISMA_LOG === '1' ? ['query', 'warn', 'error'] : ['warn', 'error'],
   });
