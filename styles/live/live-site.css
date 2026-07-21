@@ -710,6 +710,11 @@
   background: var(--token-gradient-hero);
 }
 
+.live-carousel--hero .live-carousel__slide,
+.live-carousel--image .live-carousel__slide {
+  aspect-ratio: 16 / 9;
+}
+
 /* Image slider: compact gallery, bottom-aligned overlay, neutral image treatment */
 .live-carousel--image .live-carousel__slide {
   min-height: 200px;
@@ -825,7 +830,22 @@
     var(--carousel-easing, cubic-bezier(0.22, 1, 0.36, 1)) 90ms both;
   position: relative;
   width: 100%;
-  min-height: inherit;
+  min-height: min(var(--split-hero-image-max-height, 300px), 52vw);
+  aspect-ratio: var(--split-hero-visual-aspect, 4 / 3);
+}
+
+/* LCP: first paint shows slide immediately — no opacity/transform entrance on hero image. */
+.live-carousel--splitHero.is-initial-paint .live-carousel__split-visual-media,
+.live-carousel--splitHero.is-initial-paint .live-carousel__split-copy,
+.live-carousel--splitHero.is-initial-paint .live-carousel__split-panel.is-active .live-carousel__split-panel-inner {
+  animation: none !important;
+}
+
+.live-carousel--splitHero .live-carousel__split-visual-media > span {
+  display: block !important;
+  width: 100% !important;
+  height: auto !important;
+  max-width: 100%;
 }
 
 .live-carousel--splitHero .live-carousel__split-img:not(.live-carousel__split-img--custom-size) {
@@ -889,6 +909,8 @@
   align-items: flex-start;
   align-self: center;
   min-width: 0;
+  position: relative;
+  padding-bottom: 52px;
 }
 
 .live-carousel__split-badge {
@@ -1015,6 +1037,7 @@
   object-fit: var(--carousel-image-fit, contain);
   display: block;
   margin: 0 auto;
+  aspect-ratio: var(--split-hero-visual-aspect, auto);
 }
 
 .live-carousel__split-img--custom-size {
@@ -1037,8 +1060,12 @@
 }
 
 .live-carousel__split-copy .live-carousel__split-nav {
-  margin-top: clamp(8px, 1.5vw, 16px);
+  margin-top: 0;
   flex-shrink: 0;
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
 }
 
 .live-carousel__split-nav {
@@ -1050,7 +1077,7 @@
   padding-top: 0;
   width: 100%;
   max-width: 100%;
-  position: relative;
+  position: absolute;
   z-index: 2;
   transform: translate(var(--split-hero-nav-offset-x, 0), var(--split-hero-nav-offset-y, 0));
 }

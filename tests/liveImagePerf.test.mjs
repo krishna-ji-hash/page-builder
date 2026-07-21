@@ -12,6 +12,7 @@ test('pickImageLoadingPolicy prioritizes first image', () => {
   assert.equal(pickImageLoadingPolicy(0).fetchPriority, 'high');
   assert.equal(pickImageLoadingPolicy(0).loading, 'eager');
   assert.equal(pickImageLoadingPolicy(2).loading, 'lazy');
+  assert.equal(pickImageLoadingPolicy(2).fetchPriority, 'low');
 });
 
 test('liveImageIntrinsicAttrs uses aspect ratio from style_json', () => {

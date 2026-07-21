@@ -8,7 +8,7 @@ import {
 } from '@/lib/carouselTickerShared';
 import { resolveDualTickerSlides } from '@/lib/carouselTickerRows';
 import { logoHoverZoomPresentation } from '@/lib/carouselLogoHoverZoom';
-import { liveCarouselSlideImageAttrs } from '@/lib/liveCarouselImageAttrs';
+import { liveCarouselNativeImgAttrs } from '@/lib/liveCarouselImageAttrs';
 
 /**
  * Server-rendered logo ticker / marquee (CSS animation only).
@@ -64,7 +64,7 @@ export default function CarouselTickerStatic({
         {row1DupSlides.length ? (
         <div className="live-carousel__ticker-row">
           <div className={`live-carousel__ticker-track ${row1TrackClass}`.trim()}>
-            {(isMarqueeVariant ? tickerDupSlides : row1DupSlides).map(({ slide, key }) => (
+            {(isMarqueeVariant ? tickerDupSlides : row1DupSlides).map(({ slide, key }, slideIndex) => (
               <div key={key} className="live-carousel__ticker-card">
                 {slide.imageSrc ? (
                   <img
@@ -72,6 +72,10 @@ export default function CarouselTickerStatic({
                     src={slide.imageSrc}
                     alt={slide.imageAlt || ''}
                     style={tickerSlideImgStyle(slide)}
+                    {...liveCarouselNativeImgAttrs(slide, {
+                      slideIndex,
+                      isFirstVisible: slideIndex === 0,
+                    })}
                   />
                 ) : (
                   <span className="live-carousel__ticker-fallback">{tickerFallbackLabel(slide) || '\u00a0'}</span>
@@ -92,9 +96,9 @@ export default function CarouselTickerStatic({
                       src={slide.imageSrc}
                       alt={slide.imageAlt || ''}
                       style={tickerSlideImgStyle(slide)}
-                      {...liveCarouselSlideImageAttrs(slide, {
+                      {...liveCarouselNativeImgAttrs(slide, {
                         slideIndex,
-                        isFirstVisible: slideIndex === 0,
+                        isFirstVisible: false,
                       })}
                     />
                   ) : (

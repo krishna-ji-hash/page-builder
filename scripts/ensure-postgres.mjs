@@ -37,6 +37,29 @@ async function main() {
       process.exit(1);
     }
     console.log('[db] PostgreSQL ready (SELECT 1 ok)');
+
+    // Temporary non-destructive identity dump (no password / DATABASE_URL).
+    const [infoRows] = await pool.query(`
+      SELECT
+        current_database() AS database_name,
+        current_user AS database_user,
+        current_schema() AS current_schema,
+        version() AS postgres_version
+    `);
+    const info = infoRows?.[0] || {};
+    console.log('[db] PostgreSQL session info (temporary debug):');
+    console.log(
+      JSON.stringify(
+        {
+          database_name: info.database_name ?? null,
+          database_user: info.database_user ?? null,
+          current_schema: info.current_schema ?? null,
+          postgres_version: info.postgres_version ?? null,
+        },
+        null,
+        2
+      )
+    );
   } catch (error) {
     const formatted = formatPostgresConnectionError(error);
     console.error(`[db] ${formatted.message}`);

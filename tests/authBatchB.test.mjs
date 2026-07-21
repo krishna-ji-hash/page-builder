@@ -29,8 +29,8 @@ assert.equal(isUniqueViolation({ code: '23503' }), false);
 
 {
   const named = convertSqlPlaceholders(
-    `INSERT INTO admin_sessions (user_id, token_hash, expires_at, ip_address, user_agent)
-     VALUES (:userId, :tokenHash, :expiresAt, :ip, :ua)`,
+    `INSERT INTO admin_sessions (user_id, token_hash, expires_at, ip_address, user_agent, created_at)
+     VALUES (:userId, :tokenHash, :expiresAt, :ip, :ua, NOW())`,
     { userId: 1, tokenHash: 'abc', expiresAt: new Date('2030-01-01T00:00:00Z'), ip: null, ua: null }
   );
   assert.equal(named.text.includes('$1'), true);
@@ -117,8 +117,8 @@ assert.equal(isUniqueViolation({ code: '23503' }), false);
   const tokenHash = hashToken('a'.repeat(64));
   const expiresAt = new Date(Date.now() + 60_000);
   await mockExecute(
-    `INSERT INTO admin_sessions (user_id, token_hash, expires_at, ip_address, user_agent)
-     VALUES (:userId, :tokenHash, :expiresAt, :ip, :ua)`,
+    `INSERT INTO admin_sessions (user_id, token_hash, expires_at, ip_address, user_agent, created_at)
+     VALUES (:userId, :tokenHash, :expiresAt, :ip, :ua, NOW())`,
     { userId: 1, tokenHash, expiresAt, ip: null, ua: null }
   );
   assert.equal(sessions.has(tokenHash), true);

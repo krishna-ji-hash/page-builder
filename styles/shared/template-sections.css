@@ -905,6 +905,13 @@
 
 :is(.live-doc, .bld-canvas__live-mirror)
   [data-section-template='splitHeroCarousel']
+  .live-carousel__split-visual-media {
+  min-height: min(var(--split-hero-image-max-height, 300px), 45vw);
+  aspect-ratio: var(--split-hero-visual-aspect, 4 / 3);
+}
+
+:is(.live-doc, .bld-canvas__live-mirror)
+  [data-section-template='splitHeroCarousel']
   .live-carousel__split-img:not(.live-carousel__split-img--custom-size) {
   width: 100%;
   max-width: 100%;

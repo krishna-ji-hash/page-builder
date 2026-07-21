@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import FeatureTabCanvasField from '@/components/builder/canvas/FeatureTabCanvasField';
+import LiveCarouselImage from '@/components/runtime/LiveCarouselImage';
 import { liveCarouselSlideImageAttrs } from '@/lib/liveCarouselImageAttrs';
 import { buildTickerDupSlides, resolveTickerScrollClasses } from '@/lib/carouselTickerShared';
 import { resolveDualTickerSlides } from '@/lib/carouselTickerRows';
 import { logoHoverZoomPresentation } from '@/lib/carouselLogoHoverZoom';
 import { splitHeroCopyTypoFromProps, splitHeroCopyTypoToCssVars } from '@/lib/splitHeroCopyTypography';
+import { splitHeroDefaultIntrinsic } from '@/lib/liveCarouselImage';
 
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
@@ -372,9 +374,21 @@ export default function Carousel({
   const [index, setIndex] = useState(0);
   const [instantTransition, setInstantTransition] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [isInitialPaint, setIsInitialPaint] = useState(true);
   const indexRef = useRef(0);
   const splitHeroImageInputRef = useRef(null);
   indexRef.current = index;
+
+  useEffect(() => {
+    let id2;
+    const id1 = requestAnimationFrame(() => {
+      id2 = requestAnimationFrame(() => setIsInitialPaint(false));
+    });
+    return () => {
+      cancelAnimationFrame(id1);
+      if (id2 != null) cancelAnimationFrame(id2);
+    };
+  }, []);
 
   const canvasEditSplitHero = isSplitHeroVariant && builderMode && builderEditable;
   const patchSplitHeroSlide = useCallback(
@@ -430,23 +444,33 @@ export default function Carousel({
   useEffect(() => {
     if (isTickerOrMarquee) return undefined;
     if (!cfg.autoplay || isPaused || safeSlides.length <= 1) return undefined;
-    if (useSeamlessLoop) {
-      const t = setInterval(() => {
+    let intervalId;
+    let cancelled = false;
+    const startAutoplay = () => {
+      if (cancelled) return;
+      if (useSeamlessLoop) {
+        intervalId = setInterval(() => {
+          setIndex((cur) => {
+            if (cur < nSlides) return cur + 1;
+            if (cur === nSlides) return nSlides + 1;
+            return cur;
+          });
+        }, cfg.autoplayMs);
+        return;
+      }
+      intervalId = setInterval(() => {
         setIndex((cur) => {
-          if (cur < nSlides) return cur + 1;
-          if (cur === nSlides) return nSlides + 1;
-          return cur;
+          if (cur >= maxIndex) return cfg.loop ? 0 : cur;
+          return cur + 1;
         });
       }, cfg.autoplayMs);
-      return () => clearInterval(t);
-    }
-    const t = setInterval(() => {
-      setIndex((cur) => {
-        if (cur >= maxIndex) return cfg.loop ? 0 : cur;
-        return cur + 1;
-      });
-    }, cfg.autoplayMs);
-    return () => clearInterval(t);
+    };
+    const delayId = setTimeout(startAutoplay, isInitialPaint ? 1200 : 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(delayId);
+      if (intervalId) clearInterval(intervalId);
+    };
   }, [
     cfg.autoplay,
     cfg.autoplayMs,
@@ -457,6 +481,7 @@ export default function Carousel({
     safeSlides.length,
     isTickerOrMarquee,
     useSeamlessLoop,
+    isInitialPaint,
   ]);
 
   useLayoutEffect(() => {
@@ -496,11 +521,13 @@ export default function Carousel({
               {(isMarqueeVariant ? tickerDupSlides : row1DupSlides).map(({ slide, key }, slideIndex) => (
                 <div key={key} className="live-carousel__ticker-card">
                   {slide.imageSrc ? (
-                    <img
+                    <LiveCarouselImage
                       className="live-carousel__ticker-img"
                       src={slide.imageSrc}
                       alt={slide.imageAlt || ''}
                       style={tickerSlideImgStyle(slide)}
+                      variant="ticker"
+                      slideIndex={slideIndex}
                       {...liveCarouselSlideImageAttrs(slide, { slideIndex, isFirstVisible: slideIndex === 0 })}
                     />
                   ) : (
@@ -648,6 +675,11 @@ export default function Carousel({
     splitVars['--split-hero-nav-offset-y'] = `${navOffsetY}px`;
     if (imageMaxH > 0) splitVars['--split-hero-image-max-height'] = `${imageMaxH}px`;
     if (imageScalePct > 100) splitVars['--split-hero-image-scale'] = String(imageScalePct / 100);
+    const splitIntrinsic = splitHeroDefaultIntrinsic({
+      splitHeroImageMaxHeightPx: imageMaxH,
+      visualWidthPct: visualWidthPct,
+    });
+    splitVars['--split-hero-visual-aspect'] = `${splitIntrinsic.width} / ${splitIntrinsic.height}`;
     Object.assign(splitVars, splitHeroCopyTypoToCssVars(splitHeroCopyTypoFromProps(restProps)));
     const bleedPad = Math.max(0, visualOffsetY, navOffsetY);
     if (bleedPad > 0) splitVars['--split-hero-pad-bottom'] = `${bleedPad + 32}px`;
@@ -727,7 +759,10 @@ export default function Carousel({
       const slideId = String(slide?.id || slideIndex);
       const imgAttrs = liveCarouselSlideImageAttrs(slide, {
         slideIndex,
-        isFirstVisible: slideIndex === activeDotIndex,
+        isFirstVisible: slideIndex === 0 && activeDotIndex === 0,
+        variant: 'splitHero',
+        splitHeroImageMaxHeightPx: imageMaxH,
+        splitHeroVisualWidthPct: visualWidthPct,
       });
       const customImgSize =
         Math.round(Number(slide?.imageWidthPx) || 0) > 0 || Math.round(Number(slide?.imageHeightPx) || 0) > 0;
@@ -811,12 +846,20 @@ export default function Carousel({
           >
             <div className="live-carousel__split-visual-media">
               {slide.imageSrc ? (
-                <img
+                <LiveCarouselImage
                   className={`live-carousel__split-img${customImgSize ? ' live-carousel__split-img--custom-size' : ''}`.trim()}
                   src={slide.imageSrc}
                   alt={slide.imageAlt || ''}
                   style={slideImageStyle(slide, imageFit, imageObjectPosition)}
-                  {...imgAttrs}
+                  variant="splitHero"
+                  slideIndex={slideIndex}
+                  priority={imgAttrs.priority}
+                  sizes={imgAttrs.sizes}
+                  width={imgAttrs.width}
+                  height={imgAttrs.height}
+                  loading={imgAttrs.loading}
+                  fetchPriority={imgAttrs.fetchPriority}
+                  decoding={imgAttrs.decoding}
                 />
               ) : (
                 <div
@@ -877,11 +920,14 @@ export default function Carousel({
     };
 
     const activeSlide = safeSlides[activeDotIndex] ?? safeSlides[0];
+    const nextSlideIndex = safeSlides.length > 1 ? (activeDotIndex + 1) % safeSlides.length : -1;
+    const nextSlideSrc =
+      nextSlideIndex >= 0 ? String(safeSlides[nextSlideIndex]?.imageSrc || '').trim() : '';
 
     return (
       <section
         style={{ ...(style || {}), ...splitVars }}
-        className={`live-carousel live-carousel--splitHero ${isFade ? 'is-fade' : 'is-slide'} ${isPaused ? 'is-paused' : ''} ${splitHeroVisualCard ? 'live-carousel--split-visual-card' : ''} ${splitHeroBorderNone ? 'live-carousel--split-visual-border-none' : ''} ${splitHeroShadowClass} ${canvasEditSplitHero ? 'live-carousel--builder' : ''}`.trim()}
+        className={`live-carousel live-carousel--splitHero ${isFade ? 'is-fade' : 'is-slide'} ${isPaused ? 'is-paused' : ''} ${isInitialPaint ? 'is-initial-paint' : ''} ${splitHeroVisualCard ? 'live-carousel--split-visual-card' : ''} ${splitHeroBorderNone ? 'live-carousel--split-visual-border-none' : ''} ${splitHeroShadowClass} ${canvasEditSplitHero ? 'live-carousel--builder' : ''}`.trim()}
         aria-label="Split hero carousel"
         aria-roledescription="carousel"
         tabIndex={0}
@@ -903,6 +949,9 @@ export default function Carousel({
             {renderSplitPanel(activeSlide, activeDotIndex)}
           </article>
         </div>
+        {!isInitialPaint && nextSlideSrc ? (
+          <link rel="prefetch" as="image" href={nextSlideSrc} fetchPriority="low" />
+        ) : null}
       </section>
     );
   }
@@ -927,21 +976,32 @@ export default function Carousel({
           onTransitionEnd={handleTrackTransitionEnd}
         >
           {trackSlides.map(({ slide, key }, slideIndex) => {
+            const isFirstTrackSlide = slideIndex === (useSeamlessLoop ? 1 : 0);
             const imgAttrs = liveCarouselSlideImageAttrs(slide, {
               slideIndex,
-              isFirstVisible: slideIndex === (useSeamlessLoop ? 1 : 0),
+              isFirstVisible: isFirstTrackSlide,
+              variant: variantKey,
+              perView,
             });
             return (
             <div key={key} className="live-carousel__item">
               {cfg.variant === 'card' ? (
                 <article className="live-carousel__card-slide">
                   {slide.imageSrc ? (
-                    <img
+                    <LiveCarouselImage
                       className="live-carousel__card-img"
                       src={slide.imageSrc}
                       alt={slide.imageAlt || ''}
                       style={slideImageStyle(slide, imageFit, imageObjectPosition)}
-                      {...imgAttrs}
+                      variant={variantKey}
+                      slideIndex={slideIndex}
+                      priority={imgAttrs.priority}
+                      sizes={imgAttrs.sizes}
+                      width={imgAttrs.width}
+                      height={imgAttrs.height}
+                      loading={imgAttrs.loading}
+                      fetchPriority={imgAttrs.fetchPriority}
+                      decoding={imgAttrs.decoding}
                     />
                   ) : null}
                   {slideOverlayVisible(slide) ? (
@@ -961,12 +1021,19 @@ export default function Carousel({
               ) : (
                 <article className={`live-carousel__slide ${slideModeClass}`.trim()}>
                   {slide.imageSrc ? (
-                    <img
+                    <LiveCarouselImage
+                      fill
                       className="live-carousel__img"
                       src={slide.imageSrc}
                       alt={slide.imageAlt || ''}
                       style={slideImageStyle(slide, imageFit, imageObjectPosition)}
-                      {...imgAttrs}
+                      variant={variantKey}
+                      slideIndex={slideIndex}
+                      priority={imgAttrs.priority}
+                      sizes={imgAttrs.sizes}
+                      loading={imgAttrs.loading}
+                      fetchPriority={imgAttrs.fetchPriority}
+                      decoding={imgAttrs.decoding}
                     />
                   ) : null}
                   {!showOverlay || !slideOverlayVisible(slide) ? null : (
