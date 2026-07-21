@@ -7,8 +7,9 @@ import {
   canManageUsers,
 } from '@/lib/admin/adminUserPolicy.js';
 import { destroyAllUserSessions } from '@/lib/auth/session.js';
+import { isActiveFlag, toClientId } from '@/lib/auth/clientIds.js';
 import { getDbPool } from '@/lib/db.js';
-import { findAdminUserByEmail } from '@/services/admin/authService.js';
+import { findAdminUserByEmail, isUniqueViolation } from '@/services/admin/authService.js';
 
 const VALID_ROLES = new Set(Object.values(ROLES));
 
@@ -25,11 +26,11 @@ export { canAssignRole, canManageTargetUser, canManageUsers };
 
 function mapUserRow(row) {
   return {
-    id: Number(row.id),
+    id: toClientId(row.id),
     email: row.email,
     displayName: row.display_name || row.email,
     role: row.role,
-    isActive: Boolean(row.is_active),
+    isActive: isActiveFlag(row.is_active),
     lastLoginAt: row.last_login_at,
     createdAt: row.created_at,
     activeSessions: Number(row.active_sessions || 0),
@@ -41,8 +42,9 @@ async function loadProjectAssignments() {
   const [rows] = await pool.execute(`SELECT user_id, project_id FROM admin_user_projects`);
   const byUser = new Map();
   for (const row of rows) {
-    const uid = Number(row.user_id);
-    const pid = Number(row.project_id);
+    const uid = toClientId(row.user_id);
+    const pid = toClientId(row.project_id);
+    if (uid == null || pid == null) continue;
     if (!byUser.has(uid)) byUser.set(uid, []);
     byUser.get(uid).push(pid);
   }
@@ -55,7 +57,7 @@ async function loadProjectsList() {
     `SELECT id, name, title, slug FROM projects ORDER BY name ASC, id ASC`
   );
   return rows.map((row) => ({
-    id: Number(row.id),
+    id: toClientId(row.id),
     name: row.name || row.title || `Project #${row.id}`,
     slug: row.slug,
   }));
@@ -92,21 +94,27 @@ async function getUserRecord(userId) {
   const [rows] = await pool.execute(
     `SELECT id, email, display_name, role, is_active, last_login_at, created_at
      FROM admin_users WHERE id = :id LIMIT 1`,
-    { id: Number(userId) }
+    { id: toClientId(userId) }
   );
   const row = rows[0];
   if (!row) return null;
   const assignments = await loadProjectAssignments();
   return {
     ...mapUserRow({ ...row, active_sessions: 0 }),
-    projectIds: assignments.get(Number(row.id)) || [],
+    projectIds: assignments.get(toClientId(row.id)) || [],
   };
 }
 
 async function replaceUserProjects(userId, projectIds) {
   const pool = getDbPool();
-  const uid = Number(userId);
-  const ids = [...new Set((projectIds || []).map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))];
+  const uid = toClientId(userId);
+  const ids = [
+    ...new Set(
+      (projectIds || [])
+        .map((id) => toClientId(id))
+        .filter((id) => typeof id === 'number' && Number.isInteger(id) && id > 0)
+    ),
+  ];
   await pool.execute(`DELETE FROM admin_user_projects WHERE user_id = :userId`, { userId: uid });
   for (const projectId of ids) {
     await pool.execute(
@@ -119,10 +127,11 @@ async function replaceUserProjects(userId, projectIds) {
 async function countActiveSuperAdmins(excludeUserId = null) {
   const pool = getDbPool();
   const params = [];
-  let sql = `SELECT COUNT(*) AS c FROM admin_users WHERE role = 'super_admin' AND is_active = 1`;
+  // is_active is PostgreSQL boolean (Prisma Boolean) — use TRUE, not 1.
+  let sql = `SELECT COUNT(*) AS c FROM admin_users WHERE role = 'super_admin' AND is_active = TRUE`;
   if (excludeUserId != null) {
     sql += ` AND id <> ?`;
-    params.push(Number(excludeUserId));
+    params.push(toClientId(excludeUserId));
   }
   const [rows] = await pool.query(sql, params);
   return Number(rows[0]?.c || 0);
@@ -148,12 +157,24 @@ export async function createAdminUser(actor, payload) {
 
   const passwordHash = await hashPassword(password);
   const pool = getDbPool();
-  const [result] = await pool.execute(
-    `INSERT INTO admin_users (email, password_hash, display_name, role, is_active)
-     VALUES (:email, :passwordHash, :displayName, :role, 1)`,
-    { email, passwordHash, displayName, role }
-  );
-  const userId = Number(result.insertId);
+  let userId;
+  try {
+    const [result] = await pool.execute(
+      `INSERT INTO admin_users (email, password_hash, display_name, role, is_active)
+       VALUES (:email, :passwordHash, :displayName, :role, TRUE)
+       RETURNING id`,
+      { email, passwordHash, displayName, role }
+    );
+    userId = toClientId(result.insertId);
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw Object.assign(new Error('Email already in use'), { code: 'CONFLICT' });
+    }
+    throw error;
+  }
+  if (userId == null) {
+    throw Object.assign(new Error('Failed to create user'), { code: 'INTERNAL' });
+  }
   if (role !== ROLES.SUPER_ADMIN) {
     await replaceUserProjects(userId, payload?.projectIds);
   }
@@ -169,7 +190,7 @@ export async function updateAdminUser(actor, userId, payload) {
     throw Object.assign(new Error('Cannot modify this user'), { code: 'FORBIDDEN' });
   }
 
-  const isSelf = Number(actor.id) === Number(userId);
+  const isSelf = toClientId(actor.id) === toClientId(userId);
   const nextRole = payload?.role != null ? normalizeRole(payload.role) : target.role;
   if (!nextRole) throw Object.assign(new Error('Invalid role'), { code: 'VALIDATION' });
   if (payload?.role != null && !canAssignRole(actor, nextRole)) {
@@ -198,10 +219,11 @@ export async function updateAdminUser(actor, userId, payload) {
   await pool.execute(
     `UPDATE admin_users SET display_name = :displayName, role = :role, is_active = :isActive WHERE id = :id`,
     {
-      id: Number(userId),
+      id: toClientId(userId),
       displayName,
       role: nextRole,
-      isActive: nextActive ? 1 : 0,
+      // PostgreSQL boolean column — pass real booleans, not 0/1 integers.
+      isActive: nextActive,
     }
   );
 
@@ -210,7 +232,7 @@ export async function updateAdminUser(actor, userId, payload) {
     if (!passwordCheck.ok) throw Object.assign(new Error(passwordCheck.error), { code: 'VALIDATION' });
     const passwordHash = await hashPassword(payload.password);
     await pool.execute(`UPDATE admin_users SET password_hash = :passwordHash WHERE id = :id`, {
-      id: Number(userId),
+      id: toClientId(userId),
       passwordHash,
     });
   }
@@ -246,7 +268,7 @@ async function countSuperAdmins(excludeUserId = null) {
   let sql = `SELECT COUNT(*) AS c FROM admin_users WHERE role = 'super_admin'`;
   if (excludeUserId != null) {
     sql += ` AND id <> ?`;
-    params.push(Number(excludeUserId));
+    params.push(toClientId(excludeUserId));
   }
   const [rows] = await pool.query(sql, params);
   return Number(rows[0]?.c || 0);
@@ -256,8 +278,8 @@ async function countSuperAdmins(excludeUserId = null) {
 export async function deleteAdminUser(actor, userId) {
   if (!canManageUsers(actor)) throw Object.assign(new Error('Forbidden'), { code: 'FORBIDDEN' });
 
-  const uid = Number(userId);
-  if (Number(actor.id) === uid) {
+  const uid = toClientId(userId);
+  if (toClientId(actor.id) === uid) {
     throw Object.assign(new Error('You cannot delete your own account'), { code: 'VALIDATION' });
   }
 

@@ -1,7 +1,13 @@
 import { hashPassword, verifyPassword } from '../../lib/auth/password.js';
 import { validateNewPassword } from '../../lib/auth/passwordPolicy.js';
+import { isActiveFlag, toClientId } from '../../lib/auth/clientIds.js';
 import { createAdminSession, destroyAdminSession } from '../../lib/auth/session.js';
 import { getDbPool } from '../../lib/db.js';
+
+/** PostgreSQL unique_violation, or wrapper mysqlCode alias. */
+export function isUniqueViolation(error) {
+  return error?.code === '23505' || error?.mysqlCode === 'ER_DUP_ENTRY';
+}
 
 export async function findAdminUserByEmail(email) {
   const pool = getDbPool();
@@ -25,7 +31,7 @@ export async function getAdminUserById(userId) {
 
 export async function authenticateAdmin(email, password) {
   const user = await findAdminUserByEmail(email);
-  if (!user || !user.is_active) return null;
+  if (!user || !isActiveFlag(user.is_active)) return null;
   const valid = await verifyPassword(password, user.password_hash);
   if (!valid) return null;
   return user;
@@ -36,6 +42,7 @@ export async function loginAdmin(email, password, meta = {}) {
   if (!user) return null;
 
   const pool = getDbPool();
+  // NOW() is valid PostgreSQL; keeps prior last_login semantics.
   await pool.execute(`UPDATE admin_users SET last_login_at = NOW() WHERE id = :id`, { id: user.id });
 
   const session = await createAdminSession(user.id, meta);
@@ -53,10 +60,10 @@ export async function changeAdminPassword(userId, currentPassword, newPassword) 
   const pool = getDbPool();
   const [rows] = await pool.execute(
     `SELECT id, password_hash, is_active FROM admin_users WHERE id = :id LIMIT 1`,
-    { id: Number(userId) }
+    { id: toClientId(userId) }
   );
   const user = rows[0];
-  if (!user || !user.is_active) return { ok: false, error: 'User not found' };
+  if (!user || !isActiveFlag(user.is_active)) return { ok: false, error: 'User not found' };
 
   const valid = await verifyPassword(currentPassword, user.password_hash);
   if (!valid) return { ok: false, error: 'Current password is incorrect' };
@@ -81,12 +88,25 @@ export async function ensureBootstrapAdmin() {
   const passwordHash = await hashPassword(password);
   const displayName = process.env.ADMIN_BOOTSTRAP_NAME || 'Super Admin';
   const pool = getDbPool();
-  const [result] = await pool.execute(
-    `INSERT INTO admin_users (email, password_hash, display_name, role)
-     VALUES (:email, :passwordHash, :displayName, 'super_admin')`,
-    { email, passwordHash, displayName }
-  );
-  return { id: result.insertId, email, display_name: displayName, role: 'super_admin' };
+  try {
+    const [result] = await pool.execute(
+      `INSERT INTO admin_users (email, password_hash, display_name, role)
+       VALUES (:email, :passwordHash, :displayName, 'super_admin')
+       RETURNING id`,
+      { email, passwordHash, displayName }
+    );
+    return {
+      id: toClientId(result.insertId),
+      email,
+      display_name: displayName,
+      role: 'super_admin',
+    };
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      return findAdminUserByEmail(email);
+    }
+    throw error;
+  }
 }
 
 export async function listAdminUsers() {
