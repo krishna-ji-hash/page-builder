@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers';
+import { applyAuthNoStoreHeaders } from '@/lib/auth/authHttp';
 import { ok } from '@/lib/api';
 import { ACTIVITY_ACTIONS } from '@/lib/admin/activityActions';
 import { SESSION_COOKIE } from '@/lib/auth/constants';
@@ -33,5 +34,5 @@ export async function POST() {
   }
 
   clearSessionCookie(store);
-  return ok({ loggedOut: true });
+  return applyAuthNoStoreHeaders(ok({ loggedOut: true }));
 }

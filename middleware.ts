@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { gateProtectedApiSession } from '@/lib/auth/middlewareSessionGate';
 import { requestHasAdminSessionCookie } from '@/lib/auth/sessionCookie';
 import { isDAdminPath } from '@/lib/site/dAdminPaths';
 import {
@@ -82,26 +83,13 @@ function redirectToHome(request: NextRequest): NextResponse {
   return NextResponse.redirect(homeUrl);
 }
 
-async function hasValidSession(request: NextRequest): Promise<boolean> {
-  if (!requestHasAdminSessionCookie(request)) return false;
-
-  const origin = request.nextUrl.origin;
-  try {
-    const res = await fetch(`${origin}/api/auth/session-check`, {
-      headers: { cookie: request.headers.get('cookie') || '' },
-      cache: 'no-store',
-    });
-    return res.ok;
-  } catch {
-    // Render cold starts / internal fetch hiccups must not cause login redirect loops.
-    // Route handlers and server layouts validate the session against the database.
-    return true;
-  }
-}
-
 /**
  * SEO redirects, builder-host admin guard, and session protection.
  * Public pages on client custom domains are never blocked here.
+ *
+ * Protected APIs: edge-safe cookie gate only (no internal HTTP to
+ * /api/auth/session-check). Full DB validation remains in route handlers
+ * via guardAdminApi / resolveSessionFromRequest.
  */
 export async function middleware(request: NextRequest) {
   const host = readRequestHost(
@@ -159,8 +147,8 @@ export async function middleware(request: NextRequest) {
     }
 
     if (isProtectedApiPath(pathname, request.method)) {
-      const valid = await hasValidSession(request);
-      if (!valid) {
+      const gate = gateProtectedApiSession(request);
+      if (!gate.ok) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
       }
     }

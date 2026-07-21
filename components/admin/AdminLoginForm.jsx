@@ -3,6 +3,10 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { resolveAdminLoginRedirectTarget } from '@/lib/admin/adminRoutes';
+import {
+  fetchSessionCheck,
+  invalidateClientSessionCache,
+} from '@/lib/auth/clientSession';
 
 const DEV_EMAIL = 'admin@localhost';
 const DEV_PASSWORD = 'changeme';
@@ -21,14 +25,9 @@ export default function AdminLoginForm() {
 
     (async () => {
       try {
-        const res = await fetch('/api/auth/session-check', {
-          credentials: 'same-origin',
-          cache: 'no-store',
-        });
+        const result = await fetchSessionCheck();
         if (cancelled) return;
-
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data?.valid) return;
+        if (!result.valid) return;
 
         const target = resolveAdminLoginRedirectTarget(searchParams.get('next'));
         router.replace(target);
@@ -59,6 +58,7 @@ export default function AdminLoginForm() {
         setError(data?.error || 'Login failed');
         return;
       }
+      invalidateClientSessionCache();
       const target = resolveAdminLoginRedirectTarget(searchParams.get('next'));
       router.replace(target);
       router.refresh();

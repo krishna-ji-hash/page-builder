@@ -25,6 +25,8 @@ import { PROJECT_LIST_CHANGED } from '@/lib/admin/projectListEvents';
 import { NAV_ICONS, SETTINGS_ICON, workspaceIcon } from '@/lib/admin/navIcons';
 import AdminTopbarTools from '@/components/admin/AdminTopbarTools';
 import AdminChangePasswordModal from '@/components/admin/AdminChangePasswordModal';
+import { AdminAuthProvider, useAdminAuth } from '@/components/admin/AdminAuthProvider';
+import { invalidateClientSessionCache } from '@/lib/auth/clientSession';
 import { readAdminTheme, persistAdminTheme } from '@/lib/admin/adminTheme';
 import '@/styles/admin/shell.css';
 
@@ -407,16 +409,9 @@ function ProjectSwitcher({ parsed, projects, activeProjectId, activePathOpts }) 
 
 function UserMenu() {
   const router = useRouter();
+  const { user, invalidate } = useAdminAuth();
   const [open, setOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
-  const [user, setUser] = useState(null);
-
-  useEffect(() => {
-    fetch('/api/auth/me', { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => setUser(data?.user || null))
-      .catch(() => setUser(null));
-  }, []);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -436,6 +431,8 @@ function UserMenu() {
     } catch {
       /* redirect to login even when the request fails */
     } finally {
+      invalidate();
+      invalidateClientSessionCache();
       router.replace('/admin/login');
       router.refresh();
     }
@@ -571,6 +568,7 @@ export default function AdminShell({ children }) {
   const isProjectRoute = parsed.kind === 'project' || parsed.kind === 'active-project';
 
   return (
+    <AdminAuthProvider>
     <div
       className="admin-shell"
       data-admin-theme={theme}
@@ -727,5 +725,6 @@ export default function AdminShell({ children }) {
         <main className="admin-shell__content">{children}</main>
       </div>
     </div>
+    </AdminAuthProvider>
   );
 }

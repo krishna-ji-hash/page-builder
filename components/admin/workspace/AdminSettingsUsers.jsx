@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ROLES } from '@/lib/auth/constants';
+import { fetchAuthMe } from '@/lib/auth/clientSession';
 import '@/styles/admin/platform.css';
 import '@/styles/admin/settings-users.css';
 
@@ -181,11 +182,11 @@ export default function AdminSettingsUsers() {
     setLoading(true);
     setError('');
     try {
-      const [meData, usersData] = await Promise.all([
-        fetchJson('/api/auth/me', { cache: 'no-store' }),
+      const [meResult, usersData] = await Promise.all([
+        fetchAuthMe(),
         fetchJson('/api/admin/users', { cache: 'no-store' }),
       ]);
-      setCurrentUser(meData.user);
+      setCurrentUser(meResult.ok ? meResult.data?.user || null : null);
       setUsers(usersData.users || []);
       setProjects(usersData.projects || []);
       setStats(usersData.stats || null);
