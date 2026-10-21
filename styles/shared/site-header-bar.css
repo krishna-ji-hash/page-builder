@@ -119,6 +119,17 @@
   max-width: min(56vw, 200px);
 }
 
+/* Published logo is width:auto. Mobile style_json sets width:100%, which stretches
+   the mark to the editor-window cap (min(56vw, 200px)) inside the artboard. */
+.bld-canvas--mobile .site-header-logo .bld-logo-img,
+.bld-canvas--tablet .site-header-logo .bld-logo-img,
+.live-doc[data-bld-device='mobile'] .site-header-logo .bld-logo-img,
+.live-doc[data-bld-device='tablet'] .site-header-logo .bld-logo-img {
+  width: auto !important;
+  max-width: min(180px, 100%);
+  height: auto !important;
+}
+
 .site-header-bar.site-header-bar--compact .site-header-nav {
   grid-column: 2;
   grid-row: 1;

@@ -10,6 +10,7 @@ import { buildRenderNodesWithGlobals } from '@/lib/globalSectionMerge';
 import { applyHomeHeaderNavToGlobal, syncPageTreeHeaderNavFromHome } from '@/lib/globalHeaderNavSync';
 import { getPublishedHomeHeaderRow } from '@/services/site/homeHeaderNavService';
 import LiveDoc from '@/components/live/LiveDoc';
+import { buildResponsivePublicCss } from '@/lib/responsivePublicCss';
 import LcpImagePreload from '@/components/seo/LcpImagePreload';
 import { publicPagePath } from '@/lib/publicSiteUrls';
 import { getVersionPreviewPageState } from '@/services/site/versionPreviewService';
@@ -104,7 +105,7 @@ export default async function VersionPreviewView({ versionId, pageContext = null
       }}
     >
       <LcpImagePreload nodes={renderNodes} />
-      <LiveDoc device="desktop">
+      <LiveDoc responsiveCss={buildResponsivePublicCss(renderNodes, siteTheme)}>
         <PublishedLiveTree
           nodes={renderNodes}
           options={buildPublishedLiveRenderOptions(state.page.projectConfig, {

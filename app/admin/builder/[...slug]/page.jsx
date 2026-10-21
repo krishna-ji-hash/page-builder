@@ -18,6 +18,24 @@ export const metadata = {
   description: 'Edit page layout',
 };
 
+async function resolveFlatBuilderPageId(active, pageSlug) {
+  const slug = String(pageSlug || '').trim();
+  if (!slug) return null;
+
+  if (active?.slug) {
+    const id = await getPageIdByProjectAndPageSlug(active.slug, slug);
+    if (id) return id;
+  }
+
+  const envSlug = String(process.env.NEXT_PUBLIC_PUBLIC_PROJECT_SLUG || '').trim();
+  if (envSlug && envSlug !== active?.slug) {
+    const id = await getPageIdByProjectAndPageSlug(envSlug, slug);
+    if (id) return id;
+  }
+
+  return null;
+}
+
 export default async function AdminBuilderEditorPage({ params }) {
   const resolved = await resolveMaybeAsyncParams(params);
   const segments = Array.isArray(resolved.slug)
@@ -41,10 +59,7 @@ export default async function AdminBuilderEditorPage({ params }) {
     }
 
     if (isPublicSlug(seg)) {
-      if (!active?.slug) {
-        notFound();
-      }
-      const flatPageId = await getPageIdByProjectAndPageSlug(active.slug, seg);
+      const flatPageId = await resolveFlatBuilderPageId(active, seg);
       if (!flatPageId) {
         notFound();
       }

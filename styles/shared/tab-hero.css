@@ -309,6 +309,7 @@
     max-width: 100%;
     min-width: 0;
     justify-content: flex-start !important;
+    overflow-x: visible;
   }
 
   :is(.live-doc, .bld-canvas__live-mirror) .live-tab-hero--align-center .live-tab-hero__nav-wrap,
@@ -341,17 +342,31 @@
     font-size: clamp(1.15rem, 5vw, 1.5rem);
   }
 
-  .live-tab-hero__tab {
+  .live-tab-hero__nav {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .live-tab-hero__tab,
+  .live-tab-hero--align-stretch .live-tab-hero__tab {
+    flex: 1 1 100%;
+    min-width: 0;
+    white-space: normal;
+    text-align: left;
     padding: 14px 16px 12px;
     font-size: 0.9rem;
-    max-width: min(100%, 280px);
-    overflow: hidden;
-    text-overflow: ellipsis;
+    max-width: 100%;
+    overflow: visible;
+    text-overflow: unset;
   }
 
   .live-tab-hero__tab-label {
-    overflow: hidden;
-    text-overflow: ellipsis;
+    display: block;
+    overflow: visible;
+    text-overflow: unset;
+    white-space: normal;
     max-width: 100%;
   }
 }
@@ -359,6 +374,36 @@
 /* Builder mobile artboard (narrow frame, any host viewport width) */
 .bld-canvas--mobile .bld-canvas__live-mirror .live-tab-hero__nav-wrap {
   justify-content: flex-start !important;
+  overflow-x: visible;
+}
+
+.bld-canvas--mobile .bld-canvas__live-mirror .live-tab-hero__nav,
+.live-doc[data-bld-device='mobile'] .live-tab-hero__nav {
+  display: flex;
+  flex-wrap: wrap;
+  width: 100%;
+  min-width: 0;
+}
+
+.bld-canvas--mobile .bld-canvas__live-mirror .live-tab-hero__tab,
+.bld-canvas--mobile .bld-canvas__live-mirror .live-tab-hero--align-stretch .live-tab-hero__tab,
+.live-doc[data-bld-device='mobile'] .live-tab-hero__tab,
+.live-doc[data-bld-device='mobile'] .live-tab-hero--align-stretch .live-tab-hero__tab {
+  flex: 1 1 100%;
+  min-width: 0;
+  white-space: normal;
+  text-align: left;
+  max-width: 100%;
+  overflow: visible;
+  text-overflow: unset;
+}
+
+.bld-canvas--mobile .bld-canvas__live-mirror .live-tab-hero__tab-label,
+.live-doc[data-bld-device='mobile'] .live-tab-hero__tab-label {
+  display: block;
+  overflow: visible;
+  white-space: normal;
+  max-width: 100%;
 }
 
 .bld-canvas--mobile .bld-canvas__live-mirror .live-tab-hero__heading,

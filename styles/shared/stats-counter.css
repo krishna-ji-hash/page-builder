@@ -81,6 +81,12 @@
   }
 }
 
+.bld-canvas--mobile .live-stats-counter,
+.live-doc[data-bld-device='mobile'] .live-stats-counter {
+  grid-template-columns: 1fr;
+  gap: 28px;
+}
+
 /* Builder canvas inline edit */
 .live-stats-counter--builder .live-stats-counter__builder-hint {
   grid-column: 1 / -1;

@@ -4454,6 +4454,9 @@ export default function BuilderInspector({
               <span className="bld-inspector__chrome-name" title={selectedNode.displayName || selectedNode.nodeType}>
                 {selectedNode.displayName || selectedNode.nodeType}
               </span>
+              <span className="bld-inspector__chrome-device">
+                {device === 'tablet' ? 'Tablet styles' : device === 'mobile' ? 'Mobile styles' : 'Desktop styles'}
+              </span>
               {isLinkedGlobalPlaceholder(selectedNode) ? (
                 <span
                   className="bld-chip"

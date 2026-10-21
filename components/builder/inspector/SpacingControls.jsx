@@ -202,7 +202,7 @@ function BoxModelVisual({
       </div>
       <div className={`bld-boxmodel__grid bld-boxmodel__grid--${kind}`}>
         <SideInput
-          label="T"
+          label="Top"
           value={box.top}
           onChange={(v) => setSide('top', v)}
           onFocus={() => begin('top')}
@@ -213,7 +213,7 @@ function BoxModelVisual({
           disabled={disabled}
         />
         <SideInput
-          label="R"
+          label="Right"
           value={box.right}
           onChange={(v) => setSide('right', v)}
           onFocus={() => begin('right')}
@@ -224,7 +224,7 @@ function BoxModelVisual({
           disabled={disabled}
         />
         <SideInput
-          label="B"
+          label="Bottom"
           value={box.bottom}
           onChange={(v) => setSide('bottom', v)}
           onFocus={() => begin('bottom')}
@@ -235,7 +235,7 @@ function BoxModelVisual({
           disabled={disabled}
         />
         <SideInput
-          label="L"
+          label="Left"
           value={box.left}
           onChange={(v) => setSide('left', v)}
           onFocus={() => begin('left')}

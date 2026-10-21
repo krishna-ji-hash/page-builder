@@ -21,6 +21,7 @@ import { resolveSeoMetadata } from '@/lib/seo/seoEngine';
 import JsonLd from '@/components/seo/JsonLd';
 import LcpImagePreload from '@/components/seo/LcpImagePreload';
 import LiveDoc from '@/components/live/LiveDoc';
+import { buildResponsivePublicCss } from '@/lib/responsivePublicCss';
 
 function cloneGlobalNode(node, prefix) {
   return {
@@ -168,7 +169,7 @@ export default async function PublicSitePageView({ projectSlug, pageSlug, search
     >
       <JsonLd data={schemaJsonLd} />
       <LcpImagePreload nodes={renderNodes} />
-      <LiveDoc>
+      <LiveDoc responsiveCss={buildResponsivePublicCss(renderNodes, siteTheme)}>
         <PublishedLiveTree
           nodes={renderNodes}
           options={buildPublishedLiveRenderOptions(page.projectConfig, {

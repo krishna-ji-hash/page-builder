@@ -12,6 +12,7 @@ import { expandCms } from '@/lib/cms/cmsExpand';
 import { getGlobalComponentsByIds } from '@/services/builder/globalComponentsService';
 import * as cmsService from '@/services/builder/cmsService';
 import LiveDoc from '@/components/live/LiveDoc';
+import { buildResponsivePublicCss } from '@/lib/responsivePublicCss';
 import LcpImagePreload from '@/components/seo/LcpImagePreload';
 import { getDraftPageForBuilder } from '@/services/builder/builderService';
 import { publicPagePath } from '@/lib/publicSiteUrls';
@@ -108,7 +109,7 @@ export default async function DraftPreviewView({ pageId }) {
       }}
     >
       <LcpImagePreload nodes={renderNodes} />
-      <LiveDoc device="desktop">
+      <LiveDoc responsiveCss={buildResponsivePublicCss(renderNodes, siteTheme)}>
         <PublishedLiveTree
           nodes={renderNodes}
           options={buildPublishedLiveRenderOptions(state.page?.projectConfig, {

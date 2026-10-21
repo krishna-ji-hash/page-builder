@@ -43,7 +43,7 @@ export default function InspectorResponsiveBar({
           ))}
         </div>
         <p className="bld-inspector-device__editing">
-          Editing: <strong>{editingLabel}</strong>
+          {editingLabel} styles
         </p>
       </div>
       <div className="bld-inspector-device__resets">

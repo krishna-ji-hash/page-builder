@@ -1995,7 +1995,8 @@ export async function getPageIdByProjectAndPageSlug(projectSlug, pageSlug, conne
      LIMIT 1`,
     [projectSlug, pageSlug]
   );
-  const id = rows[0]?.id;
+  // PG int8 / bigint often arrives as string — Number.isInteger("25") is false.
+  const id = Number(rows[0]?.id);
   return Number.isInteger(id) && id > 0 ? id : null;
 }
 

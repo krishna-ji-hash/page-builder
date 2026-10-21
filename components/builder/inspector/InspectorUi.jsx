@@ -15,13 +15,13 @@ function matchesSearch(label, query) {
     .includes(query);
 }
 
-export function InspectorPanel({ title, children, searchPlaceholder, onSearch, searchValue = '' }) {
+export function InspectorPanel({ title, children, searchPlaceholder, onSearch, searchValue = '', className = '' }) {
   const [localSearch, setLocalSearch] = useState('');
   const q = onSearch ? searchValue : localSearch;
   const setQ = onSearch || setLocalSearch;
 
   return (
-    <div className="bld-panel bld-inspector-pro">
+    <div className={`bld-panel bld-inspector-pro ${className}`.trim()}>
       {title ? <div className="bld-panel__head">{title}</div> : null}
       <div className="bld-inspector-pro__search">
         <input

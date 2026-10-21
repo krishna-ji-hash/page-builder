@@ -24,6 +24,7 @@ function ActionButtonInner({
   action,
   type = 'button',
   disabled: disabledProp = false,
+  nodeAttrs = {},
 }) {
   const { fetchInternal, bumpRefresh, showToast } = useRuntimeData();
   const [busy, setBusy] = useState(false);
@@ -80,7 +81,7 @@ function ActionButtonInner({
 
   if (!action) {
     return (
-      <button type={type} style={style} className={className} disabled={disabledProp}>
+      <button type={type} style={style} className={className} disabled={disabledProp} {...nodeAttrs}>
         {label}
       </button>
     );
@@ -88,7 +89,7 @@ function ActionButtonInner({
 
   return (
     <span className="live-action-button-wrap">
-      <button type={type} style={style} className={className} disabled={disabled} onClick={handleClick}>
+      <button type={type} style={style} className={className} disabled={disabled} onClick={handleClick} {...nodeAttrs}>
         {busy ? '…' : label}
       </button>
       {feedback ? (

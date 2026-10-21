@@ -923,6 +923,13 @@
   border: 1px solid var(--bld-border, var(--token-border-default));
 }
 
+@media (max-width: 1200px) {
+  :is(.live-doc, .bld-canvas__live-mirror) .live-blog-full-page__tabs {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+}
+
 @media (max-width: 1050px) {
   :is(.live-doc, .bld-canvas__live-mirror) .live-blog-full-page__hero-grid,
   :is(.live-doc, .bld-canvas__live-mirror) .live-blog-full-page__featured-card,
@@ -971,4 +978,13 @@
     flex-direction: column;
     align-items: flex-start;
   }
+}
+
+/* Device frames are narrower than the editor window, so the 1200px wrap does not run there. */
+.bld-canvas--mobile .live-blog-full-page__tabs,
+.bld-canvas--tablet .live-blog-full-page__tabs,
+.live-doc[data-bld-device='mobile'] .live-blog-full-page__tabs,
+.live-doc[data-bld-device='tablet'] .live-blog-full-page__tabs {
+  flex-wrap: wrap;
+  overflow-x: visible;
 }

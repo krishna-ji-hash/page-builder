@@ -6,7 +6,7 @@ import {
 } from '@/lib/richTextNodeProps';
 import TextEffectsWrap from '@/components/runtime/TextEffectsWrap';
 
-function renderInnerContent({ Tag, html, plain, className, style, sanitizeOptions }) {
+function renderInnerContent({ Tag, html, plain, className, style, sanitizeOptions, nodeAttrs }) {
   const wrapperTag = typeof Tag === 'string' ? Tag : 'div';
   if (html) {
     const safe = sanitizeInlineLeafHtmlForTag(html, wrapperTag, sanitizeOptions);
@@ -17,12 +17,13 @@ function renderInnerContent({ Tag, html, plain, className, style, sanitizeOption
           style={style}
           suppressHydrationWarning
           dangerouslySetInnerHTML={{ __html: safe }}
+          {...(nodeAttrs || {})}
         />
       );
     }
   }
   return (
-    <Tag className={className} style={style} suppressHydrationWarning>
+    <Tag className={className} style={style} suppressHydrationWarning {...(nodeAttrs || {})}>
       {plain}
     </Tag>
   );
@@ -38,6 +39,7 @@ export default function RichTextLeaf({
   className = '',
   tag: tagOverride,
   sanitizeOptions = {},
+  nodeAttrs = {},
 }) {
   const normalized = normalizeInlineTextProps(props);
   const html = resolveInlineTextHtml(normalized);
@@ -73,6 +75,7 @@ export default function RichTextLeaf({
     className: richClass,
     style,
     sanitizeOptions,
+    nodeAttrs,
   });
 
   return (

@@ -528,6 +528,7 @@ export default function Menu({
   dropdownStyle = null,
   style,
   className,
+  nodeAttrs = {},
 }) {
   const { items: safeItems } = useMemo(() => normalizeMenuItems(items), [items]);
   const navClass = menuNavClassName({ orientation, variant, align, extraClass: className || '' });
@@ -605,6 +606,7 @@ export default function Menu({
         .join(' ')
         .trim()}
       style={navStyle}
+      {...nodeAttrs}
       data-mobile-nav={showMobile ? 'true' : undefined}
       data-hamburger-align={showMobile ? hamburgerAlign : undefined}
       aria-label={ariaLabel || 'Main navigation'}

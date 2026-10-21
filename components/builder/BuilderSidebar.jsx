@@ -48,6 +48,29 @@ const ELEMENT_CARDS = [
 const validParentTypes = new Set(['row', 'column', 'stack']);
 const nodeTypeByBlockId = {};
 
+const ELEMENT_GROUP_DEFS = [
+  { id: 'content', label: 'Content', ids: new Set(['heading', 'text', 'paragraph', 'rich_text', 'button']) },
+  { id: 'media', label: 'Media', ids: new Set(['image', 'carousel', 'tabs', 'tab_hero', 'video_embed', 'logo_block', 'lottie_animation']) },
+  { id: 'layout', label: 'Layout', ids: new Set(['divider', 'divider_v', 'menu', 'spacer', 'container_box', 'grid_block']) },
+  {
+    id: 'forms',
+    label: 'Forms',
+    ids: new Set(['input', 'textarea', 'select', 'checkbox', 'radio', 'switch', 'date', 'submit', 'form', 'newsletter_form', 'whatsapp_button']),
+  },
+  { id: 'product', label: 'Product', test: (id) => String(id).startsWith('pdp_') },
+];
+
+function groupElementCards(cards) {
+  const buckets = ELEMENT_GROUP_DEFS.map((def) => ({ id: def.id, label: def.label, cards: [] }));
+  const advanced = { id: 'advanced', label: 'Advanced', cards: [] };
+  cards.forEach((card) => {
+    const def = ELEMENT_GROUP_DEFS.find((item) => (item.test ? item.test(card.id) : item.ids.has(card.id)));
+    const bucket = def ? buckets.find((item) => item.id === def.id) : advanced;
+    bucket.cards.push(card);
+  });
+  return [...buckets, advanced].filter((group) => group.cards.length);
+}
+
 function resolveNodeType(blockId) {
   if (blockId === 'divider_v') return 'divider';
   return nodeTypeByBlockId[blockId] || blockId;
@@ -306,6 +329,82 @@ export default function BuilderSidebar({
     onInsertSectionTemplate?.(key, options);
   };
 
+  const renderElementCard = (block) => {
+    const nodeType = resolveNodeType(block.id);
+    const parentType = selectedNode?.nodeType || null;
+    const canQuickAddWidget =
+      Boolean(onQuickAddNode) &&
+      Boolean(selectedNode?.id) &&
+      nodeType !== 'row' &&
+      nodeType !== 'column' &&
+      nodeType !== 'stack' &&
+      (canQuickAddFromSelection(tree, selectedNode) || validParentTypes.has(selectedNode.nodeType));
+    const hierarchyMatches = isValidNodeHierarchy(nodeType, parentType);
+    const hierarchyValid = selectedNode ? hierarchyMatches || canQuickAddWidget || insertTargetPreview?.ok : false;
+    const allowedWidgets = getWidgetsForProjectType(projectType || 'website');
+    const allowedByProject = Boolean(allowedWidgets[nodeType]);
+    const disabled =
+      !block.supported || !allowedByProject || !canCreateUnderSelection || !hierarchyValid || isCreatingNode;
+    return (
+      <button
+        key={block.id}
+        type="button"
+        className="bld-block-card"
+        disabled={disabled}
+        title={
+          !allowedByProject
+            ? `Not available for project type "${projectType || 'website'}"`
+            : !selectedNode
+              ? 'Select a Stack (recommended) or any container, then add an element.'
+              : !canCreateUnderSelection
+                ? 'Select a Section, Column, or Stack first'
+                : !hierarchyValid
+                  ? friendlyHierarchyTitle({ nodeType, selectedNode, tree })
+                  : insertTargetPreview?.ok
+                    ? `Add ${block.label} inside ${selectedNode.nodeType === 'stack' ? 'this stack' : 'section'}`
+                    : block.label
+        }
+        onClick={() => {
+          if (!block.supported || disabled) return;
+          const dividerOrient = block.dividerOrientation || null;
+          if (dividerOrient === 'vertical' && onApplyStackAccent) {
+            onApplyStackAccent();
+            return;
+          }
+          const dividerExtra = dividerOrient ? { dividerOrientation: dividerOrient } : {};
+          const useQuick =
+            canQuickAddWidget ||
+            (onQuickAddNode &&
+              selectedNode?.id &&
+              nodeType !== 'row' &&
+              nodeType !== 'column' &&
+              nodeType !== 'stack');
+          if (useQuick) {
+            onQuickAddNode({
+              targetNodeId: selectedNode.id,
+              nodeType,
+              ...dividerExtra,
+            });
+          } else {
+            onCreateNode({
+              nodeType,
+              parentNodeId: resolveParentNodeIdForCreate(nodeType, selectedNode),
+              ...dividerExtra,
+            });
+          }
+        }}
+      >
+        <span className="bld-block-card__icon">{block.icon}</span>
+        <span className="bld-block-card__label">{block.label}</span>
+        {!disabled && canQuickAddWidget ? (
+          <span className="bld-block-card__meta">Quick add</span>
+        ) : !hierarchyValid && selectedNode ? (
+          <span className="bld-block-card__meta">Not allowed here</span>
+        ) : null}
+      </button>
+    );
+  };
+
   const toggleLayerCollapse = (nodeId) =>
     setCollapsedLayerMap((prev) => ({ ...prev, [nodeId]: !prev[nodeId] }));
   const totalLayerCount = useMemo(() => {
@@ -413,11 +512,14 @@ export default function BuilderSidebar({
     return (
       <div className="bld-sidebar" role="complementary" aria-label="Layers panel">
         <div className="bld-sidebar__head">
-          <div className="bld-sidebar__title">Layers</div>
+          <div className="bld-sidebar__head-copy">
+            <div className="bld-sidebar__title">Layers</div>
+            <div className="bld-sidebar__sub">Page structure. Click a layer to select it.</div>
+          </div>
         </div>
         <div className="bld-sidebar__body">
-          <div className="bld-sidebar__hint">Click a layer to select it on the canvas.</div>
           <div className="bld-sidebar__hint">Layers: {totalLayerCount}</div>
+          {(tree || []).length ? (
           <LayerTree
             nodes={tree || []}
             tree={tree || []}
@@ -430,6 +532,12 @@ export default function BuilderSidebar({
             onMoveIntoSelected={handleMoveLayerIntoSelected}
             onToggleSectionLock={onToggleSectionLock}
           />
+          ) : (
+            <p className="bld-panel-empty">
+              <span className="bld-panel-empty__title">No layers yet</span>
+              Add a section to build the page structure.
+            </p>
+          )}
         </div>
       </div>
     );
@@ -438,14 +546,25 @@ export default function BuilderSidebar({
   return (
     <div className="bld-sidebar" role="complementary" aria-label="Builder sidebar">
       <div className="bld-sidebar__head">
+        <div className="bld-sidebar__head-copy">
         <div className="bld-sidebar__title">
           {activeTab === 'templates'
             ? 'Templates'
             : activeTab === 'reusable'
-              ? 'Reusable Blocks'
+              ? 'Reusable'
             : activeTab === 'globals'
               ? 'Globals'
               : 'Elements'}
+        </div>
+        <div className="bld-sidebar__sub">
+          {activeTab === 'templates'
+            ? 'Insert a section or full page.'
+            : activeTab === 'reusable'
+              ? 'Saved sections you can insert again.'
+            : activeTab === 'globals'
+              ? 'Shared header, footer, and linked parts.'
+              : 'Add a component inside the selection.'}
+        </div>
         </div>
       </div>
 
@@ -490,93 +609,15 @@ export default function BuilderSidebar({
                 Tip: select a <strong>Stack</strong> first (or a Column with a Stack) to insert presets.
               </div>
             </details>
-            <details className="bld-acc" open>
-              <summary>Advanced elements</summary>
-              <div className="bld-acc__body bld-acc__body--grid">
-                {[...ELEMENT_CARDS, ...EXTRA_ADVANCED_ELEMENT_CARDS].map((block) => {
-                  const nodeType = resolveNodeType(block.id);
-                  const parentType = selectedNode?.nodeType || null;
-                  const canQuickAddWidget =
-                    Boolean(onQuickAddNode) &&
-                    Boolean(selectedNode?.id) &&
-                    nodeType !== 'row' &&
-                    nodeType !== 'column' &&
-                    nodeType !== 'stack' &&
-                    (canQuickAddFromSelection(tree, selectedNode) ||
-                      validParentTypes.has(selectedNode.nodeType));
-                  const hierarchyMatches = isValidNodeHierarchy(nodeType, parentType);
-                  const hierarchyValid = selectedNode
-                    ? hierarchyMatches || canQuickAddWidget || insertTargetPreview?.ok
-                    : false;
-                  const allowedWidgets = getWidgetsForProjectType(projectType || 'website');
-                  const allowedByProject = Boolean(allowedWidgets[nodeType]);
-                  const disabled =
-                    !block.supported ||
-                    !allowedByProject ||
-                    !canCreateUnderSelection ||
-                    !hierarchyValid ||
-                    isCreatingNode;
-                  return (
-                    <button
-                      key={block.id}
-                      type="button"
-                      className="bld-block-card"
-                      disabled={disabled}
-                      title={
-                        !allowedByProject
-                          ? `Not available for project type "${projectType || 'website'}"`
-                          : !selectedNode
-                            ? 'Select a Stack (recommended) or any container, then add an element.'
-                            : !canCreateUnderSelection
-                              ? 'Select a Section, Column, or Stack first'
-                              : !hierarchyValid
-                                ? friendlyHierarchyTitle({ nodeType, selectedNode, tree })
-                                : insertTargetPreview?.ok
-                                  ? `Add ${block.label} inside ${selectedNode.nodeType === 'stack' ? 'this stack' : 'section'}`
-                                  : block.label
-                      }
-                      onClick={() => {
-                        if (!block.supported || disabled) return;
-                        const dividerOrient = block.dividerOrientation || null;
-                        if (dividerOrient === 'vertical' && onApplyStackAccent) {
-                          onApplyStackAccent();
-                          return;
-                        }
-                        const dividerExtra = dividerOrient ? { dividerOrientation: dividerOrient } : {};
-                        const useQuick =
-                          canQuickAddWidget ||
-                          (onQuickAddNode &&
-                            selectedNode?.id &&
-                            nodeType !== 'row' &&
-                            nodeType !== 'column' &&
-                            nodeType !== 'stack');
-                        if (useQuick) {
-                          onQuickAddNode({
-                            targetNodeId: selectedNode.id,
-                            nodeType,
-                            ...dividerExtra,
-                          });
-                        } else {
-                          onCreateNode({
-                            nodeType,
-                            parentNodeId: resolveParentNodeIdForCreate(nodeType, selectedNode),
-                            ...dividerExtra,
-                          });
-                        }
-                      }}
-                    >
-                      <span className="bld-block-card__icon">{block.icon}</span>
-                      <span className="bld-block-card__label">{block.label}</span>
-                      {!disabled && canQuickAddWidget ? (
-                        <span className="bld-block-card__meta">Quick add</span>
-                      ) : !hierarchyValid && selectedNode ? (
-                        <span className="bld-block-card__meta">Not allowed here</span>
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-            </details>
+            {groupElementCards([...ELEMENT_CARDS, ...EXTRA_ADVANCED_ELEMENT_CARDS]).map((group) => (
+              <details key={group.id} className="bld-acc" open>
+                <summary>
+                  {group.label}
+                  <span className="bld-acc__meta">{group.cards.length}</span>
+                </summary>
+                <div className="bld-acc__body bld-acc__body--grid">{group.cards.map(renderElementCard)}</div>
+              </details>
+            ))}
           </>
         ) : activeTab === 'templates' ? (
           <>
@@ -920,7 +961,10 @@ export default function BuilderSidebar({
                 </div>
               </details>
             ) : (
-              <div className="bld-sidebar__hint">No saved page templates yet.</div>
+              <p className="bld-panel-empty">
+                <span className="bld-panel-empty__title">No saved templates</span>
+                Save the current page to reuse it later.
+              </p>
             )}
             <details className="bld-acc" open>
               <summary>Save</summary>
@@ -969,9 +1013,9 @@ export default function BuilderSidebar({
               {reusableBlocks.length ? (
                 <div className="bld-acc__body">
                   {reusableBlocks.map((b) => (
-                    <div key={b.id} className="bld-reusable-card">
+                    <div key={b.id} className="bld-reusable-card bld-reusable-card--reusable">
                       <div className="bld-reusable-card__title" title={b.name}>{b.name}</div>
-                      <div className="bld-reusable-card__meta">Reusable section</div>
+                      <div className="bld-reusable-card__meta"><span className="bld-panel-badge">Reusable</span> Saved section</div>
                       <div className="bld-reusable-card__actions">
                         <button
                           type="button"
@@ -1006,7 +1050,10 @@ export default function BuilderSidebar({
                   ))}
                 </div>
               ) : (
-                <div className="bld-sidebar__hint">No reusable blocks yet.</div>
+              <p className="bld-panel-empty">
+                <span className="bld-panel-empty__title">No reusable sections</span>
+                Select a section, then save it here to insert again.
+              </p>
               )}
             </details>
           </>
@@ -1142,12 +1189,12 @@ export default function BuilderSidebar({
                 {Array.isArray(globalComponents) && globalComponents.length ? (
                   <div className="bld-acc__body">
                     {globalComponents.map((c) => (
-                      <div key={c.id} className="bld-reusable-card">
+                      <div key={c.id} className="bld-reusable-card bld-reusable-card--global">
                         <div className="bld-reusable-card__title" title={c.name}>
                           {c.name}
                         </div>
                         <div className="bld-reusable-card__meta">
-                          {c.type || 'generic'} • links: {Number(c.linkedPagesCount || 0)}
+                          <span className="bld-panel-badge bld-panel-badge--global">Global</span> {c.type || 'generic'} • links: {Number(c.linkedPagesCount || 0)}
                         </div>
                         <div className="bld-reusable-card__meta">
                           Updated: {c.updatedAt ? new Date(c.updatedAt).toLocaleString() : '—'}
@@ -1161,7 +1208,10 @@ export default function BuilderSidebar({
                     ))}
                   </div>
                 ) : (
-                  <div className="bld-sidebar__hint">No global components yet. Convert a section to create one.</div>
+                  <p className="bld-panel-empty">
+                    <span className="bld-panel-empty__title">No global components</span>
+                    Convert a section to share it across pages.
+                  </p>
                 )}
               </div>
             </details>

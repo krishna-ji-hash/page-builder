@@ -22,18 +22,39 @@ function buildStatusLabel({
   return `${draft} — in sync with server.`;
 }
 
-function draftSaveStatusLabel(status, { isSyncingDraft, hasUnpublishedEdits } = {}) {
+function draftSaveStatusLabel(status, { isSyncingDraft } = {}) {
   if (isSyncingDraft || status === 'saving') return 'Saving...';
   if (status === 'failed') return 'Save failed';
-  if (status === 'unsaved' || hasUnpublishedEdits) return 'Unsaved changes';
+  if (status === 'unsaved') return 'Unsaved';
   return 'Saved';
 }
 
-function draftSaveStatusClass(status, { isSyncingDraft, hasUnpublishedEdits } = {}) {
+function draftSaveStatusClass(status, { isSyncingDraft } = {}) {
   if (isSyncingDraft || status === 'saving') return 'is-saving';
   if (status === 'failed') return 'is-failed';
-  if (status === 'unsaved' || hasUnpublishedEdits) return 'is-dirty';
+  if (status === 'unsaved') return 'is-dirty';
   return 'is-clean';
+}
+
+function draftSaveStatusTitle(status, { isSyncingDraft } = {}) {
+  if (isSyncingDraft || status === 'saving') return 'Saving the draft';
+  if (status === 'failed') return 'Draft save failed';
+  if (status === 'unsaved') return 'Draft has unsaved changes';
+  return 'Draft is saved';
+}
+
+function publishStatusLabel({ isPublishing, hasUnpublishedEdits, publishedVersionId }) {
+  if (isPublishing) return 'Publishing';
+  if (hasUnpublishedEdits) return 'Unpublished';
+  if (publishedVersionId) return 'Live';
+  return 'Not live';
+}
+
+function publishStatusClass({ isPublishing, hasUnpublishedEdits, publishedVersionId }) {
+  if (isPublishing) return 'is-saving';
+  if (hasUnpublishedEdits) return 'is-dirty';
+  if (publishedVersionId) return 'is-clean';
+  return 'is-muted';
 }
 
 export default function BuilderTopbar({
@@ -72,6 +93,8 @@ export default function BuilderTopbar({
   showGrid = false,
   onToggleGrid,
 }) {
+  const projectLabel = projectName || 'default';
+  const pageLabel = pageName || 'Page';
   const statusText = buildStatusLabel({
     isPublishing,
     isSyncingDraft,
@@ -79,70 +102,79 @@ export default function BuilderTopbar({
     draftVersionNumber,
     publishedVersionId,
   });
-  const saveStatusText = draftSaveStatusLabel(draftSaveStatus, { isSyncingDraft, hasUnpublishedEdits });
-  const saveStatusClass = draftSaveStatusClass(draftSaveStatus, { isSyncingDraft, hasUnpublishedEdits });
+  const saveStatusText = draftSaveStatusLabel(draftSaveStatus, { isSyncingDraft });
+  const saveStatusClass = draftSaveStatusClass(draftSaveStatus, { isSyncingDraft });
+  const saveStatusTitle = draftSaveStatusTitle(draftSaveStatus, { isSyncingDraft });
+  const publishFlags = { isPublishing, hasUnpublishedEdits, publishedVersionId };
+  const publishText = publishStatusLabel(publishFlags);
+  const publishClass = publishStatusClass(publishFlags);
   const modeLabel = isFreeMode ? 'Layout: Free' : 'Layout: Strict';
   const debugLabel = isLayoutDebug ? 'Debug: On' : 'Debug: Off';
   const gridLabel = showGrid ? 'Grid: On' : 'Grid: Off';
+  const previewTitle = previewUrl ? `Open draft preview (${previewUrl})` : 'Draft preview URL unavailable';
+  const liveTitle = canOpenLivePreview
+    ? `Open the published site${liveUrl ? ` (${liveUrl})` : ''}`
+    : 'Publish at least once to open public live URL';
 
   return (
     <header className="bld-topbar">
-      <div className="bld-topbar__left">
-        <div className="bld-topbar__title-row">
-          <div className="bld-topbar__brand">Project: {projectName || 'default'}</div>
-          <div className="bld-topbar__page-name">Page: {pageName}</div>
-          {clipboardNodeTypeLabel ? (
-            <span className="bld-topbar__clipboard" title="Copied layer (paste with Ctrl+V)">
-              Clipboard: <strong>{clipboardNodeTypeLabel}</strong>
-            </span>
-          ) : null}
-        </div>
-        <div className="bld-topbar__status" title={previewUrl || liveUrl || undefined}>
-          <span
-            className={`bld-topbar__state-pill ${saveStatusClass}`}
-            role="status"
-            aria-live="polite"
-          >
-            {saveStatusText}
+      <div className="bld-topbar__identity">
+        <div className="bld-topbar__identity-item">
+          <span className="bld-topbar__kicker">Project</span>
+          <span className="bld-topbar__identity-value" title={projectLabel}>
+            {projectLabel}
           </span>
-          {saveAckVisible ? (
-            <span className="bld-topbar__save-ack" role="status" aria-live="polite">
-              Draft saved
-            </span>
-          ) : null}
-          <span>{statusText}</span>
-          {previewUrl ? (
-            <span className="bld-topbar__live-path">
-              {' '}
-              · Draft Preview: <span className="bld-topbar__mono">{previewUrl}</span>
-            </span>
-          ) : null}
-          {liveUrl ? (
-            <span className="bld-topbar__live-path">
-              {' '}
-              · Live URL: <span className="bld-topbar__mono">{liveUrl}</span>
-            </span>
-          ) : null}
+        </div>
+        <span className="bld-topbar__identity-sep" aria-hidden="true">
+          /
+        </span>
+        <div className="bld-topbar__identity-item">
+          <span className="bld-topbar__kicker">Page</span>
+          <span className="bld-topbar__identity-value" title={pageLabel}>
+            {pageLabel}
+          </span>
+        </div>
+        {clipboardNodeTypeLabel ? (
+          <span className="bld-topbar__clipboard" title="Copied layer (paste with Ctrl+V)">
+            Clipboard: <strong>{clipboardNodeTypeLabel}</strong>
+          </span>
+        ) : null}
+      </div>
+
+      <div className="bld-topbar__device">
+        <div className="bld-device-switch" role="group" aria-label="Editing device">
+          {deviceOptions.map((item) => {
+            const value = item.toLowerCase();
+            const isActive = device === value;
+            return (
+              <button
+                key={item}
+                type="button"
+                className={`bld-device-switch__btn ${isActive ? 'is-active' : ''}`}
+                aria-pressed={isActive}
+                title={`Edit ${item} layout`}
+                onClick={() => onDeviceChange(value)}
+              >
+                {item}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      <div className="bld-topbar__center">
-        <div className="bld-device-switch" role="tablist" aria-label="Preview device">
-          {deviceOptions.map((item) => (
-            <button
-              key={item}
-              type="button"
-              className={`bld-device-switch__btn ${device === item.toLowerCase() ? 'is-active' : ''}`}
-              onClick={() => onDeviceChange(item.toLowerCase())}
-            >
-              {item}
-            </button>
-          ))}
+      <div className="bld-topbar__tools">
+        <div className="bld-topbar__group" role="group" aria-label="History">
+          <button type="button" className="bld-btn bld-btn--ghost" onClick={onUndo} disabled={!canUndo} title="Undo">
+            Undo
+          </button>
+          <button type="button" className="bld-btn bld-btn--ghost" onClick={onRedo} disabled={!canRedo} title="Redo">
+            Redo
+          </button>
+          <button type="button" className="bld-btn bld-btn--ghost" onClick={onOpenHistory} title="Restore a previous snapshot">
+            {historyLabel}
+          </button>
         </div>
-      </div>
-
-      <div className="bld-topbar__right">
-        <div className="bld-topbar__actions">
+        <div className="bld-topbar__group bld-topbar__group--tools" role="group" aria-label="Editing tools">
           <ThemeToggle />
           <button type="button" className="bld-btn bld-btn--ghost" onClick={onOpenSeo} title="Edit page SEO">
             SEO
@@ -150,21 +182,13 @@ export default function BuilderTopbar({
           <button type="button" className="bld-btn bld-btn--ghost" onClick={onOpenAudit} title="Run audits (responsive, performance, accessibility)">
             Audit
           </button>
-          <button type="button" className="bld-btn bld-btn--ghost" onClick={onUndo} disabled={!canUndo}>
-            Undo
-          </button>
-          <button type="button" className="bld-btn bld-btn--ghost" onClick={onRedo} disabled={!canRedo}>
-            Redo
-          </button>
-          <button type="button" className="bld-btn bld-btn--ghost" onClick={onOpenHistory} title="Restore a previous snapshot">
-            {historyLabel}
-          </button>
-          <button type="button" className="bld-btn bld-btn--ghost" onClick={onResetToBlank}>
+          <button type="button" className="bld-btn bld-btn--ghost" onClick={onResetToBlank} title="Reset the page to a blank canvas">
             Reset
           </button>
           <button
             type="button"
             className={`bld-btn ${isFreeMode ? 'bld-btn--secondary' : 'bld-btn--ghost'}`}
+            aria-pressed={isFreeMode}
             onClick={onToggleFreeMode}
             title={
               isFreeMode
@@ -177,6 +201,7 @@ export default function BuilderTopbar({
           <button
             type="button"
             className={`bld-btn ${isLayoutDebug ? 'bld-btn--secondary' : 'bld-btn--ghost'}`}
+            aria-pressed={isLayoutDebug}
             onClick={onToggleLayoutDebug}
             title="Toggle layout debug outlines"
           >
@@ -185,18 +210,46 @@ export default function BuilderTopbar({
           <button
             type="button"
             className={`bld-btn ${showGrid ? 'bld-btn--secondary' : 'bld-btn--ghost'}`}
+            aria-pressed={showGrid}
             onClick={onToggleGrid}
             title="Show a 12-column visual grid overlay (guides only)"
           >
             {gridLabel}
           </button>
-          <span className="bld-topbar__actions-sep" aria-hidden="true" />
+        </div>
+      </div>
+
+      <div className="bld-topbar__commit">
+        <div className="bld-topbar__status" role="group" aria-label="Draft and publish status">
+          <span
+            className={`bld-topbar__state-pill ${saveStatusClass}`}
+            role="status"
+            aria-live="polite"
+            title={saveStatusTitle}
+          >
+            {saveStatusText}
+          </span>
+          <span
+            className={`bld-topbar__state-pill ${publishClass}`}
+            role="status"
+            aria-live="polite"
+            title={statusText}
+          >
+            {publishText}
+          </span>
+          {saveAckVisible ? (
+            <span className="bld-topbar__save-ack" role="status" aria-live="polite">
+              Draft saved
+            </span>
+          ) : null}
+        </div>
+        <div className="bld-topbar__group bld-topbar__group--commit">
           <button
             type="button"
             className="bld-btn bld-btn--secondary"
             onClick={onPreview}
             disabled={!previewUrl}
-            title={!previewUrl ? 'Draft preview URL unavailable' : 'Open draft preview'}
+            title={previewTitle}
           >
             Draft Preview
           </button>
@@ -205,15 +258,16 @@ export default function BuilderTopbar({
             className="bld-btn bld-btn--secondary"
             onClick={onLivePreview}
             disabled={!canOpenLivePreview}
-            title={!canOpenLivePreview ? 'Publish at least once to open public live URL' : undefined}
+            title={liveTitle}
           >
             Live
           </button>
           <button
             type="button"
-            className="bld-btn bld-btn--outline"
+            className="bld-btn bld-btn--secondary"
             onClick={onSave}
             disabled={isSyncingDraft || isPublishing}
+            title="Save the draft"
           >
             {isSyncingDraft ? 'Saving…' : 'Save'}
           </button>
@@ -222,6 +276,7 @@ export default function BuilderTopbar({
             className="bld-btn bld-btn--primary"
             onClick={onPublish}
             disabled={isPublishing || isSyncingDraft}
+            title="Publish the draft to the live site"
           >
             {isPublishing ? 'Publishing…' : 'Publish'}
           </button>

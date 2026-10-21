@@ -361,3 +361,50 @@
     min-width: min(100%, 160px) !important;
   }
 }
+
+/* Mobile artboard: same stack when the editor window is wider than 767px. */
+.bld-canvas--mobile .live-doc .bld-section-layout.bld-layout-mobile-stack,
+.bld-canvas--mobile .live-doc .bld-section-layout[data-bld-layout-mobile-stack='true'],
+.live-doc[data-bld-device='mobile'] .bld-section-layout.bld-layout-mobile-stack,
+.live-doc[data-bld-device='mobile'] .bld-section-layout[data-bld-layout-mobile-stack='true'] {
+  flex-direction: column !important;
+  flex-wrap: nowrap !important;
+}
+
+.bld-canvas--mobile .live-doc .bld-section-layout.bld-layout-mobile-stack > :is(
+    .live-node.bld-stack,
+    .bld-node__shell.bld-stack,
+    .live-leaf-wrap,
+    .bld-node-children > .live-node.bld-stack,
+    .bld-node-children > .bld-node__shell.bld-stack,
+    .bld-node-children > .live-leaf-wrap
+  ),
+.bld-canvas--mobile .live-doc .bld-section-layout[data-bld-layout-mobile-stack='true'] > :is(
+    .live-node.bld-stack,
+    .bld-node__shell.bld-stack,
+    .live-leaf-wrap,
+    .bld-node-children > .live-node.bld-stack,
+    .bld-node-children > .bld-node__shell.bld-stack,
+    .bld-node-children > .live-leaf-wrap
+  ),
+.live-doc[data-bld-device='mobile'] .bld-section-layout.bld-layout-mobile-stack > :is(
+    .live-node.bld-stack,
+    .bld-node__shell.bld-stack,
+    .live-leaf-wrap,
+    .bld-node-children > .live-node.bld-stack,
+    .bld-node-children > .bld-node__shell.bld-stack,
+    .bld-node-children > .live-leaf-wrap
+  ),
+.live-doc[data-bld-device='mobile'] .bld-section-layout[data-bld-layout-mobile-stack='true'] > :is(
+    .live-node.bld-stack,
+    .bld-node__shell.bld-stack,
+    .live-leaf-wrap,
+    .bld-node-children > .live-node.bld-stack,
+    .bld-node-children > .bld-node__shell.bld-stack,
+    .bld-node-children > .live-leaf-wrap
+  ) {
+  flex: 0 0 auto !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+}

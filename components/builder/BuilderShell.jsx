@@ -4890,6 +4890,7 @@ export default function BuilderShell({ pageId, apiMode = 'legacy', blogPreviewSl
                   Theme
                 </button>
               </div>
+              <div className="bld-left__library-scroll">
               {Array.isArray(selectionBreadcrumb) && selectionBreadcrumb.length ? (
                 <div className="bld-left__crumb" title="Selection path">
                   {selectionBreadcrumb.join(' → ')}
@@ -5190,8 +5191,7 @@ export default function BuilderShell({ pageId, apiMode = 'legacy', blogPreviewSl
                   </button>
                 </div>
               ) : null}
-              <div className="bld-left__library-scroll">
-                {leftPanelTab === 'theme' ? (
+              {leftPanelTab === 'theme' ? (
                   <ProjectBrandPanel
                     onApplyFontsToPage={handleApplyBrandFontsToPage}
                     isApplyingFonts={isApplyingBrandFonts}

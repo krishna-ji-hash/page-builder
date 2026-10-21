@@ -2132,7 +2132,6 @@ function NodeRenderer({
         flexGrow: 0,
         flexShrink: 0,
         flexBasis: 'auto',
-        flex: undefined,
         justifyContent: 'flex-end',
         alignItems: 'center',
       };
@@ -2151,7 +2150,6 @@ function NodeRenderer({
         width: 'auto',
         maxWidth: 'min(56vw, 200px)',
         flexGrow: 0,
-        flex: undefined,
       };
     }
   }

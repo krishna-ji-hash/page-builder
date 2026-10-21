@@ -39,7 +39,7 @@ export default function AdvancedPanel({
   const resources = listResourceIds();
 
   return (
-    <div className="bld-panel">
+    <div className="bld-panel bld-panel--advanced">
       <div className="bld-panel__head">Advanced</div>
       <Section title="Position" defaultOpen={false}>
         <div className="bld-field">

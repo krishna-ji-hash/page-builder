@@ -22,7 +22,7 @@ export default function SeoCmsPanel({ selectedNode, projectId, pageId, onChange 
   }
 
   return (
-    <InspectorPanel title="SEO & CMS">
+    <InspectorPanel title="SEO & CMS" className="bld-inspector-pro--seo">
       <InspectorSection title="CMS bindings" defaultOpen keywords="cms collection binding dynamic">
         <CmsBindingsPanel selectedNode={selectedNode} projectId={projectId} onChange={onChange} />
       </InspectorSection>

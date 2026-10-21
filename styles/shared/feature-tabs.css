@@ -283,6 +283,26 @@
 }
 
 @media (max-width: 960px) {
+  .live-feature-tabs__nav-wrap {
+    overflow-x: visible;
+  }
+
+  .live-feature-tabs__nav,
+  .live-feature-tabs--align-stretch .live-feature-tabs__nav {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .live-feature-tabs__tab,
+  .live-feature-tabs--align-stretch .live-feature-tabs__tab {
+    flex: 1 1 100%;
+    min-width: 0;
+    white-space: normal;
+    text-align: left;
+  }
+
   .live-feature-tabs__grid {
     grid-template-columns: 1fr;
     gap: 28px;
@@ -315,6 +335,73 @@
     border-radius: 14px;
     min-height: 220px;
   }
+}
+
+/* Device frames are narrower than the editor window, so the 960/640 queries do not run there. */
+.bld-canvas--mobile .live-feature-tabs__grid,
+.bld-canvas--tablet .live-feature-tabs__grid,
+.live-doc[data-bld-device='mobile'] .live-feature-tabs__grid,
+.live-doc[data-bld-device='tablet'] .live-feature-tabs__grid {
+  grid-template-columns: 1fr;
+  gap: 28px;
+}
+
+.bld-canvas--mobile .live-feature-tabs__copy,
+.bld-canvas--tablet .live-feature-tabs__copy,
+.live-doc[data-bld-device='mobile'] .live-feature-tabs__copy,
+.live-doc[data-bld-device='tablet'] .live-feature-tabs__copy {
+  order: 1;
+}
+
+.bld-canvas--mobile .live-feature-tabs__visual,
+.bld-canvas--tablet .live-feature-tabs__visual,
+.live-doc[data-bld-device='mobile'] .live-feature-tabs__visual,
+.live-doc[data-bld-device='tablet'] .live-feature-tabs__visual {
+  order: 2;
+}
+
+.bld-canvas--mobile .live-feature-tabs__paragraph,
+.live-doc[data-bld-device='mobile'] .live-feature-tabs__paragraph {
+  max-width: none;
+}
+
+.bld-canvas--mobile .live-feature-tabs__nav-wrap,
+.bld-canvas--tablet .live-feature-tabs__nav-wrap,
+.live-doc[data-bld-device='mobile'] .live-feature-tabs__nav-wrap,
+.live-doc[data-bld-device='tablet'] .live-feature-tabs__nav-wrap {
+  overflow-x: visible;
+}
+
+.bld-canvas--mobile .live-feature-tabs__nav,
+.bld-canvas--tablet .live-feature-tabs__nav,
+.live-doc[data-bld-device='mobile'] .live-feature-tabs__nav,
+.live-doc[data-bld-device='tablet'] .live-feature-tabs__nav,
+.bld-canvas--mobile .live-feature-tabs--align-stretch .live-feature-tabs__nav,
+.bld-canvas--tablet .live-feature-tabs--align-stretch .live-feature-tabs__nav,
+.live-doc[data-bld-device='mobile'] .live-feature-tabs--align-stretch .live-feature-tabs__nav,
+.live-doc[data-bld-device='tablet'] .live-feature-tabs--align-stretch .live-feature-tabs__nav {
+  display: flex;
+  flex-wrap: wrap;
+  width: 100%;
+  min-width: 0;
+}
+
+.bld-canvas--mobile .live-feature-tabs__tab,
+.bld-canvas--tablet .live-feature-tabs__tab,
+.live-doc[data-bld-device='mobile'] .live-feature-tabs__tab,
+.live-doc[data-bld-device='tablet'] .live-feature-tabs__tab {
+  flex: 1 1 100%;
+  min-width: 0;
+  white-space: normal;
+  text-align: left;
+  font-size: 14px;
+  padding: 12px 14px 14px;
+}
+
+.bld-canvas--mobile .live-feature-tabs__figure,
+.live-doc[data-bld-device='mobile'] .live-feature-tabs__figure {
+  border-radius: 14px;
+  min-height: 220px;
 }
 
 /* Builder — inline canvas editing */
